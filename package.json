@@ -66,7 +66,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "icons": "node scripts/generate-icons.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "node scripts/gen-routes.cjs && tsc --noEmit",
+    "routes": "node scripts/gen-routes.cjs"
   },
   "private": true
 }
