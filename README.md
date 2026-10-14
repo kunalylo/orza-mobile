@@ -50,4 +50,9 @@ src/
 - **Icons**: `Icon name="camera"` (Feather) or `"mci:pill"` (MaterialCommunityIcons).
 - **Motion**: Reanimated shared values use `.get()` / `.set()` (React Compiler safe); respect `useReducedMotion()`.
 - **Haptics**: `haptics.tap/soft/firm/select/success/warning/error` from `@/lib/haptics`.
+- **Photos**: `pickPhotos(source)` + `toUploadDataUrl(uri)` from `@/lib/image` (JSON data URLs; the server rejects multipart).
+- **Voice**: `useVoiceInput({ onFinal })` from `@/lib/voice` (en-IN / hi-IN, live partial transcript, `available` false → hide the mic).
+- **Dose events**: `emitDoseEvent` / `onDoseEvent` from `@/features/meds/events` after any dose or medicine change.
+- **Route types**: after adding/removing a route file run `npm run routes` (regenerates `.expo/types/router.d.ts` without a
+  dev server); `npm run typecheck` does that and then `tsc --noEmit`.
 - Never edit `android/` or `ios/` — configure native behaviour in `app.json` / config plugins.
