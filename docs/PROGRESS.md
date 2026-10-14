@@ -100,3 +100,5 @@ IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
   Pushed routes use singular folders: meal/, med/, rx/, recipe/, chat/, account/ … Modal routes: listed for the verifier to add to
   `src/app/(app)/_layout.tsx`. If interrupted: re-run the same workflow script with resumeFromRunId (finished steps are cached), or
   check `docs/notes/*.md` checklists + `git status` and finish each step by hand.
+  Run: workflow `orza-mobile-phase-b2`, run id `wf_1e9916a7-4c3`, script
+  `C:\Users\ADMIN\.claude\projects\E--aylo-orza\28092694-1d2e-42df-925f-dfe01d5728c5\workflows\scripts\orza-mobile-phase-b2-wf_1e9916a7-4c3.js`.

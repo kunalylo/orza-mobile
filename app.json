@@ -20,14 +20,7 @@
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "NSCameraUsageDescription": "ÖRZA uses your camera so you can snap meals, medicines and prescriptions.",
-        "NSPhotoLibraryUsageDescription": "ÖRZA lets you choose meal, medicine and prescription photos from your library.",
-        "NSMicrophoneUsageDescription": "ÖRZA uses the microphone so you can log meals and ask questions by voice.",
-        "NSCalendarsUsageDescription": "ÖRZA adds your medicine and wellness reminders to your calendar and shows your day's plans.",
-        "NSCalendarsFullAccessUsageDescription": "ÖRZA adds your medicine and wellness reminders to your calendar and shows your day's plans.",
-        "NSCalendarsWriteOnlyAccessUsageDescription": "ÖRZA adds your medicine and wellness reminders to your calendar.",
-        "NSHealthShareUsageDescription": "ÖRZA reads steps, activity, sleep, heart rate, weight and water from Apple Health to personalise your targets and reports.",
-        "NSHealthUpdateUsageDescription": "ÖRZA can save the weight and water you log to Apple Health."
+        "NSCalendarsWriteOnlyAccessUsageDescription": "ÖRZA adds your medicine and wellness reminders to your calendar."
       }
     },
     "android": {
@@ -41,7 +34,7 @@
       },
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.USE_FULL_SCREEN_INTENT",
@@ -49,7 +42,21 @@
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.READ_CALENDAR",
         "android.permission.WRITE_CALENDAR",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_DISTANCE",
+        "android.permission.health.READ_SLEEP",
+        "android.permission.health.READ_RESTING_HEART_RATE",
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.READ_WEIGHT",
+        "android.permission.health.READ_HYDRATION"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.ACCESS_MEDIA_LOCATION",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ],
       "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false
@@ -75,11 +82,56 @@
       "expo-localization",
       "expo-sharing",
       "expo-web-browser",
-      "expo-speech-recognition",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "ÖRZA uses the microphone so you can log meals and ask questions by voice.",
+          "speechRecognitionPermission": "ÖRZA turns what you say into text so you can log meals and ask questions hands-free.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox", "com.google.android.tts", "com.google.android.as"]
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ÖRZA lets you choose meal, medicine and prescription photos from your library.",
+          "cameraPermission": "ÖRZA uses your camera so you can snap meals, medicines and prescriptions.",
+          "microphonePermission": "ÖRZA uses the microphone so you can log meals and ask questions by voice."
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "ÖRZA adds your medicine and wellness reminders to your calendar and shows your day's plans.",
+          "remindersPermission": "ÖRZA can add your medicine and wellness reminders to the Reminders app."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#FF7A6A"
+        }
+      ],
       "expo-background-task",
-      "expo-build-properties",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26,
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
+          }
+        }
+      ],
       "react-native-health-connect",
-      "@kingstinct/react-native-healthkit"
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "ÖRZA reads steps, activity, sleep, heart rate, weight and water from Apple Health to personalise your targets and reports.",
+          "NSHealthUpdateUsageDescription": "ÖRZA only reads from Apple Health today. If it ever saves something, such as a weight you log, it will ask you first.",
+          "background": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
