@@ -34,3 +34,5 @@ IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
 
 ## Log
 - 2026-10-14: project created (`create-expo-app` default template, SDK 57). Plan written.
+- 2026-10-14: Phase A started as a workflow (A1 backend mobile auth in E:\aylo\orza — committed locally, NOT pushed; A2 mobile foundation). If interrupted: check
+  `git log` in both repos and the files present, then finish whatever A1/A2 item is incomplete before starting Phase B.

@@ -1,26 +1,61 @@
 {
   "expo": {
-    "name": "orza-mobile",
-    "slug": "orza-mobile",
+    "name": "ÖRZA",
+    "slug": "orza",
+    "owner": "kunal_ylo",
     "version": "1.0.0",
+    "scheme": "orza",
     "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#FBF7F1",
+    "primaryColor": "#FF7A6A",
     "icon": "./assets/images/icon.png",
-    "scheme": "orzamobile",
-    "userInterfaceStyle": "automatic",
+    "description": "ÖRZA — AI wellness that evolves with you: snap meals, chat naturally, medicine alarms with photos, goals and reports.",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "bundleIdentifier": "in.co.ylo.orza",
+      "buildNumber": "1",
+      "supportsTablet": false,
+      "icon": "./assets/images/icon.png",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "ÖRZA uses your camera so you can snap meals, medicines and prescriptions.",
+        "NSPhotoLibraryUsageDescription": "ÖRZA lets you choose meal, medicine and prescription photos from your library.",
+        "NSMicrophoneUsageDescription": "ÖRZA uses the microphone so you can log meals and ask questions by voice.",
+        "NSCalendarsUsageDescription": "ÖRZA adds your medicine and wellness reminders to your calendar and shows your day's plans.",
+        "NSCalendarsFullAccessUsageDescription": "ÖRZA adds your medicine and wellness reminders to your calendar and shows your day's plans.",
+        "NSCalendarsWriteOnlyAccessUsageDescription": "ÖRZA adds your medicine and wellness reminders to your calendar.",
+        "NSHealthShareUsageDescription": "ÖRZA reads steps, activity, sleep, heart rate, weight and water from Apple Health to personalise your targets and reports.",
+        "NSHealthUpdateUsageDescription": "ÖRZA can save the weight and water you log to Apple Health."
+      }
     },
     "android": {
+      "package": "in.co.ylo.orza",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#07090C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_FULL_SCREEN_INTENT",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -28,11 +63,16 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#FBF7F1",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 168,
+          "resizeMode": "contain"
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-font",
+      "expo-image",
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true,
