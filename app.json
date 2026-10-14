@@ -72,7 +72,14 @@
       "expo-secure-store",
       "expo-font",
       "expo-image",
-      "expo-localization"
+      "expo-localization",
+      "expo-sharing",
+      "expo-web-browser",
+      "expo-speech-recognition",
+      "expo-background-task",
+      "expo-build-properties",
+      "react-native-health-connect",
+      "@kingstinct/react-native-healthkit"
     ],
     "experiments": {
       "typedRoutes": true,
