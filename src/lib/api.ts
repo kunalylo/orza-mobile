@@ -1,0 +1,206 @@
+/**
+ * ÖRZA API client (same JSON API as the website, signed in with the phone app's Bearer session token).
+ *
+ * - Every request: `Accept: application/json`, `X-ORZA-Client: mobile`, `credentials: "omit"` (the native cookie
+ *   jar must never mix in a website cookie), `Authorization: Bearer <token>` when signed in.
+ * - Bodies are JSON with `Content-Type: application/json` (the server's cross-site guard requires it).
+ * - Errors become `ApiError` with the server's `{error, code, field}`; network failures and timeouts get
+ *   friendly messages; a 401 on an authenticated call signs the app out (see `setUnauthorizedHandler`).
+ */
+import * as Device from 'expo-device';
+
+import { API_BASE, API_ORIGIN, PLATFORM } from './config';
+
+const DEFAULT_TIMEOUT_MS = 20_000;
+
+export class ApiError extends Error {
+  /** HTTP status; 0 = no response (offline / timeout). */
+  readonly status: number;
+  /** Server code (`rate_limited`, `insufficient_credits`, …) or `network` / `timeout` / `http_<status>`. */
+  readonly code: string;
+  /** Validation errors name the offending field. */
+  readonly field?: string;
+  /** Seconds, from `Retry-After` (429). */
+  readonly retryAfter?: number;
+  readonly data?: unknown;
+
+  constructor(message: string, opts: { status: number; code: string; field?: string; retryAfter?: number; data?: unknown }) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = opts.status;
+    this.code = opts.code;
+    this.field = opts.field;
+    this.retryAfter = opts.retryAfter;
+    this.data = opts.data;
+  }
+
+  get isNetwork() {
+    return this.status === 0;
+  }
+}
+
+export const NETWORK_MESSAGE = "Can't reach ÖRZA right now. Check your connection and try again.";
+export const TIMEOUT_MESSAGE = 'ÖRZA is taking too long to answer. Please try again.';
+export const GENERIC_MESSAGE = 'Something went wrong. Please try again.';
+
+/** A user-facing message for anything thrown by the client (or elsewhere). */
+export function errorMessage(e: unknown, fallback = GENERIC_MESSAGE): string {
+  // Only ApiError messages are written for people; anything else (TypeError, native errors) gets the fallback.
+  return e instanceof ApiError && e.message ? e.message : fallback;
+}
+
+/* ───────────────────────────── Session plumbing ───────────────────────────── */
+
+let sessionToken: string | null = null;
+let onUnauthorized: (() => void) | null = null;
+
+/** Set by the AuthProvider whenever the stored session changes. */
+export function setSessionToken(token: string | null) {
+  sessionToken = token;
+}
+
+export function getSessionToken() {
+  return sessionToken;
+}
+
+/** Called once when an authenticated request answers 401 (expired / revoked session). */
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler;
+}
+
+/** Name sent with sign-in so the session list on the web shows "Kunal's iPhone" etc. */
+export function deviceLabel(): string {
+  const raw = (Device.deviceName || Device.modelName || (PLATFORM === 'ios' ? 'iPhone' : 'Android phone')).trim();
+  return (raw || 'Phone').slice(0, 80);
+}
+
+/* ───────────────────────────── Requests ───────────────────────────── */
+
+export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+export interface RequestOptions {
+  method?: Method;
+  /** JSON-serialised (objects/arrays/primitives). Use `form` for multipart uploads. */
+  body?: unknown;
+  form?: FormData;
+  headers?: Record<string, string>;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  /** Send the Bearer token (default true). */
+  auth?: boolean;
+}
+
+/** `"/auth/me"` → `${API_BASE}/auth/me`; absolute URLs pass through; `/api/...` paths are accepted too. */
+export function apiUrl(path: string): string {
+  if (/^https?:\/\//.test(path)) return path;
+  if (path.startsWith('/api/')) return `${API_ORIGIN}${path}`;
+  return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+/** Image source for a protected photo URL the API returns (relative `photo_urls`, `/api/media/<id>`). */
+export function mediaSource(url: string | null | undefined) {
+  if (!url) return undefined;
+  const uri = /^https?:\/\//.test(url) ? url : `${API_ORIGIN}${url.startsWith('/') ? url : `/${url}`}`;
+  return sessionToken ? { uri, headers: { Authorization: `Bearer ${sessionToken}` } } : { uri };
+}
+
+function baseHeaders(auth: boolean): Record<string, string> {
+  const h: Record<string, string> = {
+    Accept: 'application/json',
+    'X-ORZA-Client': 'mobile',
+  };
+  if (PLATFORM !== 'web') h['X-ORZA-Platform'] = PLATFORM;
+  if (auth && sessionToken) h.Authorization = `Bearer ${sessionToken}`;
+  return h;
+}
+
+async function parse(res: Response): Promise<unknown> {
+  const text = await res.text().catch(() => '');
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function messageFor(status: number, data: unknown): { message: string; code: string; field?: string } {
+  const obj = data && typeof data === 'object' ? (data as Record<string, unknown>) : null;
+  const serverMessage = typeof obj?.error === 'string' && obj.error.trim() ? obj.error.trim() : null;
+  const code = typeof obj?.code === 'string' ? obj.code : `http_${status}`;
+  const field = typeof obj?.field === 'string' ? obj.field : undefined;
+  if (serverMessage) return { message: serverMessage, code, field };
+  if (status === 401) return { message: 'Please sign in again.', code };
+  if (status === 403) return { message: "You don't have access to that.", code };
+  if (status === 404) return { message: "We couldn't find that.", code };
+  if (status === 413) return { message: 'That file is too large.', code };
+  if (status === 429) return { message: 'Too many tries — please wait a moment and try again.', code };
+  if (status >= 500) return { message: "Something went wrong on our side. Please try again in a moment.", code };
+  return { message: GENERIC_MESSAGE, code };
+}
+
+export async function request<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
+  const { method = opts.body !== undefined || opts.form ? 'POST' : 'GET', body, form, timeoutMs = DEFAULT_TIMEOUT_MS, signal, auth = true } = opts;
+  const headers = { ...baseHeaders(auth), ...opts.headers };
+  let payload: BodyInit | undefined;
+  if (form) {
+    payload = form; // fetch sets the multipart boundary itself
+  } else if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    payload = JSON.stringify(body);
+  } else if (method !== 'GET' && method !== 'DELETE') {
+    headers['Content-Type'] = 'application/json';
+    payload = '{}';
+  }
+
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const relay = () => controller.abort();
+  signal?.addEventListener('abort', relay);
+  const usedToken = auth ? sessionToken : null;
+
+  let res: Response;
+  try {
+    res = await fetch(apiUrl(path), { method, headers, body: payload, signal: controller.signal, credentials: 'omit' });
+  } catch (e) {
+    if (signal?.aborted) throw e; // the caller cancelled (React Query) — let it see the abort
+    throw timedOut
+      ? new ApiError(TIMEOUT_MESSAGE, { status: 0, code: 'timeout' })
+      : new ApiError(NETWORK_MESSAGE, { status: 0, code: 'network' });
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', relay);
+  }
+
+  const data = await parse(res);
+  if (!res.ok) {
+    const { message, code, field } = messageFor(res.status, data);
+    const retry = Number(res.headers.get('Retry-After'));
+    const error = new ApiError(message, {
+      status: res.status,
+      code,
+      field,
+      retryAfter: Number.isFinite(retry) && retry > 0 ? retry : undefined,
+      data,
+    });
+    // Only a request made with the *current* token may end the session (a stale in-flight call must not).
+    if (res.status === 401 && usedToken && usedToken === sessionToken) onUnauthorized?.();
+    throw error;
+  }
+  return data as T;
+}
+
+export const api = {
+  get: <T>(path: string, opts?: Omit<RequestOptions, 'method' | 'body'>) => request<T>(path, { ...opts, method: 'GET' }),
+  post: <T>(path: string, body?: unknown, opts?: Omit<RequestOptions, 'method' | 'body'>) =>
+    request<T>(path, { ...opts, method: 'POST', body: body ?? {} }),
+  put: <T>(path: string, body?: unknown, opts?: Omit<RequestOptions, 'method' | 'body'>) =>
+    request<T>(path, { ...opts, method: 'PUT', body: body ?? {} }),
+  patch: <T>(path: string, body?: unknown, opts?: Omit<RequestOptions, 'method' | 'body'>) =>
+    request<T>(path, { ...opts, method: 'PATCH', body: body ?? {} }),
+  del: <T>(path: string, opts?: Omit<RequestOptions, 'method'>) => request<T>(path, { ...opts, method: 'DELETE' }),
+};
