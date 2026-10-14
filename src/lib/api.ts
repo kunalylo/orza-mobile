@@ -3,7 +3,8 @@
  *
  * - Every request: `Accept: application/json`, `X-ORZA-Client: mobile`, `credentials: "omit"` (the native cookie
  *   jar must never mix in a website cookie), `Authorization: Bearer <token>` when signed in.
- * - Bodies are JSON with `Content-Type: application/json` (the server's cross-site guard requires it).
+ * - Bodies are always JSON with `Content-Type: application/json`: the server refuses any non-JSON write (415), so photos
+ *   travel as data URLs inside JSON — there is no multipart upload.
  * - Errors become `ApiError` with the server's `{error, code, field}`; network failures and timeouts get
  *   friendly messages; a 401 on an authenticated call signs the app out (see `setUnauthorizedHandler`).
  */
@@ -68,10 +69,29 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
   onUnauthorized = handler;
 }
 
-/** Name sent with sign-in so the session list on the web shows "Kunal's iPhone" etc. */
+const DEVICE_LABEL_MAX = 80;
+
+/**
+ * Name sent with sign-in (`X-ORZA-Device`) and device registration, so the web shows "Kunal's iPhone" etc.
+ * Cleaned the way the server cleans it (no control / line-separator characters, single spaces, ≤ 80 characters,
+ * never splitting an emoji), so `POST /api/devices` never refuses it and it always URL-encodes.
+ */
 export function deviceLabel(): string {
-  const raw = (Device.deviceName || Device.modelName || (PLATFORM === 'ios' ? 'iPhone' : 'Android phone')).trim();
-  return (raw || 'Phone').slice(0, 80);
+  const raw = Device.deviceName || Device.modelName || (PLATFORM === 'ios' ? 'iPhone' : 'Android phone');
+  const clean = raw
+    .replace(/[\u0000-\u001F\u007F-\u009F\u2028\u2029]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return Array.from(clean).slice(0, DEVICE_LABEL_MAX).join('').trim() || 'Phone';
+}
+
+/** `X-ORZA-Device` value: header values must be Latin-1, so the name is URL-encoded (the server decodes it). */
+export function deviceHeaderValue(): string {
+  try {
+    return encodeURIComponent(deviceLabel());
+  } catch {
+    return 'Phone'; // a lone surrogate in the device name — send a plain fallback rather than fail sign-in
+  }
 }
 
 /* ───────────────────────────── Requests ───────────────────────────── */
@@ -80,9 +100,8 @@ export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface RequestOptions {
   method?: Method;
-  /** JSON-serialised (objects/arrays/primitives). Use `form` for multipart uploads. */
+  /** JSON-serialised (objects/arrays/primitives). Photos go in as data URLs — the server accepts JSON only. */
   body?: unknown;
-  form?: FormData;
   headers?: Record<string, string>;
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -140,12 +159,11 @@ function messageFor(status: number, data: unknown): { message: string; code: str
 }
 
 export async function request<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
-  const { method = opts.body !== undefined || opts.form ? 'POST' : 'GET', body, form, timeoutMs = DEFAULT_TIMEOUT_MS, signal, auth = true } = opts;
+  const { method = opts.body !== undefined ? 'POST' : 'GET', body, timeoutMs = DEFAULT_TIMEOUT_MS, signal, auth = true } = opts;
   const headers = { ...baseHeaders(auth), ...opts.headers };
-  let payload: BodyInit | undefined;
-  if (form) {
-    payload = form; // fetch sets the multipart boundary itself
-  } else if (body !== undefined) {
+  // The server's guard: every write is JSON, except a DELETE without a body, which may omit the Content-Type.
+  let payload: string | undefined;
+  if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
     payload = JSON.stringify(body);
   } else if (method !== 'GET' && method !== 'DELETE') {

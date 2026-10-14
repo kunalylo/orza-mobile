@@ -11,6 +11,8 @@ export const KEYS = {
   token: 'orza.session',
   user: 'orza.user',
   device: 'orza.device',
+  /** A session signed out while offline: still live on the server until the app ends it (next launch or sign-in). */
+  unrevoked: 'orza.session.unrevoked',
 } as const;
 
 type Key = (typeof KEYS)[keyof typeof KEYS];

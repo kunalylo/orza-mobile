@@ -13,7 +13,8 @@ Expo API; never edit `android/` or `ios/` by hand (config plugins only); run `np
 IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
 
 ## Phase A — Foundation
-- [ ] A1 Backend (E:\aylo\orza): mobile Bearer-token auth (login/register return a session token for `X-ORZA-Client: mobile`; `Authorization: Bearer` accepted everywhere a cookie is; logout revokes it), device registry for push/alarm de-dup. Test locally, push to live only with the user's OK.
+- [x] A1 Backend (E:\aylo\orza): mobile Bearer-token auth (login/register return a session token for `X-ORZA-Client: mobile`; `Authorization: Bearer` accepted everywhere a cookie is; logout revokes it), device registry for push/alarm de-dup. Test locally, push to live only with the user's OK.
+  — Committed locally (web `3583c79` + `96a63af`), **not pushed / not deployed**: the live site can't sign the app in until the user OKs a push. Contract: web `SPEC.md` "Mobile app (React Native) — auth & devices".
 - [x] A2 Mobile foundation: app.json (name ÖRZA, ids, permissions text, plugins), eas.json (development / preview APK / production), fonts, theme tokens, UI kit (Screen, Text, GlassCard, Button, Chip/Tag, Input, Segmented, EnergyRing, Orb, Skeleton, EmptyState, Toast), API client (SecureStore token, 401 → sign-in), auth + user context, navigation shell (welcome → auth → onboarding → tabs), brand icon + splash.
 
 ## Phase B — Features (parallel streams)
@@ -55,10 +56,33 @@ IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
   - Notes for Phase B/C:
     - Replace a placeholder by rewriting its route file (`src/app/(app)/<name>.tsx` or `(tabs)/<name>.tsx`); keep `Screen tabBar` on tab roots.
     - `registerDevice()` sends `alarms_local: false` on purpose — the server stops medicine Web Push while a phone claims local alarms. C1 must
-      pass `{ alarmsLocal: true, pushToken }` only once alarms really ring on the phone (and keep sending the push token every time —
-      omitting it deletes the stored one).
+      pass `{ alarmsLocal: true, pushToken }` only once alarms really ring on the phone. (Since the A verification below, `device.ts` remembers
+      that declaration and re-sends it on every re-registration until sign-out, so the token isn't dropped — the server deletes an omitted
+      `push_token`. Pass `pushToken: null` when notifications are turned off; `unregisterDevice()` calls `DELETE /api/devices/<id>`.)
     - Android tab bar uses dense glass (expo-blur needs a `BlurTargetView` on Android); iOS uses real blur.
     - Keyboard: `Screen keyboard` (KeyboardAvoidingView `padding` on iOS; Android relies on `softwareKeyboardLayoutMode: resize`). The tab bar
       hides itself while the Android keyboard is up.
     - The app cannot sign in against production until A1 (Bearer auth + devices) is deployed to the live site. To test earlier, run the web app
       with A1 and set `EXPO_PUBLIC_API_URL` to its LAN address (e.g. `http://192.168.x.x:3100`).
+- 2026-10-14: **Phase A verified** (A1 + A2 both ticked).
+  - Web (`E:\aylo\orza`): `npx tsc --noEmit` ✓; A1 is in local commits `3583c79` + `96a63af` (main is 2 ahead of origin, **not pushed**); A1's
+    pure-helper scratch test 18/18 ✓ (no database).
+  - Mobile: `npx tsc --noEmit` ✓, `npx expo lint` ✓, `npx expo-doctor` 21/21 ✓, `npx expo export --platform android` ✓ (4.7 MB HBC).
+  - Cross-check of the mobile client against A1's real contract (header names `X-ORZA-Client`/`X-ORZA-Device`/`X-ORZA-Platform`,
+    `{user, token}`, Bearer, `credentials: "omit"`, logout, `/api/devices`, `/api/media`). Already matched: headers, token field, JSON bodies,
+    bodyless DELETE, 401 handling, device body fields. Fixed on the mobile side:
+    - `api.ts`: removed the multipart `form` option (the server answers 415 to any non-JSON write; photos go as data URLs in JSON).
+    - `api.ts`: `deviceLabel()` now cleans the name like the server (control/line-separator chars, single spaces, 80 code points without
+      splitting an emoji — the old `.slice(0, 80)` could leave a lone surrogate and make `encodeURIComponent` throw on sign-in);
+      `deviceHeaderValue()` URL-encodes it for `X-ORZA-Device` with a safe fallback.
+    - `device.ts`: remembers the declared `pushToken`/`alarmsLocal` so foreground re-registrations don't wipe them; a changed or failed
+      declaration bypasses the 10-min throttle; sign-out discards an in-flight registration; added `unregisterDevice()`.
+    - `auth.tsx`: offline sign-out keeps the token in `orza.session.unrevoked`; the next launch retries `POST /api/auth/logout` with it and the
+      next sign-in/sign-up sends it as the Bearer so the server replaces that session (A1 `startMobileSession`) — otherwise the session and its
+      device registration stayed live for 30 days. `signOut({ everywhere: true })` now throws (and stays signed in) if the server can't be
+      reached, instead of silently signing out only this phone.
+  - Contract test (scratch, not in the repo): the real `api.ts`/`device.ts` driven with a fake fetch, each request checked with the web
+    backend's own helpers (`mobileClientFrom`, `cleanDeviceLabel`, `assertSameOriginRequest`/`assertSameOriginJson`, `resolveCredential`,
+    `isTimeZone`, `EXPO_PUSH_TOKEN_RE`): 11/11 ✓.
+  - Still untested end to end: sign-in/logout/devices against a running backend (only production is configured — needs a local web app with
+    a dev database), and anything on a real device (D1).
