@@ -90,3 +90,13 @@ IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
   expo-notifications, expo-calendar, HealthKit (@kingstinct + nitro), react-native-health-connect, background-task, build-properties…);
   `src/lib/image.ts` interface stub (B2 implements). Phase B launched: B1 food, B2 meds (+image.ts), B3 coach/account, B4 health/calendar/
   reminders (+ owns app.json plugin config). If interrupted: inspect git log/status, finish incomplete streams (resume prompts), then verify.
+- 2026-10-14: first Phase B run hit the session limit while the 4 agents were still researching (nothing written). Re-planned for
+  resilience: 9 smaller builder steps in 4 lanes (each lane sequential, lanes parallel), every builder keeps a research + checklist
+  file `docs/notes/<step>.md` (written early, read first on resume) and writes code incrementally; then one verify/integrate step.
+  Added before relaunch: `scripts/gen-routes.cjs` (`npm run routes` / `npm run typecheck` — typed routes without a dev server),
+  `src/lib/voice.ts` (useVoiceInput stub, implemented by B1a), `src/features/meds/events.ts` (dose events), `src/ui/Sheet.tsx`
+  (shared bottom sheet). Lanes: food B1a meals+voice → B1b snap+today · meds B2a image.ts+medicines → B2b prescriptions+alarm ·
+  coach B3a chat+recipes+rebalance → B3b goals+reports+credits → B3c settings+more · care B4a app.json+health → B4b calendar+reminders.
+  Pushed routes use singular folders: meal/, med/, rx/, recipe/, chat/, account/ … Modal routes: listed for the verifier to add to
+  `src/app/(app)/_layout.tsx`. If interrupted: re-run the same workflow script with resumeFromRunId (finished steps are cached), or
+  check `docs/notes/*.md` checklists + `git status` and finish each step by hand.
