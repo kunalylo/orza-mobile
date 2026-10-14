@@ -86,3 +86,7 @@ IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
     `isTimeZone`, `EXPO_PUSH_TOKEN_RE`): 11/11 ✓.
   - Still untested end to end: sign-in/logout/devices against a running backend (only production is configured — needs a local web app with
     a dev database), and anything on a real device (D1).
+- 2026-10-14: Phase B prep: all Phase B/C native deps installed in one go (expo-image-picker/-manipulator, expo-speech-recognition,
+  expo-notifications, expo-calendar, HealthKit (@kingstinct + nitro), react-native-health-connect, background-task, build-properties…);
+  `src/lib/image.ts` interface stub (B2 implements). Phase B launched: B1 food, B2 meds (+image.ts), B3 coach/account, B4 health/calendar/
+  reminders (+ owns app.json plugin config). If interrupted: inspect git log/status, finish incomplete streams (resume prompts), then verify.
