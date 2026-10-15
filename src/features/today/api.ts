@@ -55,6 +55,8 @@ function scheduleSoftRefresh(qc: QueryClient, date: string) {
       return;
     }
     void qc.invalidateQueries({ queryKey: todayKeys.day(date) });
+    // Reports chart the same water / steps / weight numbers.
+    void qc.invalidateQueries({ queryKey: ['reports'] });
   }, 900);
 }
 

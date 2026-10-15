@@ -1,8 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, View, type TextInput } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, View, type TextInput } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -18,7 +17,7 @@ import Animated, {
 import { ApiError, errorMessage } from '@/lib/api';
 import { useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
-import { useVoiceInput, type VoiceLang } from '@/lib/voice';
+import { loadVoiceLang, saveVoiceLang, useVoiceInput, type VoiceLang } from '@/lib/voice';
 import { colors, diagonal, gradients, radii, shadows, spacing } from '@/theme';
 import { Button, Chip, GlassCard, Icon, Segmented, Text, TextField, toast } from '@/ui';
 
@@ -41,7 +40,6 @@ const LANGS: { value: VoiceLang; label: string }[] = [
   { value: 'en-IN', label: 'English' },
   { value: 'hi-IN', label: 'हिंदी' },
 ];
-const LANG_KEY = 'orza.voiceLang';
 
 export type ComposerMealType = MealType | 'auto';
 
@@ -83,15 +81,12 @@ export function MealComposer({
   const logText = useLogMealText();
   const submitting = logText.isPending;
 
-  // Remember the voice language (Hindi speakers shouldn't have to switch every time).
+  // Remember the voice language (Hindi speakers shouldn't have to switch every time) — shared with Ask ÖRZA.
   useEffect(() => {
-    if (Platform.OS === 'web') return;
     let alive = true;
-    SecureStore.getItemAsync(LANG_KEY)
-      .then((saved) => {
-        if (alive && (saved === 'en-IN' || saved === 'hi-IN')) setLang(saved);
-      })
-      .catch(() => {});
+    void loadVoiceLang().then((saved) => {
+      if (alive && saved) setLang(saved);
+    });
     return () => {
       alive = false;
     };
@@ -99,7 +94,7 @@ export function MealComposer({
 
   const chooseLang = (l: VoiceLang) => {
     setLang(l);
-    if (Platform.OS !== 'web') SecureStore.setItemAsync(LANG_KEY, l).catch(() => {});
+    saveVoiceLang(l);
   };
 
   const voice = useVoiceInput({

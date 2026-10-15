@@ -8,7 +8,7 @@ import { ActivityIndicator, Linking, Pressable, StyleSheet, TextInput, View } fr
 import Animated, { FadeIn, FadeOut, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { haptics } from '@/lib/haptics';
-import { useVoiceInput, type VoiceLang } from '@/lib/voice';
+import { loadVoiceLang, saveVoiceLang, useVoiceInput, type VoiceLang } from '@/lib/voice';
 import { colors, diagonal, fonts, gradients, radii, spacing } from '@/theme';
 import { Icon, PressableScale, Text, toast } from '@/ui';
 
@@ -20,9 +20,6 @@ const VOICE_LABEL: Record<VoiceLang, { short: string; long: string }> = {
   'en-IN': { short: 'EN', long: 'English (India)' },
   'hi-IN': { short: 'हिंदी', long: 'Hindi' },
 };
-
-/** Remembered for the app session (a convenience only). */
-let lastVoiceLang: VoiceLang | null = null;
 
 function ListeningDot() {
   const reduce = useReducedMotion();
@@ -52,8 +49,19 @@ export interface ComposerProps {
 }
 
 export function Composer({ value, onChange, onSend, busy, error, defaultVoiceLang = 'en-IN', inputRef }: ComposerProps) {
-  const [voiceLang, setVoiceLang] = useState<VoiceLang>(lastVoiceLang ?? defaultVoiceLang);
+  const [voiceLang, setVoiceLang] = useState<VoiceLang>(defaultVoiceLang);
   const [focused, setFocused] = useState(false);
+
+  // The member's last voice language — shared with the meal composer and kept across launches.
+  useEffect(() => {
+    let alive = true;
+    void loadVoiceLang().then((saved) => {
+      if (alive && saved) setVoiceLang(saved);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
   const valueRef = useRef(value);
   useEffect(() => {
     valueRef.current = value;
@@ -90,7 +98,7 @@ export function Composer({ value, onChange, onSend, busy, error, defaultVoiceLan
   function switchLang() {
     if (voice.listening) voice.cancel();
     haptics.select();
-    lastVoiceLang = other;
+    saveVoiceLang(other);
     setVoiceLang(other);
   }
 

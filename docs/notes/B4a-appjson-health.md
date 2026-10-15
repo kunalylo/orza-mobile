@@ -51,8 +51,8 @@ Owner files: `app.json`, `src/lib/health/**`, `src/app/(app)/health.tsx`, `src/f
 - Weight = latest reading of the day (iOS `mostRecent`, Android latest record). Steps/kcal/distance/water = sums; HR = averages.
 - Dates are device-local `YYYY-MM-DD`; last 30 days incl. today (today re-synced later as it grows).
 - Auto-sync: `useHealthAutoSync()` runs on mount + every AppState → active, only when connected and ≥ 3 h since the last
-  success (and ≥ 2 min since the last failed attempt). Mounted by the Health screen; global mount requested in
-  `(app)/_layout.tsx` (cross-area request). Manual "Sync now" / pull-to-refresh always sync.
+  success (and ≥ 2 min since the last failed attempt). Mounted once in `(app)/_layout.tsx` (done by the Phase B
+  verifier; the Health screen no longer mounts its own copy). Manual "Sync now" / pull-to-refresh always sync.
 - HealthKit cannot report read grants, so "connected" = the user went through the permission sheet; if a sync returns nothing
   we say so and point to Settings › Health › Data Access & Devices.
 - app.json: usage strings live in plugin props (single source); `READ_MEDIA_IMAGES` removed + blocked (image picker uses the

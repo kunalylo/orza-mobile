@@ -16,7 +16,7 @@ import type { ChartPoint, HealthMetric, HealthRange, MergedHealthDay } from '@/f
 import { errorMessage } from '@/lib/api';
 import { useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
-import { useHealthAutoSync, useHealthSync } from '@/lib/health/sync';
+import { useHealthSync } from '@/lib/health/sync';
 import { colors, radii, spacing } from '@/theme';
 import { Button, EmptyState, GlassCard, IconButton, Screen, ScreenHeader, Segmented, Skeleton, Tag, Text, toast } from '@/ui';
 
@@ -36,8 +36,7 @@ const valuesOf = (pts: ChartPoint[]) => pts.flatMap((p) => (p.value !== undefine
 
 export default function HealthSync() {
   const user = useSignedInUser();
-  const health = useHealthSync();
-  useHealthAutoSync();
+  const health = useHealthSync(); // launch / foreground auto-sync is mounted once in (app)/_layout.tsx
   const reduce = useReducedMotion();
 
   const today = todayIn(user.profile?.timezone);

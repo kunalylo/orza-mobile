@@ -6,6 +6,8 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import { ApiError, errorMessage } from '@/lib/api';
 
+import { DAY_SUMMARY_ROOTS } from '@/features/meals/api';
+
 /** Server AI calls give up after 45 s; leave room for the database writes around them. */
 export const AI_TIMEOUT_MS = 65_000;
 
@@ -39,13 +41,11 @@ export function aiErrorInfo(e: unknown): AiErrorInfo {
 }
 
 /**
- * After a chat reply or a recipe logged a meal: refresh the meal log's day caches (`['meals','day',date]`, see
- * src/features/meals/api.ts) and the screens that summarise the day (same roots the meal log refreshes).
+ * After a chat reply or a recipe logged a meal (on a day we may not know): refresh every cached meal-log day
+ * (`['meals','day',date]`) and the screens that summarise the day — the same roots the meal log refreshes.
  */
-const SUMMARY_ROOTS = new Set(['today', 'dashboard', 'summary', 'reports', 'insights']);
-
 export function invalidateMealQueries(queryClient: QueryClient) {
   return queryClient.invalidateQueries({
-    predicate: (q) => (q.queryKey[0] === 'meals' && q.queryKey[1] === 'day') || SUMMARY_ROOTS.has(String(q.queryKey[0])),
+    predicate: (q) => (q.queryKey[0] === 'meals' && q.queryKey[1] === 'day') || DAY_SUMMARY_ROOTS.includes(String(q.queryKey[0])),
   });
 }

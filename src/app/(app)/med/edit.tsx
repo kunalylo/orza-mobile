@@ -323,7 +323,7 @@ export default function EditMedicine() {
         {medQ.isError ? (
           notFound ? (
             <GlassCard padding={spacing.sm}>
-              <EmptyState icon="mci:pill-off" title="This medicine isn't here any more" body="It may have been deleted on another device." actionLabel="Back to medicines" onAction={() => router.replace('/medicines')} />
+              <EmptyState icon="mci:pill-off" title="This medicine isn't here any more" body="It may have been deleted on another device." actionLabel="Back to medicines" onAction={() => router.dismissTo('/medicines')} />
             </GlassCard>
           ) : (
             <ErrorPanel error={medQ.error} onRetry={() => void medQ.refetch()} retrying={medQ.isFetching} />

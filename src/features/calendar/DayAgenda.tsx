@@ -29,15 +29,16 @@ const KIND_ICON: Record<CalendarEvent['kind'], IconName> = {
   external: 'calendar',
 };
 
+// Tab routes (medicines, meals) use dismissTo: it returns to the existing tabs instead of stacking a second copy.
 function openEvent(e: CalendarEvent, date: string) {
   if (e.kind === 'medication') {
     const dose = parseDoseEventId(e.id);
-    if (!dose) return router.push('/medicines');
+    if (!dose) return router.dismissTo('/medicines');
     const acted = e.status === 'taken' || e.status === 'skipped';
     if (acted) return router.push({ pathname: '/med/[id]', params: { id: dose.medicationId } });
     return router.push({ pathname: '/alarm', params: { med: dose.medicationId, at: dose.at } });
   }
-  if (e.kind === 'meal') return router.push({ pathname: '/meals', params: { date } });
+  if (e.kind === 'meal') return router.dismissTo({ pathname: '/meals', params: { date } });
   if (e.kind === 'reminder') return router.push('/reminders');
 }
 

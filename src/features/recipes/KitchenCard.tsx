@@ -47,7 +47,7 @@ export function KitchenCard({ user, kitchen }: { user: PublicUser; kitchen?: Kit
           </View>
         ))}
       </View>
-      <Pressable onPress={() => router.push('/settings')} style={styles.link} accessibilityRole="link" hitSlop={6}>
+      <Pressable onPress={() => router.push('/account/profile')} style={styles.link} accessibilityRole="link" hitSlop={6}>
         <Text variant="caption" color="rgba(247,244,239,0.85)" weight="medium">
           Update preferences
         </Text>

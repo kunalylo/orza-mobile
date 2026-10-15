@@ -123,11 +123,11 @@ export function SessionsSheet({ visible, onClose, sessions, loading, error, onRe
         <Pressable
           onPress={() => {
             onClose();
-            router.push('/settings');
+            router.push('/account/memory');
           }}
           style={styles.memory}
           accessibilityRole="link"
-          accessibilityHint="Opens Settings, where you can see and edit what ÖRZA remembers"
+          accessibilityHint="Opens what ÖRZA remembers, where you can see and edit it"
         >
           <Icon name="mci:bookmark-check" size={17} color={colors.violet600} />
           <Text variant="caption" tone="muted" style={styles.memoryText}>

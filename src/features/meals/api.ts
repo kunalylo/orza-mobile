@@ -62,12 +62,13 @@ export function findCachedMeal(qc: QueryClient, id: string): Meal | undefined {
   return undefined;
 }
 
-/** Screens outside the meal log that summarise the day (Today, reports…) refetch after a meal changes. */
-function invalidateDaySummaries(qc: QueryClient, date: string) {
+/** Query-key roots of the screens outside the meal log that summarise a day (Today, reports…). */
+export const DAY_SUMMARY_ROOTS: readonly string[] = ['today', 'dashboard', 'summary', 'reports', 'insights'];
+
+/** After a meal on `date` changed: refetch that day's log and every screen that summarises the day. */
+export function invalidateDaySummaries(qc: QueryClient, date: string) {
   void qc.invalidateQueries({ queryKey: mealKeys.day(date) });
-  void qc.invalidateQueries({
-    predicate: (q) => ['today', 'dashboard', 'summary', 'reports', 'insights'].includes(String(q.queryKey[0])),
-  });
+  void qc.invalidateQueries({ predicate: (q) => DAY_SUMMARY_ROOTS.includes(String(q.queryKey[0])) });
 }
 
 /* ───────────────────────────── Queries ───────────────────────────── */

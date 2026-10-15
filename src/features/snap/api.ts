@@ -7,7 +7,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, errorMessage } from '@/lib/api';
 import { PhotoError, PhotoPermissionError } from '@/lib/image';
 
-import { mealKeys, upsertMealInCache } from '@/features/meals/api';
+import { invalidateDaySummaries, upsertMealInCache } from '@/features/meals/api';
 
 import type { ConfirmInput, ConfirmResponse, ScanInput, ScanProblem, ScanResponse } from './types';
 import { SCAN_TIMEOUT_MS } from './utils';
@@ -30,11 +30,8 @@ export function useConfirmScan() {
     mutationFn: ({ id, ...body }: ConfirmInput) => api.post<ConfirmResponse>(`/meals/scan/${encodeURIComponent(id)}/confirm`, body, { timeoutMs: 30_000 }),
     onSuccess: ({ meal }) => {
       upsertMealInCache(qc, meal);
-      void qc.invalidateQueries({ queryKey: mealKeys.day(meal.date) });
-      // Today, reports and other day summaries refetch.
-      void qc.invalidateQueries({
-        predicate: (q) => ['today', 'dashboard', 'summary', 'reports', 'insights'].includes(String(q.queryKey[0])),
-      });
+      // The day's log, Today, reports and other day summaries refetch.
+      invalidateDaySummaries(qc, meal.date);
     },
   });
 }

@@ -33,15 +33,21 @@ src/
     (app)/(tabs)/           Today · Meals · Snap (raised centre) · Medicines · More
     (app)/*.tsx             feature screens (ask, goals, recipes, rebalance, reports, health, calendar,
                             reminders, credits, settings) + alarm (full-screen modal)
-  components/               app-specific pieces (TabBar, FeaturePlaceholder, onboarding/*, auth/*)
+    (app)/meal|med|rx|recipe|account/   pushed detail screens (med/edit is a full-screen modal)
+  components/               app-specific pieces (TabBar, onboarding/*, auth/*)
+  features/<area>/          per-feature API hooks, types, helpers and components (meals, snap, today, meds, rx,
+                            alarm, chat, recipes, rebalance, goals, reports, credits, settings, more, health,
+                            calendar, reminders)
   ui/                       design-system kit — import from "@/ui"
   theme/                    tokens: colours, gradients, spacing, radii, typography, shadows, motion
-  lib/                      api client, auth (+ React Query), secure storage, device registration, haptics, fonts
+  lib/                      api client, auth (+ React Query), secure storage, device registration, haptics, fonts,
+                            image (photos), voice (speech), health (HealthKit / Health Connect bridge + sync)
 ```
 
 ### Conventions
 - **API**: `api.get/post/patch/put/del` from `@/lib/api` (JSON, Bearer token, timeouts, `ApiError {status, code, field}`,
-  friendly offline/timeout messages; an authenticated 401 signs out). Photos: `mediaSource(url)` for `expo-image`.
+  friendly offline/timeout messages; an authenticated 401 signs out, except `code: "wrong_password"`). Photos:
+  `mediaSource(url)` for `expo-image`.
 - **Data**: React Query (`useQuery` / `useMutation`) — the client is provided by `AuthProvider`.
 - **User**: `useAuth()` (`signIn/signUp/signOut/refresh/setUser`), `useSignedInUser()` inside member screens.
 - **UI**: `Screen` (safe area, cream canvas / `orb` / `hero` backdrop, keyboard, `tabBar` spacing), `ScreenHeader`, `Text`
@@ -50,8 +56,12 @@ src/
 - **Icons**: `Icon name="camera"` (Feather) or `"mci:pill"` (MaterialCommunityIcons).
 - **Motion**: Reanimated shared values use `.get()` / `.set()` (React Compiler safe); respect `useReducedMotion()`.
 - **Haptics**: `haptics.tap/soft/firm/select/success/warning/error` from `@/lib/haptics`.
-- **Photos**: `pickPhotos(source)` + `toUploadDataUrl(uri)` from `@/lib/image` (JSON data URLs; the server rejects multipart).
-- **Voice**: `useVoiceInput({ onFinal })` from `@/lib/voice` (en-IN / hi-IN, live partial transcript, `available` false → hide the mic).
+- **Photos**: `pickPhotos(source)` + `toUploadDataUrl(uri, {maxSide, quality, maxBytes})` from `@/lib/image` (JSON data
+  URLs; the server rejects multipart; default cap 1.4 MB, meal scans pass 2.5 MB).
+- **Voice**: `useVoiceInput({ onFinal })` from `@/lib/voice` (en-IN / hi-IN, live partial transcript, `available` false → hide the mic);
+  `loadVoiceLang()` / `saveVoiceLang()` share the member's last voice language between composers.
+- **Meal changes**: `invalidateDaySummaries(qc, date)` / `upsertMealInCache` from `@/features/meals/api` (refreshes the day's
+  log plus every query rooted at `today` / `dashboard` / `summary` / `reports` / `insights`).
 - **Dose events**: `emitDoseEvent` / `onDoseEvent` from `@/features/meds/events` after any dose or medicine change.
 - **Route types**: after adding/removing a route file run `npm run routes` (regenerates `.expo/types/router.d.ts` without a
   dev server); `npm run typecheck` does that and then `tsc --noEmit`.

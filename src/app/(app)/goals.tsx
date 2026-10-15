@@ -112,7 +112,7 @@ export default function Goals() {
                 eyebrow="Daily targets"
                 title={data.goal ? 'What your goal looks like each day' : 'Your daily targets'}
                 actionLabel="Fine-tune"
-                onAction={() => router.push('/settings')}
+                onAction={() => router.push('/account/targets')}
               />
               <TargetsGrid targets={data.targets} previous={previousTargets} />
             </View>

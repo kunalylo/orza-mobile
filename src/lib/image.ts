@@ -2,7 +2,7 @@
  * Photo capture + upload preparation shared by Snap & Know (meals), medicine photos and
  * prescription scans.
  *
- * INTERFACE CONTRACT — other features import exactly these exports (implemented by the Medicines stream, B2a).
+ * INTERFACE CONTRACT — other features import exactly these exports (built in step B2a).
  *
  * Server limits (see the web API): images are sent as JSON `data:image/jpeg;base64,…` URLs,
  * ≤ 1.5 MB after compression for medicine/prescription photos and ≤ ~6 MB for meal scans.
@@ -10,7 +10,7 @@
  * - `pickPhotos` uses the system photo picker for the library (no permission prompt needed on iOS 14+ / Android)
  *   and asks for camera access only when the camera is used.
  * - `toUploadDataUrl` uses the contextual expo-image-manipulator API (EXIF orientation applied, metadata dropped),
- *   then steps size / quality down until the JPEG fits under `MAX_UPLOAD_BYTES`.
+ *   then steps size / quality down until the JPEG fits under `MAX_UPLOAD_BYTES` (or the caller's `maxBytes`).
  */
 import { ImageManipulator, SaveFormat, type ImageRef } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
@@ -143,12 +143,17 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
 /**
  * Resize (longest side ≤ maxSide, default 1280 px), re-encode as JPEG (default quality 0.8) and
  * return a `data:image/jpeg;base64,…` URL ready for the API. Also returns the encoded size in bytes.
- * Steps size / quality down automatically when the result is above the upload limit; throws `PhotoError`
- * (friendly message) when the photo can't be read or made small enough.
+ * Steps size / quality down automatically when the result is above the upload limit (`maxBytes`, default
+ * `MAX_UPLOAD_BYTES` — meal scans may pass more); throws `PhotoError` (friendly message) when the photo can't be read
+ * or made small enough.
  */
-export async function toUploadDataUrl(uri: string, opts: { maxSide?: number; quality?: number } = {}): Promise<{ dataUrl: string; bytes: number }> {
+export async function toUploadDataUrl(
+  uri: string,
+  opts: { maxSide?: number; quality?: number; maxBytes?: number } = {}
+): Promise<{ dataUrl: string; bytes: number }> {
   const maxSide = Math.round(clamp(opts.maxSide ?? 1280, 320, 4096));
   const quality = clamp(opts.quality ?? 0.8, 0.3, 1);
+  const maxBytes = Math.round(clamp(opts.maxBytes ?? MAX_UPLOAD_BYTES, 100_000, 6_000_000));
 
   let original: ImageRef;
   try {
@@ -177,7 +182,7 @@ export async function toUploadDataUrl(uri: string, opts: { maxSide?: number; qua
         lastSide = side;
       }
       const out = await encode(ref, q);
-      if (out.bytes <= MAX_UPLOAD_BYTES) return out;
+      if (out.bytes <= maxBytes) return out;
     }
     throw new PhotoError('That photo is too detailed to upload. Please try a closer, simpler shot.');
   } catch (e) {

@@ -1,7 +1,8 @@
 /**
  * Voice input (speech → text) shared by the meal composer and Ask ÖRZA chat — expo-speech-recognition.
  *
- * INTERFACE CONTRACT — other features import exactly these exports (`VoiceLang`, `VoiceInput`, `useVoiceInput`).
+ * INTERFACE CONTRACT — other features import exactly these exports (`VoiceLang`, `VoiceInput`, `useVoiceInput`), plus
+ * `loadVoiceLang` / `saveVoiceLang` so every composer shares the member's last voice language.
  *
  * - The native module is loaded with `requireOptionalNativeModule`, never through the package's JS entry (which throws at
  *   import time when the module is missing, e.g. in Expo Go) — so a build without it simply reports `available: false`.
@@ -18,6 +19,7 @@ import type {
   ExpoSpeechRecognitionModule as SpeechModuleValue,
   ExpoSpeechRecognitionResultEvent,
 } from 'expo-speech-recognition';
+import * as SecureStore from 'expo-secure-store';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 
@@ -40,6 +42,30 @@ export interface VoiceInput {
   stop: () => void;
   /** stop listening and discard the transcript. */
   cancel: () => void;
+}
+
+/* ───────────────────────────── Remembered language ───────────────────────────── */
+
+/** The voice language the member last picked, shared by every composer (meal log, Ask ÖRZA). */
+const VOICE_LANG_KEY = 'orza.voiceLang';
+let rememberedLang: VoiceLang | null = null;
+
+/** The last chosen voice language (in memory first, then SecureStore), or null when none was chosen yet. */
+export async function loadVoiceLang(): Promise<VoiceLang | null> {
+  if (rememberedLang || Platform.OS === 'web') return rememberedLang;
+  try {
+    const saved = await SecureStore.getItemAsync(VOICE_LANG_KEY);
+    if (saved === 'en-IN' || saved === 'hi-IN') rememberedLang = saved;
+  } catch {
+    // a convenience only
+  }
+  return rememberedLang;
+}
+
+/** Remember the voice language across screens and launches. */
+export function saveVoiceLang(lang: VoiceLang): void {
+  rememberedLang = lang;
+  if (Platform.OS !== 'web') SecureStore.setItemAsync(VOICE_LANG_KEY, lang).catch(() => {});
 }
 
 /* ───────────────────────────── Native module ───────────────────────────── */

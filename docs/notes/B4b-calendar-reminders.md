@@ -54,10 +54,15 @@ Ownership: src/app/(app)/calendar.tsx, src/app/(app)/reminders.tsx, src/features
 - [x] src/features/calendar/utils.ts
 - [x] src/features/calendar/api.ts
 - [x] src/features/calendar/deviceCalendar.ts
-- [ ] src/features/calendar/MonthGrid.tsx
-- [ ] src/features/calendar/DayAgenda.tsx
-- [ ] src/features/calendar/PhoneCalendarCard.tsx
-- [ ] src/features/calendar/SubscribeCard.tsx
-- [ ] src/features/calendar/ConnectCard.tsx
-- [ ] src/app/(app)/calendar.tsx
-- [ ] npm run typecheck + npx expo lint clean
+- [x] src/features/calendar/MonthGrid.tsx
+- [x] src/features/calendar/DayAgenda.tsx
+- [x] src/features/calendar/PhoneCalendarCard.tsx
+- [x] src/features/calendar/SubscribeCard.tsx
+- [x] src/features/calendar/ConnectCard.tsx
+- [x] src/app/(app)/calendar.tsx
+- [x] npm run typecheck + npx expo lint clean
+
+## Status (resumed session)
+- All calendar components + screen were already on disk (checkpoint commit 081bb61); reviewed for completeness and consistency.
+- `npm run typecheck` clean (routes regenerated), `npx expo lint` clean for the whole project.
+- iOS full-access calendar usage string comes from the expo-calendar plugin's `calendarPermission` (sets NSCalendarsFullAccessUsageDescription).

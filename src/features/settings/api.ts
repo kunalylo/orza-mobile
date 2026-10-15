@@ -6,7 +6,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
-import { ApiError, api, getSessionToken } from '@/lib/api';
+import { ApiError, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { Preferences, PublicUser, Targets } from '@/lib/types';
 
@@ -113,18 +113,13 @@ export class PasswordChangeError extends Error {
 }
 
 /**
- * POST /api/account/password. Sent with an explicit Bearer (`auth: false`) because the shared client signs out on any
- * authenticated 401 — and a wrong current password is a 401 (`code: "wrong_password"`). A real expired session
- * (`code: "unauthorized"`) is reported with `expired`, and the screen then lets the normal sign-out happen.
+ * POST /api/account/password. A wrong current password is a 401 with `code: "wrong_password"`, which the shared client
+ * does not treat as a lost session. A real expired session (`code: "unauthorized"`) signs out as usual and is also
+ * reported with `expired`.
  */
 async function changePassword(current: string, next: string): Promise<void> {
-  const token = getSessionToken();
   try {
-    await api.post(
-      '/account/password',
-      { current_password: current, new_password: next },
-      { auth: false, headers: token ? { Authorization: `Bearer ${token}` } : {} }
-    );
+    await api.post('/account/password', { current_password: current, new_password: next });
   } catch (e) {
     if (!(e instanceof ApiError)) throw new PasswordChangeError("We couldn't change your password. Please try again.");
     if (e.status === 401) {

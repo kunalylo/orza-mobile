@@ -295,7 +295,7 @@ export default function Reminders() {
             Each medicine rings at its own times with its photo. Scan a prescription and ÖRZA creates the alarms for you.
           </Text>
           <View style={styles.actions}>
-            <Button label="Open Medicines" iconRight="chevron-right" variant="primary" size="sm" onPress={() => router.push('/medicines')} />
+            <Button label="Open Medicines" iconRight="chevron-right" variant="primary" size="sm" onPress={() => router.dismissTo('/medicines')} />
             <Button label="Scan a prescription" icon="camera" variant="secondary" size="sm" onPress={() => router.push('/rx')} />
           </View>
         </GlassCard>

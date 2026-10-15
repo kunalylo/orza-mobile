@@ -35,25 +35,25 @@ Profile draft/patch logic ported from web `settings/profile-draft.ts` (units-awa
 ## Decisions
 - Single source of truth = `useSignedInUser()`. `useAccountSync()` (React Query `['account','profile']`, GET /profile)
   pushes the fresh user into `setUser`; every mutation `setUser(res.user)`.
-- Password change is sent with `auth:false` + explicit Bearer so a wrong-password 401 can't trip the global
-  unauthorized handler (it signs out on ANY authenticated 401). Expired-session 401 (`code !== 'wrong_password'`) → `refresh()`
-  which lets the normal handler sign out. Cross-area request filed to exempt `wrong_password` in api.ts.
+- Password change: `src/lib/api.ts` now exempts a `wrong_password` 401 from the global sign-out (Phase B verifier), so the
+  request goes through the normal authenticated client. Expired-session 401 (`code !== 'wrong_password'`) signs out as usual
+  and the screen also shows the "session ended" message.
 - Toast has no action → memory "Undo" is an inline animated pill (6 s).
 - Routes: `settings.tsx` hub; `account/profile`, `account/targets`, `account/preferences`, `account/memory`,
   `account/password`, `account/data` (export + delete + links). All normal pushes.
 
 ## Checklist
-- [ ] src/features/settings/options.ts
-- [ ] src/features/settings/profileDraft.ts
-- [ ] src/features/settings/api.ts (types, hooks, export/share, field-error parsing)
-- [ ] src/features/settings/parts.tsx (SettingsGroup, SettingsRow, FieldGroup, SaveBar, ToggleRow, Avatar)
-- [ ] src/features/more/* (MenuSection/MenuRow/AccountHeader)
-- [ ] src/app/(app)/(tabs)/more.tsx
-- [ ] src/app/(app)/settings.tsx (hub)
-- [ ] src/app/(app)/account/profile.tsx
-- [ ] src/app/(app)/account/targets.tsx
-- [ ] src/app/(app)/account/preferences.tsx
-- [ ] src/app/(app)/account/memory.tsx
-- [ ] src/app/(app)/account/password.tsx
-- [ ] src/app/(app)/account/data.tsx
-- [ ] npm run routes / typecheck / lint
+- [x] src/features/settings/options.ts
+- [x] src/features/settings/profileDraft.ts
+- [x] src/features/settings/api.ts (types, hooks, export/share, field-error parsing)
+- [x] src/features/settings/parts.tsx (SettingsGroup, SettingsRow, FieldGroup, SaveBar, ToggleRow, Avatar)
+- [x] src/features/more/* (menu.ts, AccountCard.tsx; MenuSection rendered with SettingsGroup+SettingsRow)
+- [x] src/app/(app)/(tabs)/more.tsx
+- [x] src/app/(app)/settings.tsx (hub; Delete row pushes /account/data?confirm=delete)
+- [x] src/app/(app)/account/profile.tsx (+ features/settings/RegionSheet.tsx, TargetsCallout.tsx)
+- [x] src/app/(app)/account/targets.tsx
+- [x] src/app/(app)/account/preferences.tsx
+- [x] src/app/(app)/account/memory.tsx
+- [x] src/app/(app)/account/password.tsx
+- [x] src/app/(app)/account/data.tsx
+- [x] npm run routes / typecheck / lint (all clean)

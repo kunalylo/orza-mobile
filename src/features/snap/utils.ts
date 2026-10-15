@@ -3,8 +3,11 @@
  */
 import type { IconName, TagTone } from '@/ui';
 
-/** Longest side / JPEG quality for meal photos. Meal scans accept far larger uploads (≈ 6 MB) than medicine photos. */
-export const SCAN_PHOTO = { maxSide: 1600, quality: 0.82 } as const;
+/**
+ * Longest side / JPEG quality / size cap for meal photos. Meal scans accept far larger uploads (≈ 6 MB) than medicine
+ * photos; 2.5 MB keeps the base64 JSON body (≈ 3.4 MB) under the hosting platform's 4.5 MB request limit.
+ */
+export const SCAN_PHOTO = { maxSide: 1600, quality: 0.82, maxBytes: 2_500_000 } as const;
 
 /** The AI usually answers in 5–20 s; leave room for slow networks. */
 export const SCAN_TIMEOUT_MS = 90_000;

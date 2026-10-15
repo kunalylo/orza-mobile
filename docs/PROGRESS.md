@@ -18,10 +18,56 @@ IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
 - [x] A2 Mobile foundation: app.json (name ÖRZA, ids, permissions text, plugins), eas.json (development / preview APK / production), fonts, theme tokens, UI kit (Screen, Text, GlassCard, Button, Chip/Tag, Input, Segmented, EnergyRing, Orb, Skeleton, EmptyState, Toast), API client (SecureStore token, 401 → sign-in), auth + user context, navigation shell (welcome → auth → onboarding → tabs), brand icon + splash.
 
 ## Phase B — Features (parallel streams)
-- [ ] B1 Today dashboard, Meal log (text / voice / food list), Snap & Know (camera + gallery → AI scan → edit → log)
-- [ ] B2 Medicines (photos via camera/gallery, schedules, stock), prescription scan → alarms, photo alarm screen (Take/Snooze/Skip), adherence
-- [ ] B3 Ask ÖRZA chat, Goals, Recipes, Rebalance, Reports, Credits, Settings (profile, targets, prefs, memory, password, export, delete)
-- [ ] B4 Health sync (HealthKit iOS / Health Connect Android → /api/health/import), device Calendar (expo-calendar), Reminders
+- [x] B1 Today dashboard, Meal log (text / voice / food list), Snap & Know (camera + gallery → AI scan → edit → log)
+  — Today `(tabs)/index.tsx` + `features/today` (`GET /dashboard/today`, energy card, insight, quick actions, meds card on the
+  shared meds hooks, water / steps / weight). Meals `(tabs)/meals.tsx` + `meal/[id].tsx` + `features/meals` (type / speak →
+  `/meals/text`, food list + custom item → `/meals/manual`, edit / delete; params `compose` `voice` `date` `meal_type`).
+  Snap `(tabs)/snap.tsx` + `features/snap` (camera / gallery → `/meals/scan` → review with the meals ItemEditor → confirm).
+  Voice: `lib/voice.ts` (expo-speech-recognition, en-IN / hi-IN, shared remembered language). Notes: `docs/notes/B1a*`, `B1b*`.
+- [x] B2 Medicines (photos via camera/gallery, schedules, stock), prescription scan → alarms, photo alarm screen (Take/Snooze/Skip), adherence
+  — Photos: `lib/image.ts` (system picker, camera permission, contextual manipulator, size steps; `maxBytes` option).
+  Medicines tab `(tabs)/medicines.tsx`, `med/[id].tsx`, `med/edit.tsx` (full-screen modal) + `features/meds` (timeline,
+  Take / Snooze / Skip, 7-day adherence, schedule editor, stock / refill). Prescriptions `rx/index|review|done.tsx` +
+  `features/rx` (scan, manual entry, review → apply). Alarm `alarm.tsx` (`?med=&at=`) + `features/alarm`. Notes: `B2a*`, `B2b*`.
+- [x] B3 Ask ÖRZA chat, Goals, Recipes, Rebalance, Reports, Credits, Settings (profile, targets, prefs, memory, password, export, delete)
+  — `ask.tsx` + `features/chat` (sessions, voice, logged-meal cards); `recipes.tsx`, `recipe/[id].tsx` + `features/recipes`;
+  `rebalance.tsx` + `features/rebalance`; `goals.tsx` + `features/goals` (goal-math port, weight chart); `reports.tsx` +
+  `features/reports` (daily / weekly, weekly CSV share); `credits.tsx` + `features/credits` (request credits, no prices);
+  More tab + `settings.tsx` + `account/{profile,targets,preferences,memory,password,data}.tsx` + `features/settings|more`.
+  Notes: `B3a*`, `B3b*`, `B3c*`.
+- [x] B4 Health sync (HealthKit iOS / Health Connect Android → /api/health/import), device Calendar (expo-calendar), Reminders
+  — `app.json` plugins / permissions (speech, camera, photos, calendar, HealthKit, Health Connect, notifications, SDK 26/36);
+  `lib/health/*` (per-platform bridge, store, `syncHealth`, auto-sync mounted in `(app)/_layout.tsx`) + `health.tsx` +
+  `features/health`; `calendar.tsx` + `features/calendar` (month grid, agenda, phone-calendar copy, subscribe feed, connect
+  own calendar); `reminders.tsx` + `features/reminders` (server reminders, quiet hours, WhatsApp, notification permission).
+  Notes: `B4a*`, `B4b*`.
+
+### Phase B open issues (carry into C / D)
+- **Backend (web repo, not changed by the app work):** add `"health_connect"` to `IMPORT_SOURCES` in
+  `E:\aylo\orza\src\components\care\health\metrics.ts` (Android uploads fall back to `apple_health` until then). A1 (Bearer
+  auth + devices) is still unpushed — the app can't sign in against production until it is deployed.
+- **Never run on a device or against the live API** (D1): mic permission flow + Hindi recognition, camera / gallery
+  permission flows (deny → blocked → Open Settings), swipe-to-delete in scroll views, sheets inside sheets (time picker inside
+  the medicine editor), `med/edit` opening over the alarm on iOS, Android keyboard with edge-to-edge (`Screen keyboard` uses no
+  KeyboardAvoidingView behaviour on Android — may need `padding` or a keyboard controller), expo-sharing of cache-folder files
+  (reports CSV, data export) on Android, Reanimated SVG animations, phone-calendar sync (dev build; iOS needs full access),
+  HealthKit / Health Connect (dev build), 360×640 layouts. Response shapes come from the web route handlers.
+- **Phase C:** local reminder / alarm notifications (reminders arrive via the server today); alarm screen doesn't keep the
+  screen awake (`expo-keep-awake` is not a direct dependency — add with a time limit in C2/C3); iOS time-sensitive
+  entitlement, a dedicated 96×96 notification icon; Play Console declarations (USE_FULL_SCREEN_INTENT, SCHEDULE_EXACT_ALARM,
+  Health Connect permissions form, privacy policy covering health data).
+- **Deliberate gaps:** prescription free-text frequency parser (web `lib/care/frequency.ts`) not ported — pattern chips +
+  custom times instead, "As written" read-only; no per-medicine dose-history endpoint (detail shows 7 / 30-day totals);
+  Android camera process-death recovery (`getPendingResultAsync`) not handled; Health Connect reads only 30 days before the
+  first grant; web-only pieces left out (credit price cards — App Store 3.1.1; doctor print view — weekly CSV instead, PDF
+  would need expo-print; browser-alarm explainer); food-list allergy filter is a compact copy of the web matcher; `for_person`
+  is per prescription (API shape); Today's "Type or speak" opens the composer — no one-tap mic shortcut yet (Meals accepts
+  `voice=1`). The memory screen trusts a fresh `GET /api/profile`; any future `setUser` with a stale / partial user could
+  make a memory edit overwrite the list.
+- **Duplicated helpers (fine for now, tidy later):** `formatNumber` ×4 (chat, goals, meals, settings); date helpers (`addDays`
+  ×3, `todayInTz` / `todayIn` ×4, `DEFAULT_TZ` ×3); unit maths + activity / target defaults in `goals/math` and `settings`;
+  two Steppers (meals, meds), two scan Viewfinders (snap, rx), `FALLBACK_COSTS` (meals, credits), photo-problem mapping (snap,
+  rx, meds PhotoGrid), `useLogWeight` (today, goals).
 
 ## Phase C — Native alarms & notifications
 - [ ] C1 Local scheduling engine (rolling window; iOS 64-pending limit; reschedule on app open, med change, timezone change; dedupe with server push)
@@ -102,3 +148,21 @@ IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
   check `docs/notes/*.md` checklists + `git status` and finish each step by hand.
   Run: workflow `orza-mobile-phase-b2`, run id `wf_1e9916a7-4c3`, script
   `C:\Users\ADMIN\.claude\projects\E--aylo-orza\28092694-1d2e-42df-925f-dfe01d5728c5\workflows\scripts\orza-mobile-phase-b2-wf_1e9916a7-4c3.js`.
+- 2026-10-15: **Phase B verified + integrated** (B1–B4 ticked; per-step notes in `docs/notes/`). Steps B1a/B2a/B3a then
+  B1b/B2b/B3b/B4a were checkpointed in `8e87b92` / `081bb61`; B3c and B4b were finished from those checkpoints. Integration:
+  - `(app)/_layout.tsx`: health auto-sync mounted once for the signed-in area (removed from the Health screen); `med/edit`
+    registered as a full-screen modal (exact safe-area / keyboard; opens over the alarm — a plain push from a modal lands
+    underneath it on iOS). No other modal routes needed.
+  - Links: stack screens now return to tab routes with `router.dismissTo` (calendar agenda, reminders, reports meal log,
+    medicine / recipe "not found") — `navigate`/`push`/`replace` there stacked a second copy of the tabs. Chat memory links →
+    `/account/memory`, chat logged-meal card → `/meal/[id]?date=`, Goals "Fine-tune" → `/account/targets`, recipes kitchen
+    card → `/account/profile`.
+  - `lib/api.ts`: a `wrong_password` 401 no longer signs out (as on the web); the password change uses the normal client.
+  - `lib/voice.ts`: `loadVoiceLang` / `saveVoiceLang` (`orza.voiceLang`) shared by the meal composer and the chat composer.
+  - `lib/image.ts`: optional `maxBytes`; Snap sends up to 2.5 MB (base64 body stays under the host's 4.5 MB limit).
+  - `features/meals/api.ts` exports `DAY_SUMMARY_ROOTS` / `invalidateDaySummaries` (Snap and chat reuse them); water / steps
+    also refresh Reports. Removed the unused `components/FeaturePlaceholder.tsx`; README layout / conventions updated.
+  - Expo patch updates (`npx expo install --fix`: expo 57.0.29, expo-router 57.0.27, @expo/ui, expo-linking, expo-notifications).
+  - Checks: `npm run typecheck` ✓ (typed routes regenerated; every link resolves), `npx expo lint` ✓, `npx expo-doctor` 21/21 ✓,
+    `npx expo export --platform android` ✓ (6.5 MB HBC) and `--platform ios` ✓ (6.4 MB HBC), exported outside the repo.
+  - Next: Phase C (native alarms & notifications), then D1 device testing of everything above.

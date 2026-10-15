@@ -6,7 +6,8 @@
  * - Bodies are always JSON with `Content-Type: application/json`: the server refuses any non-JSON write (415), so photos
  *   travel as data URLs inside JSON — there is no multipart upload.
  * - Errors become `ApiError` with the server's `{error, code, field}`; network failures and timeouts get
- *   friendly messages; a 401 on an authenticated call signs the app out (see `setUnauthorizedHandler`).
+ *   friendly messages; a 401 on an authenticated call signs the app out (see `setUnauthorizedHandler`) — except
+ *   `code: "wrong_password"`, which only means a password typed to confirm a change was wrong.
  */
 import * as Device from 'expo-device';
 
@@ -205,8 +206,9 @@ export async function request<T = unknown>(path: string, opts: RequestOptions = 
       retryAfter: Number.isFinite(retry) && retry > 0 ? retry : undefined,
       data,
     });
-    // Only a request made with the *current* token may end the session (a stale in-flight call must not).
-    if (res.status === 401 && usedToken && usedToken === sessionToken) onUnauthorized?.();
+    // Only a request made with the *current* token may end the session (a stale in-flight call must not). A
+    // `wrong_password` 401 only means the current password typed on a password change was wrong (as on the web).
+    if (res.status === 401 && code !== 'wrong_password' && usedToken && usedToken === sessionToken) onUnauthorized?.();
     throw error;
   }
   return data as T;

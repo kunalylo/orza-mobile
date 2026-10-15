@@ -124,7 +124,7 @@ export default function RecipeScreen() {
               title={notFound ? "That recipe doesn't exist anymore." : "Couldn't load this recipe"}
               body={notFound ? 'It may have been deleted on another device.' : errorMessage(q.error)}
               actionLabel={notFound ? 'Back to recipes' : 'Try again'}
-              onAction={notFound ? () => router.replace('/recipes') : () => void q.refetch()}
+              onAction={notFound ? () => router.dismissTo('/recipes') : () => void q.refetch()}
             />
           </View>
         )}

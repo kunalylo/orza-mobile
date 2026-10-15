@@ -130,7 +130,7 @@ export function AssistantBubble({ message }: { message: UIMessage }) {
           {remembered.map((f) => (
             <Tag key={f} label={f} tone="violet" />
           ))}
-          <Pressable onPress={() => router.push('/settings')} hitSlop={8} accessibilityRole="link" accessibilityLabel="Manage what ÖRZA remembers">
+          <Pressable onPress={() => router.push('/account/memory')} hitSlop={8} accessibilityRole="link" accessibilityLabel="Manage what ÖRZA remembers">
             <Text variant="caption" tone="subtle" style={styles.underline}>
               Manage
             </Text>
@@ -156,12 +156,12 @@ export function LoggedMealCard({ meal }: { meal: Meal }) {
   const type = MEAL_TYPE_LABEL[meal.meal_type] ?? 'Meal';
   return (
     <PressableScale
-      onPress={() => router.push('/meals')}
+      onPress={() => router.push({ pathname: '/meal/[id]', params: { id: meal.id, date: meal.date } })}
       haptic="soft"
       style={styles.mealCard}
       accessibilityRole="button"
       accessibilityLabel={`Logged ${type}${day !== 'Today' ? `, ${day}` : ''}: ${summary}, ${formatNumber(meal.totals.calories)} kcal`}
-      accessibilityHint="Opens your meal log"
+      accessibilityHint="Opens this meal to review or adjust it"
     >
       <LinearGradient colors={gradients.energy} {...diagonal} style={styles.mealDisc}>
         <Icon name="check" size={18} color={colors.white} />
