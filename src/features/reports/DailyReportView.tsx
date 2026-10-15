@@ -94,7 +94,7 @@ export function DailyReportView({ report, imperial, dimmed }: { report: DailyRep
               iconRight="arrow-right"
               variant="ghost"
               size="sm"
-              onPress={() => router.dismissTo({ pathname: '/meals', params: r.is_today ? {} : { date: r.date } })}
+              onPress={() => router.dismissTo({ pathname: '/meals', params: { date: r.date } })}
             />
           </View>
           {r.meals.length ? (
@@ -132,7 +132,7 @@ export function DailyReportView({ report, imperial, dimmed }: { report: DailyRep
               body="Snap a photo, type or speak what you ate — your report fills in automatically."
               actionLabel={r.is_today ? 'Log a meal' : undefined}
               actionVariant="primary"
-              onAction={r.is_today ? () => router.dismissTo({ pathname: '/meals', params: { compose: '1' } }) : undefined}
+              onAction={r.is_today ? () => router.dismissTo({ pathname: '/meals', params: { compose: '1', date: r.date } }) : undefined}
               style={styles.empty}
             />
           )}

@@ -84,12 +84,14 @@ function useSelection(points: ChartPoint[], band: number) {
     if (band > 0) selectIndex(Math.floor((x - M.left) / band));
   };
 
+  // Select only once a horizontal drag is recognised (onStart = activation; onUpdate fires only while active), never on
+  // touch-down (onBegin): a vertical scroll of the screen that starts on a chart fails the pan and must not pick a day.
   const gesture = Gesture.Race(
     Gesture.Pan()
       .runOnJS(true)
       .activeOffsetX([-6, 6])
       .failOffsetY([-14, 14])
-      .onBegin((e) => selectX(e.x))
+      .onStart((e) => selectX(e.x))
       .onUpdate((e) => selectX(e.x)),
     Gesture.Tap()
       .runOnJS(true)

@@ -140,7 +140,11 @@ export function useConversation({ initialSessionId, initialDraft }: { initialSes
     }
   }
 
-  async function send(raw: string) {
+  /**
+   * Send `raw` as the next user message. Only a send of the composer's own text (`fromComposer`) empties the
+   * composer; Retry, quick actions and starter questions leave whatever the user is typing untouched.
+   */
+  async function send(raw: string, { fromComposer = false }: { fromComposer?: boolean } = {}) {
     const text = raw.trim();
     if (!text || pendingRef.current) return;
     if (text.length > MAX_MESSAGE) {
@@ -152,8 +156,10 @@ export function useConversation({ initialSessionId, initialDraft }: { initialSes
     pendingRef.current = p;
     sentRef.current = true;
     setPending(p);
-    setInput('');
-    setComposerError(null);
+    if (fromComposer) {
+      setInput('');
+      setComposerError(null);
+    }
     setLocal((ls) => [
       ...ls,
       {
@@ -289,7 +295,8 @@ export function useConversation({ initialSessionId, initialDraft }: { initialSes
     },
     composerError,
     inputRef,
-    send,
+    /** Send what's in the composer (and empty it). */
+    sendInput: () => void send(input, { fromComposer: true }),
     retry,
     startNew,
     openSession,

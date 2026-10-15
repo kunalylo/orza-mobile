@@ -13,16 +13,30 @@ export interface Nutrients {
   fiber_g: number;
 }
 
+/**
+ * A meal item as the API returns it. MongoDB stores an item's missing optional values as `null` (food-list and
+ * custom items have no `confidence`, many have no `grams`), so read them as `number | null | undefined`.
+ */
 export interface MealItem extends Nutrients {
   name: string;
   /** e.g. 2 */
   quantity: number;
   /** e.g. "roti", "katori", "plate", "g" */
   unit: string;
+  grams?: number | null;
+  /** 0..1 */
+  confidence?: number | null;
+}
+
+/**
+ * A meal item as clients send it (custom items, edits, scan confirmation). Optional numbers are left out rather than
+ * sent as `null` (the server's zod schemas have rejected `null`), so a stored item goes through `fromDraft` first.
+ */
+export type MealItemInput = Omit<MealItem, 'grams' | 'confidence'> & {
   grams?: number;
   /** 0..1 */
   confidence?: number;
-}
+};
 
 export interface Meal {
   id: string;

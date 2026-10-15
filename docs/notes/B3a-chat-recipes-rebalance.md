@@ -14,7 +14,7 @@ All JSON, Bearer. AI calls: server AI timeout 45 s → client `timeoutMs: 65_000
 - `GET /chat/history?session_id=` → `{ session, messages: ChatMessage[] (oldest first, latest 200), logged_meals: Record<mealId, Meal> }`; 404.
 - `POST /chat/send { message (1..2000, trimmed), session_id? }` →
   `{ session_id, session, user_message, message, logged_meal?, credits?, memory?, remembered?, allergies?, notice? }`.
-  Errors: 400 field `message` ("Type a message for ÖRZA" / "Please keep messages under 2,000 characters"), 402 `no_credits`,
+  Errors: 400 `validation` "message: Type a message for ÖRZA" / "message: Please keep messages under 2,000 characters", 402 `no_credits`,
   404 (session deleted), 429 `rate_limited`, network/timeout. AI outages fall back to the free coach (200 + `notice`).
   ChatMessage `{id,session_id,user_id,role,content,meta?:{logged_meal_id?,ai?,remembered?},created_at}`.
 
@@ -24,19 +24,21 @@ All JSON, Bearer. AI calls: server AI timeout 45 s → client `timeoutMs: 65_000
 - `DELETE /recipes/:id` → `{ ok }`.
 - `POST /recipes/:id/save { saved: boolean }` → `{ recipe }`.
 - `POST /recipes/generate { prompt? ≤300, max_calories? int 150..1500, cuisine? ≤40, diet? }` → `{ recipe, ai, credits?, notice? }`.
-  Errors: 400 + field (prompt/max_calories/cuisine/diet), 422 `no_match`, 429. 402 never escapes (falls back to library + notice).
+  Errors: 400 `validation` "<field>: <message>" (prompt/max_calories/cuisine/diet), 422 `no_match`, 429. 402 never escapes (falls back to library + notice).
   Recipe `{id,title,cuisine,description,prep_minutes,servings,ingredients[],steps[],nutrition{calories,protein_g,carbs_g,fat_g,fiber_g},tags[],saved,created_at,source?,prompt?}`.
 - Log a serving (web "Log 1 serving"): `POST /meals/manual { items: [{name ≤80, quantity:1, unit:"serving", calories, protein_g, carbs_g, fat_g, fiber_g}] }` → `{ meal }`.
 
 ### Rebalance (compensation)
 - `GET /compensation` → `{ plans: Plan[] (newest, max 20), ai_enabled, cost }`.
 - `POST /compensation/plan { occasion 2..80, description? ≤500, extra_calories? int 100..5000, days? 2..5 }` →
-  `{ plan, credits?, estimate?: {calories, matched[], source}, notice? }`. 400 + field. 402 never escapes (notice).
+  `{ plan, credits?, estimate?: {calories, matched[], source}, notice? }`. 400 `validation` "<field>: <message>". 402 never escapes (notice).
 - `DELETE /compensation/:id` → `{ ok }`; 404 "Plan not found".
   Plan `{id,occasion,description?,extra_calories,days:[{date,calorie_target,adjustment,focus,activity,meals[]}],message,summary?:{usual_calories,floor_calories,food_kcal,activity_kcal,released_kcal,avg_daily_trim,walk_minutes_per_day,extra_steps_per_day,back_to_usual},ai?,estimated?,created_at}`.
 
 ## Library APIs
 - `api.get/post/del` + `ApiError {status, code, field}` + `errorMessage` (@/lib/api); `useAuth().setUser/refresh/user`.
+- 400s from these routes carry no `field`: zod failures arrive as `{error: "<path>: <message>", code: "validation"}`
+  (web `src/lib/http.ts` `route()`). `aiErrorInfo` (features/chat/ai.ts) splits that into `field` + a capitalised message.
 - React Query v5: `useQuery`, `useMutation`, `useQueryClient().setQueryData/invalidateQueries`.
 - `useVoiceInput({onFinal})` (@/lib/voice) → hide mic when `!available`; `start('en-IN'|'hi-IN')`, `stop`, `partial`, `error`, `blocked`.
 - Reanimated 4: `FadeIn/FadeInDown/FadeInUp/LinearTransition`, `useReducedMotion`; shared values `.get()/.set()`.

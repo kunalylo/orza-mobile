@@ -7,10 +7,9 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
-import { fieldError } from '@/features/meds/api';
 import { TimePickerSheet } from '@/features/meds/PickerSheets';
 import { formatTime12 } from '@/features/meds/shared';
-import { ApiError, errorMessage } from '@/lib/api';
+import { ApiError, errorMessage, validationField } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
 import { colors, radii, spacing } from '@/theme';
 import { Button, Chip, Icon, PressableScale, Sheet, Text, TextField, toast } from '@/ui';
@@ -188,7 +187,7 @@ export function ReminderSheet({ visible, reminder, onClose, whatsappAvailable, w
         },
         onError: (err) => {
           haptics.error();
-          const f = fieldError(err);
+          const f = validationField(err);
           if (f?.field === 'title') setErrors({ title: f.message });
           else if (f?.field === 'schedule') setErrors({ times: f.message });
           else if (f?.field === 'body') setErrors({ form: f.message });

@@ -42,11 +42,14 @@ export function scheduleFromDraft(d: ScheduleDraft): { schedule: Schedule } | { 
   if (times.length > MAX_TIMES) return { error: `Up to ${MAX_TIMES} times a day.` };
   if (!isISODate(d.start_date)) return { error: 'Choose a start date.' };
   const schedule: Schedule = { times, days: [], start_date: d.start_date };
-  if (d.repeat === 'weekdays') {
+  // SOS never rings, and the editor hides Repeat for it — so neither check nor send those settings. The draft keeps
+  // them, so "Set alarm times instead" brings them back.
+  const repeat = d.as_needed ? 'daily' : d.repeat;
+  if (repeat === 'weekdays') {
     if (!d.days.length) return { error: 'Pick at least one day of the week.' };
     schedule.days = d.days.length === 7 ? [] : [...d.days].sort((a, b) => a - b);
   }
-  if (d.repeat === 'interval') {
+  if (repeat === 'interval') {
     const n = Number(d.every_n_days);
     if (!Number.isInteger(n) || n < 2 || n > 90) return { error: 'Repeat every 2 to 90 days.' };
     schedule.every_n_days = n;

@@ -1,15 +1,19 @@
 /**
  * Settings → Preferences ("How ÖRZA works for you"): units, coach tone, reminders, weekly report, AI-training opt-out
  * and time zone. Each control saves on change — optimistic, reverted (with a toast) if the save fails.
+ *
+ * Saves run one after another (each answer carries the whole user, so an older answer can never land last and undo a
+ * newer change), and a value being saved is shown over the server copy until its own save settles.
  */
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 
 import { useAccountSync, useSaveProfile, useSavePreference } from '@/features/settings/api';
 import { DEFAULT_PREFERENCES, TONE_COPY } from '@/features/settings/options';
 import { SavedPill, SettingsGroup, ToggleRow } from '@/features/settings/parts';
+import { errorMessage } from '@/lib/api';
 import { useSignedInUser } from '@/lib/auth';
 import { WEB_URL } from '@/lib/config';
 import { deviceTimeZone } from '@/lib/device';
@@ -42,18 +46,15 @@ export default function PreferencesSettings() {
   const saveProfile = useSaveProfile();
 
   const server: Preferences = { ...DEFAULT_PREFERENCES, ...(user.preferences || {}) };
-  const serverKey = JSON.stringify(server);
-  const [prefs, setPrefs] = useState<Preferences>(server);
-  const [seen, setSeen] = useState(serverKey);
-  const [pending, setPending] = useState<Partial<Record<keyof Preferences, boolean>>>({});
+  // Values waiting for (or in) their save. Shown over the server copy, so the answer to another control's save, or a
+  // refresh, landing in between never flips them back; dropping one shows the server value again (saved or rolled back).
+  const [unsaved, setUnsaved] = useState<Partial<Preferences>>({});
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const queue = useRef<Promise<void>>(Promise.resolve());
 
-  // Follow the server copy whenever it changes (a save, a refresh).
-  if (seen !== serverKey) {
-    setSeen(serverKey);
-    setPrefs(server);
-  }
+  const prefs: Preferences = { ...server, ...unsaved };
+  const isPending = (key: keyof Preferences) => key in unsaved;
 
   useEffect(() => {
     if (!savedAt) return;
@@ -61,23 +62,32 @@ export default function PreferencesSettings() {
     return () => clearTimeout(t);
   }, [savedAt]);
 
-  const update = <K extends keyof Preferences>(key: K, value: Preferences[K]) => {
-    if (prefs[key] === value || pending[key]) return; // one save per control at a time
-    const previous = prefs[key];
-    setPrefs((p) => ({ ...p, [key]: value }));
-    setPending((p) => ({ ...p, [key]: true }));
-    savePref.mutate({ [key]: value } as Partial<Preferences>, {
-      onSuccess: () => {
-        haptics.success();
-        setSavedAt(Date.now());
-      },
-      onError: (e) => {
-        haptics.error();
-        setPrefs((p) => ({ ...p, [key]: previous }));
-        toast.error(e instanceof Error && e.message ? e.message : "We couldn't save that. Please try again.");
-      },
-      onSettled: () => setPending((p) => ({ ...p, [key]: false })),
+  const settle = (key: keyof Preferences) =>
+    setUnsaved((u) => {
+      const next = { ...u };
+      delete next[key];
+      return next;
     });
+
+  // `mutateAsync` settles for this very save; callbacks passed to `mutate` are dropped once another control saves.
+  const save = async (key: keyof Preferences, body: Partial<Preferences>) => {
+    try {
+      await savePref.mutateAsync(body); // its onSuccess has already put the fresh user in place
+      haptics.success();
+      setSavedAt(Date.now());
+    } catch (e) {
+      haptics.error();
+      toast.error(errorMessage(e, "We couldn't save that. Please try again."));
+    } finally {
+      settle(key);
+    }
+  };
+
+  const update = <K extends keyof Preferences>(key: K, value: Preferences[K]) => {
+    if (prefs[key] === value || isPending(key)) return; // one save per control at a time
+    setUnsaved((u) => ({ ...u, [key]: value }));
+    const body = { [key]: value } as Partial<Preferences>;
+    queue.current = queue.current.then(() => save(key, body)).catch(() => undefined);
   };
 
   const tz = user.profile?.timezone || DEFAULT_TZ;
@@ -128,7 +138,7 @@ export default function PreferencesSettings() {
               { value: 'metric', label: 'Metric · kg, cm' },
               { value: 'imperial', label: 'Imperial · lb, ft' },
             ]}
-            style={pending.units ? styles.pending : undefined}
+            style={isPending('units') ? styles.pending : undefined}
           />
         </ChoiceRow>
         <ChoiceRow title="Coach tone" description={TONE_COPY[prefs.tone]} last>
@@ -140,7 +150,7 @@ export default function PreferencesSettings() {
               { value: 'gentle', label: 'Gentle' },
               { value: 'direct', label: 'Direct' },
             ]}
-            style={pending.tone ? styles.pending : undefined}
+            style={isPending('tone') ? styles.pending : undefined}
           />
         </ChoiceRow>
       </SettingsGroup>
@@ -150,14 +160,14 @@ export default function PreferencesSettings() {
           title="Gentle reminders"
           description="Friendly nudges to log meals, drink water and weigh in, plus your custom reminders. Medicine alarms aren’t affected — they keep ringing."
           value={prefs.reminders}
-          pending={pending.reminders}
+          pending={isPending('reminders')}
           onChange={(v) => update('reminders', v)}
         />
         <ToggleRow
           title="Weekly report"
           description="A calm summary of your week — patterns, wins and one thing to try next."
           value={prefs.weekly_report}
-          pending={pending.weekly_report}
+          pending={isPending('weekly_report')}
           onChange={(v) => update('weekly_report', v)}
           last
         />
@@ -168,7 +178,7 @@ export default function PreferencesSettings() {
           title="Help improve ÖRZA’s AI"
           description="Lets your conversations and logs, anonymized first, help make ÖRZA’s AI better. Turning this off doesn’t change how AI features work for you."
           value={!prefs.ai_training_opt_out}
-          pending={pending.ai_training_opt_out}
+          pending={isPending('ai_training_opt_out')}
           onChange={(v) => update('ai_training_opt_out', !v)}
           last
         >

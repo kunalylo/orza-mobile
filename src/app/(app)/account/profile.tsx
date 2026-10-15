@@ -22,7 +22,7 @@ import {
   SEX_OPTIONS,
 } from '@/features/settings/options';
 import { ChoiceList, FieldGroup, SaveBar } from '@/features/settings/parts';
-import { LB_PER_KG, buildPatch, draftErrorKey, draftKey, toDraft, type DraftErrors, type ProfileDraft } from '@/features/settings/profileDraft';
+import { LB_PER_KG, buildPatch, draftErrorKey, draftKey, rebaseDraft, toDraft, type DraftErrors, type ProfileDraft } from '@/features/settings/profileDraft';
 import { RegionSheet } from '@/features/settings/RegionSheet';
 import { TargetsCallout } from '@/features/settings/TargetsCallout';
 import { useSignedInUser } from '@/lib/auth';
@@ -58,6 +58,8 @@ export default function ProfileSettings() {
   const baseKey = draftKey(baseline);
 
   const [draft, setDraft] = useState<ProfileDraft>(baseline);
+  // The server copy the draft is edited from, always in the draft's units: Save sends only what differs from it.
+  const [base, setBase] = useState<ProfileDraft>(baseline);
   const [seenBase, setSeenBase] = useState(baseKey);
   const [errors, setErrors] = useState<DraftErrors>({});
   const [allergyInput, setAllergyInput] = useState('');
@@ -66,14 +68,19 @@ export default function ProfileSettings() {
   const [refreshing, setRefreshing] = useState(false);
   const ageRef = useRef<TextInput>(null);
 
-  // Follow outside changes (a refresh, a units switch) unless there are unsaved edits.
+  // Follow outside changes (a refresh, a weigh-in logged from Goals, a units switch). Untouched fields take the fresh
+  // value and unsaved edits stay, so Save never puts back a stale copy of a field that wasn't edited here. A draft
+  // without edits simply adopts the new copy (in the new units).
   if (seenBase !== baseKey) {
     setSeenBase(baseKey);
-    if (draftKey(draft) === seenBase) setDraft(baseline);
+    const fresh = draft.units === units ? baseline : toDraft(user, draft.units);
+    const next = rebaseDraft(draft, base, fresh);
+    const clean = draftKey(next) === draftKey(fresh);
+    setDraft(clean ? baseline : next);
+    setBase(clean ? baseline : fresh);
   }
 
-  const draftBase = draft.units === baseline.units ? baseline : toDraft(user, draft.units);
-  const dirty = draftKey(draft) !== draftKey(draftBase);
+  const dirty = draftKey(draft) !== draftKey(base);
   const imperial = draft.units === 'imperial';
   const saving = save.isPending;
 
@@ -131,13 +138,14 @@ export default function ProfileSettings() {
   const discard = () => {
     haptics.soft();
     setDraft(baseline);
+    setBase(baseline);
     setErrors({});
     setAllergyInput('');
   };
 
   const onSave = () => {
     if (saving) return;
-    const { patch, errors: errs, changed } = buildPatch(draft, draftBase);
+    const { patch, errors: errs, changed } = buildPatch(draft, base);
     if (Object.values(errs).some(Boolean)) {
       setErrors(errs);
       haptics.error();
@@ -145,11 +153,15 @@ export default function ProfileSettings() {
       return;
     }
     if (!changed) return;
+    const sent = draft;
     save.mutate(patch, {
       onSuccess: (res) => {
         haptics.success();
-        const next = toDraft(res.user, units);
-        setDraft(next);
+        // The saved copy replaces what was sent (tidied by the server); anything edited while saving stays as typed.
+        // If the draft already moved to other units it had no edits left and has adopted the fresh copy itself.
+        const saved = toDraft(res.user, sent.units);
+        setDraft((d) => (d.units === sent.units ? rebaseDraft(d, sent, saved) : d));
+        setBase((b) => (b.units === sent.units ? saved : b));
         setErrors({});
         if (res.targets_recomputed) {
           setUpdatedTargets(res.user.targets);

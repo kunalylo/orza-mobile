@@ -1,9 +1,11 @@
 /**
  * Edit one reviewed medicine in a bottom sheet: name, strength, dose, prescription pattern (1-0-1, BD, TDS, SOS…),
- * alarm time chips, food timing and course length. Nothing changes in the list until "Save".
+ * alarm time chips, food timing and course length. Nothing changes in the list until "Save". Once something was
+ * changed the sheet stops closing on its own: swipe-down is off, and Cancel, the close button, the backdrop and Android
+ * back all ask "Discard changes?" first.
  */
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 
 import { TimePickerSheet } from '@/features/meds/PickerSheets';
@@ -21,16 +23,34 @@ type Draft = ReviewRow & { daysText: string; savedTimes?: string[] };
 
 const toDraft = (r: ReviewRow | null): Draft | null => (r ? { ...r, times: [...r.times], daysText: r.duration_days ? String(r.duration_days) : '' } : null);
 
-/** Re-seed the draft each time the sheet opens (state adjusted during render, no effect). */
-function useDraftOnOpen(visible: boolean, row: ReviewRow | null): [Draft | null, (d: Draft) => void] {
+/** What counts as an unsaved change (`savedTimes` is bookkeeping, times are compared as a set). */
+function draftKey(d: Draft): string {
+  const { savedTimes: _ignored, ...rest } = d;
+  void _ignored;
+  return JSON.stringify({ ...rest, name: rest.name.trim(), times: [...rest.times].filter(isHHMM).sort() });
+}
+
+/**
+ * Re-seed the draft each time the sheet opens (state adjusted during render, no effect). Also returns the key of
+ * what it was opened with, the baseline for unsaved changes.
+ */
+function useDraftOnOpen(visible: boolean, row: ReviewRow | null): [Draft | null, (d: Draft) => void, string | null] {
   const [draft, setDraft] = useState<Draft | null>(() => toDraft(row));
+  const [opened, setOpened] = useState<string | null>(() => {
+    const d = toDraft(row);
+    return d ? draftKey(d) : null;
+  });
   const [openedFor, setOpenedFor] = useState<string | null>(visible ? (row?.key ?? null) : null);
   const key = visible ? (row?.key ?? null) : null;
   if (key !== openedFor) {
     setOpenedFor(key);
-    if (key) setDraft(toDraft(row));
+    const seeded = key ? toDraft(row) : null;
+    if (seeded) {
+      setDraft(seeded);
+      setOpened(draftKey(seeded));
+    }
   }
-  return [draft, setDraft];
+  return [draft, setDraft, opened];
 }
 
 function SectionLabel({ children }: { children: string }) {
@@ -54,7 +74,7 @@ export function RowEditorSheet({
   onClose: () => void;
   onSave: (row: ReviewRow) => void;
 }) {
-  const [draft, setDraft] = useDraftOnOpen(visible, row);
+  const [draft, setDraft, opened] = useDraftOnOpen(visible, row);
   const [timeIndex, setTimeIndex] = useState<number | null>(null); // -1 = adding
   const [showErrors, setShowErrors] = useState(false);
   const [wasVisible, setWasVisible] = useState(visible);
@@ -78,6 +98,9 @@ export function RowEditorSheet({
     showErrors && daysNum !== undefined && (!Number.isInteger(daysNum) || daysNum < 1 || daysNum > 365) ? 'Days should be 1 to 365.' : null;
   const otherError = showErrors && problem && !nameError && !doseError && !daysError ? problem : null;
 
+  // A new row counts as soon as anything was typed or picked; a scanned row once it differs from how it opened.
+  const dirty = draftKey(draft) !== opened;
+
   const save = () => {
     if (problem) {
       setShowErrors(true);
@@ -87,6 +110,18 @@ export function RowEditorSheet({
     haptics.success();
     onSave({ ...candidate, include: draft.include || isNew });
     onClose();
+  };
+
+  const cancel = () => {
+    if (!dirty) {
+      onClose();
+      return;
+    }
+    haptics.warning();
+    Alert.alert('Discard changes?', isNew ? "This medicine hasn't been added to the list yet." : "Your changes to this medicine haven't been saved.", [
+      { text: 'Keep editing', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: onClose },
+    ]);
   };
 
   const pickPattern = (key: string) => {
@@ -116,10 +151,18 @@ export function RowEditorSheet({
     <Sheet
       visible={visible}
       onClose={onClose}
+      // With unsaved changes nothing closes it silently: backdrop, X and Android back ask first (like Cancel), swipe is off.
+      dismissible={!dirty}
+      onBlockedDismiss={cancel}
       eyebrow={isNew ? 'Add a medicine' : 'Check this medicine'}
       title={draft.name.trim() || 'New medicine'}
       full
-      footer={<Button label={isNew ? 'Add medicine' : 'Save'} icon="check" variant="primary" size="lg" block onPress={save} />}
+      footer={
+        <View style={styles.footer}>
+          <Button label="Cancel" variant="ghost" size="lg" onPress={cancel} />
+          <Button label={isNew ? 'Add medicine' : 'Save'} icon="check" variant="primary" size="lg" onPress={save} style={styles.flex} />
+        </View>
+      }
     >
       {row?.frequency_text && !isNew ? (
         <View style={styles.written}>
@@ -268,6 +311,7 @@ export function RowEditorSheet({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   mono: { fontFamily: fonts.mono, fontSize: 12, color: colors.ink },
   written: {
     flexDirection: 'row',

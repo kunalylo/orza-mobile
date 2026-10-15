@@ -10,6 +10,7 @@ import type { RxProblem } from './problem';
 
 const ICON: Record<RxProblem['kind'], IconName> = {
   ai_disabled: 'mci:robot-off-outline',
+  ai_busy: 'mci:timer-sand',
   no_credits: 'mci:circle-multiple-outline',
   rate_limited: 'clock',
   offline: 'wifi-off',
@@ -18,7 +19,7 @@ const ICON: Record<RxProblem['kind'], IconName> = {
 };
 
 export function ProblemPanel({ problem, onManual, onRetry, retrying }: { problem: RxProblem; onManual: () => void; onRetry?: () => void; retrying?: boolean }) {
-  const canRetry = !!onRetry && (problem.kind === 'error' || problem.kind === 'offline' || problem.kind === 'rate_limited');
+  const canRetry = !!onRetry && (problem.kind === 'error' || problem.kind === 'offline' || problem.kind === 'rate_limited' || problem.kind === 'ai_busy');
   return (
     <Animated.View entering={FadeInDown.springify().damping(18)} exiting={FadeOut.duration(160)} style={styles.panel} accessibilityRole="alert">
       <View style={styles.head}>

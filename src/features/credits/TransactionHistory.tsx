@@ -15,7 +15,7 @@ const PAGE = 15;
 
 function txIcon(tx: CreditTransaction): { icon: IconName; bg: string; fg: string } {
   if (isRefund(tx.reason)) return { icon: 'rotate-ccw', bg: colors.cyan50, fg: colors.cyan700 };
-  const action = transactionAction(tx.reason);
+  const action = transactionAction(tx);
   if (tx.amount < 0 && action) return { icon: ACTION_ICONS[action], bg: 'rgba(255,255,255,0.85)', fg: colors.muted };
   return { icon: /welcome/i.test(tx.reason || '') ? 'gift' : 'zap', bg: colors.energyBg, fg: colors.energyInk };
 }

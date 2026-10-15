@@ -11,6 +11,10 @@
  *   Offline, the phone signs out anyway and keeps the token in `orza.session.unrevoked`; the next launch retries the
  *   logout, and the next sign-in sends it as the Bearer so the server replaces that session (web `startMobileSession`).
  * - After sign-in and on every return to the foreground the phone is registered (`POST /api/devices`).
+ * - A deliberate sign-out (also after deleting the account) deletes the phone's ÖRZA calendar first (`clearPhoneCalendar`).
+ * - A user copy that lands after sign-out, or that belongs to an earlier session (a `/auth/me` refresh or a mutation
+ *   answer still in flight when the member signed out — and maybe into another account), is dropped: it never brings a
+ *   user back on screen or writes their profile snapshot into the Keychain of a signed-out phone.
  */
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { createContext, use, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -40,7 +44,10 @@ export interface AuthContextValue {
   signOut: (opts?: { everywhere?: boolean }) => Promise<void>;
   /** Re-read `/api/auth/me` (credits, targets, onboarding state…). */
   refresh: () => Promise<PublicUser | null>;
-  /** Replace the user with a fresher copy an endpoint returned (e.g. onboarding completion). */
+  /**
+   * Replace the user with a fresher copy an endpoint returned (e.g. onboarding completion). Ignored once signed out, or
+   * when the copy is of another account than the signed-in one (an answer to a request from an earlier session).
+   */
   setUser: (user: PublicUser) => void;
   /** Boot retry after `unreachable`. */
   retry: () => void;
@@ -107,16 +114,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionExpired, setSessionExpired] = useState(false);
   const [bootKey, setBootKey] = useState(0);
   const lastRefresh = useRef(0);
+  /** Id of the user in state, readable synchronously by late answers (`setUser`). */
+  const userId = useRef<string | null>(null);
 
+  /** Puts a user in place (state + Keychain snapshot). Callers make sure it belongs to the current session. */
   const applyUser = useCallback((next: PublicUser) => {
+    userId.current = next.id;
     setUserState(next);
     void writeSecureJson(KEYS.user, snapshotOf(next));
   }, []);
+
+  /** `setUser` for screens and mutations: only a copy of the signed-in account, while a session exists. */
+  const setUser = useCallback(
+    (next: PublicUser) => {
+      if (!getSessionToken() || userId.current !== next.id) return;
+      applyUser(next);
+    },
+    [applyUser]
+  );
 
   /** Forget the session on this phone (token, snapshot, cached data). */
   const clearLocal = useCallback(async () => {
     setSessionToken(null);
     resetDeviceRegistration();
+    userId.current = null;
     setUserState(null);
     setStatus('signedOut');
     queryClient.clear();
@@ -124,8 +145,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [queryClient]);
 
   const refresh = useCallback(async (): Promise<PublicUser | null> => {
+    const token = getSessionToken();
+    if (!token) return null;
     try {
       const { user: me } = await api.get<{ user: PublicUser }>('/auth/me');
+      // Signed out (or into another account) while this was in flight: that answer belongs to the old session.
+      if (getSessionToken() !== token) return null;
       lastRefresh.current = Date.now();
       applyUser(me);
       return me;
@@ -156,6 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setSessionToken(token);
       if (snapshot?.id) {
+        userId.current = snapshot.id;
         setUserState(snapshot);
         setStatus('signedIn');
         void refresh();
@@ -164,7 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       try {
         const { user: me } = await api.get<{ user: PublicUser }>('/auth/me', { timeoutMs: 12_000 });
-        if (cancelled) return;
+        if (cancelled || getSessionToken() !== token) return;
         lastRefresh.current = Date.now();
         applyUser(me);
         setStatus('signedIn');
@@ -244,6 +270,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Offline: sign out here anyway and end the server session on the next launch or sign-in.
         if (token && unreachable(e)) await writeSecure(KEYS.unrevoked, token);
       }
+      // The phone's ÖRZA calendar holds this account's medicine names and rings for its doses: delete it (best effort,
+      // never throws, waits <= 4 s). Loaded on demand so expo-calendar stays out of start-up and lib/ has no static
+      // feature import. Deliberate sign-out only: on a 401 expiry the per-user link just stays with its account.
+      await import('@/features/calendar/deviceCalendar').then((m) => m.clearPhoneCalendar()).catch(() => undefined);
       setSessionExpired(false);
       await clearLocal();
     },
@@ -260,13 +290,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUp,
       signOut,
       refresh,
-      setUser: applyUser,
+      setUser,
       retry: () => {
         setStatus('loading');
         setBootKey((k) => k + 1);
       },
     }),
-    [status, user, sessionExpired, signIn, signUp, signOut, refresh, applyUser]
+    [status, user, sessionExpired, signIn, signUp, signOut, refresh, setUser]
   );
 
   return (

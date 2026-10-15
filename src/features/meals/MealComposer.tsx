@@ -14,7 +14,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 
-import { ApiError, errorMessage } from '@/lib/api';
+import { ApiError, errorMessage, validationField } from '@/lib/api';
 import { useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
 import { loadVoiceLang, saveVoiceLang, useVoiceInput, type VoiceLang } from '@/lib/voice';
@@ -26,6 +26,12 @@ import type { AiStatus, MealType, TextLogResponse } from './types';
 import { FALLBACK_COSTS, MEAL_SINGULAR, MEAL_TYPES, formatNumber } from './utils';
 
 const MAX_CHARS = 500;
+
+/** The log request got no answer, but the server may have finished it — so check the list before retrying. */
+const NO_ANSWER_MESSAGE = {
+  timeout: 'ÖRZA took too long to answer, but it may still have logged this meal. Check your list below before trying again.',
+  network: 'The connection dropped before ÖRZA answered. If the meal went through, it will show in your list below — check before trying again.',
+} as const;
 
 /** Real sentences people type — English, Hindi and Hinglish, with Indian portions. */
 const EXAMPLES = [
@@ -155,8 +161,12 @@ export function MealComposer({
         },
         onError: (e) => {
           haptics.error();
-          if (e instanceof ApiError && e.field === 'text') setFieldError(e.message);
+          // The server's zod 400 reads "text: Tell ÖRZA a little more…" (no `field`).
+          const invalid = validationField(e);
+          if (invalid?.field === 'text') setFieldError(invalid.message);
           else if (e instanceof ApiError && e.code === 'no_items') setFieldError(e.message);
+          // No answer: the server may still log it (the day is being refetched) — a blind retry could log it twice.
+          else if (e instanceof ApiError && e.isNetwork) setFormError({ message: NO_ANSWER_MESSAGE[e.code === 'timeout' ? 'timeout' : 'network'], code: e.code });
           else setFormError({ message: errorMessage(e), code: e instanceof ApiError ? (e.status === 402 ? 'no_credits' : e.code) : 'unknown' });
         },
       }

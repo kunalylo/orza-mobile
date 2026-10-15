@@ -1,6 +1,8 @@
 /**
  * Bottom sheet — a frosted cream panel that springs up over a dimmed backdrop.
  * Close it by tapping the backdrop, swiping the grab handle / header down, the close button, or Android back.
+ * With `dismissible={false}` those are blocked; add `onBlockedDismiss` to answer the backdrop, close button and Android
+ * back yourself instead (e.g. a "Discard changes?" prompt). The swipe stays off, so a blocked sheet never hangs half-dragged.
  * Content scrolls and stays above the keyboard; a `footer` (e.g. Save) is pinned at the bottom.
  *
  *   <Sheet visible={open} onClose={() => setOpen(false)} eyebrow="Meals" title="Add from food list" footer={<Button … />}>
@@ -38,6 +40,11 @@ export interface SheetProps {
   scroll?: boolean;
   /** false blocks backdrop / swipe / back / close-button dismissal (e.g. while saving). Default true. */
   dismissible?: boolean;
+  /**
+   * Called instead of `onClose` when the backdrop, the close button or Android back is used while `dismissible` is
+   * false (e.g. to ask "Discard changes?"). Swipe-down stays disabled. Without it those controls do nothing.
+   */
+  onBlockedDismiss?: () => void;
   /** Show the round close button in the header (default true when there is a title). */
   closeButton?: boolean;
   /** Screen-reader label for the sheet (defaults to the title). */
@@ -65,6 +72,7 @@ function SheetModal({
   full,
   scroll = true,
   dismissible = true,
+  onBlockedDismiss,
   closeButton,
   accessibilityLabel,
 }: SheetProps & { onHidden: () => void }) {
@@ -92,7 +100,10 @@ function SheetModal({
 
   const requestClose = useCallback(() => {
     if (dismissible) onClose();
-  }, [dismissible, onClose]);
+    else onBlockedDismiss?.();
+  }, [dismissible, onClose, onBlockedDismiss]);
+  /** The backdrop, close button and Android back do something (close, or the blocked-dismiss handler). */
+  const closable = dismissible || Boolean(onBlockedDismiss);
 
   const pan = Gesture.Pan()
     .enabled(dismissible)
@@ -128,8 +139,8 @@ function SheetModal({
             onPress={requestClose}
             accessibilityRole="button"
             accessibilityLabel="Close"
-            accessible={dismissible}
-            importantForAccessibility={dismissible ? 'auto' : 'no-hide-descendants'}
+            accessible={closable}
+            importantForAccessibility={closable ? 'auto' : 'no-hide-descendants'}
           />
         </Animated.View>
 
@@ -157,7 +168,7 @@ function SheetModal({
                     ) : null}
                   </View>
                   {showClose ? (
-                    <IconButton icon="x" accessibilityLabel="Close" size={36} iconSize={18} onPress={requestClose} disabled={!dismissible} />
+                    <IconButton icon="x" accessibilityLabel="Close" size={36} iconSize={18} onPress={requestClose} disabled={!closable} />
                   ) : null}
                 </View>
               )}

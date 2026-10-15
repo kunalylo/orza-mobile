@@ -195,7 +195,7 @@ export default function AskOrza() {
       <Composer
         value={chat.input}
         onChange={chat.setInput}
-        onSend={() => void chat.send(chat.input)}
+        onSend={chat.sendInput}
         busy={busy}
         error={chat.composerError}
         defaultVoiceLang={defaultVoiceLang}

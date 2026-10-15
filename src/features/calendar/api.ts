@@ -6,6 +6,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 
 import { remindersApi } from '@/features/reminders/api';
 import { api } from '@/lib/api';
+import { useSignedInUser } from '@/lib/auth';
 
 import {
   getPhonePermission,
@@ -30,6 +31,9 @@ export const calendarKeys = {
   eventsAll: () => ['calendar', 'events'] as const,
   events: (from: string, to: string) => ['calendar', 'events', from, to] as const,
   phone: () => ['calendar', 'phone'] as const,
+  phoneState: (userId: string) => ['calendar', 'phone', userId] as const,
+  /** Mutation key shared by every phone-calendar sync, so a screen can tell one is already running. */
+  phoneSync: () => ['calendar', 'phone', 'sync'] as const,
 };
 
 /* ───────────────────────────── Plain calls ───────────────────────────── */
@@ -65,6 +69,21 @@ function patchStatus(qc: ReturnType<typeof useQueryClient>, patch: Partial<Calen
   qc.setQueryData<CalendarStatusResponse>(calendarKeys.status(), (s) => (s ? { ...s, ...patch } : s));
 }
 
+/**
+ * One external-calendar state for the whole screen (as the website keeps it): GET /api/calendar only reports
+ * connected / provider / preview, while the calendar's name and a failed refresh come from /calendar/events — so the
+ * screen reads the events copy first. After connecting or disconnecting, every cached events range gets the new state
+ * right away (and loses its imported events on disconnect), so an older range's `connected` / `error` / `name` never
+ * outlives the change while the refetch runs — or if it fails.
+ */
+function setExternalState(qc: ReturnType<typeof useQueryClient>, external: ExternalCalendarState) {
+  patchStatus(qc, { external });
+  qc.setQueriesData<CalendarEventsResponse>({ queryKey: calendarKeys.eventsAll() }, (d) =>
+    d ? { ...d, external, events: external.connected ? d.events : d.events.filter((e) => e.kind !== 'external') } : d
+  );
+  void qc.invalidateQueries({ queryKey: calendarKeys.eventsAll() });
+}
+
 /** Create (or rotate) the private feed link. */
 export function useFeedToken() {
   const qc = useQueryClient();
@@ -86,10 +105,7 @@ export function useConnectExternal() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (url: string) => calendarApi.connectExternal(url),
-    onSuccess: (res) => {
-      patchStatus(qc, { external: res.external });
-      void qc.invalidateQueries({ queryKey: calendarKeys.eventsAll() });
-    },
+    onSuccess: (res) => setExternalState(qc, res.external),
   });
 }
 
@@ -97,11 +113,7 @@ export function useDisconnectExternal() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: calendarApi.disconnectExternal,
-    onSuccess: () => {
-      const off: ExternalCalendarState = { connected: false };
-      patchStatus(qc, { external: off });
-      void qc.invalidateQueries({ queryKey: calendarKeys.eventsAll() });
-    },
+    onSuccess: () => setExternalState(qc, { connected: false }),
   });
 }
 
@@ -113,21 +125,29 @@ export interface PhoneCalendarState {
   link: PhoneCalendarLink | null;
 }
 
-async function readPhoneState(): Promise<PhoneCalendarState> {
+/** This account's view of the phone calendar — a calendar another account on this phone added shows as not added. */
+async function readPhoneState(userId: string): Promise<PhoneCalendarState> {
   if (!phoneCalendarSupported) return { supported: false, permission: 'blocked', link: null };
   const permission = await getPhonePermission();
-  const link = permission === 'granted' ? ((await linkedCalendar())?.link ?? null) : await readLink();
+  const link = permission === 'granted' ? ((await linkedCalendar(userId))?.link ?? null) : await readLink(userId);
   return { supported: true, permission, link };
 }
 
 export function usePhoneCalendarState() {
-  return useQuery({ queryKey: calendarKeys.phone(), queryFn: readPhoneState, staleTime: 15_000, retry: false });
+  const userId = useSignedInUser().id;
+  return useQuery({ queryKey: calendarKeys.phoneState(userId), queryFn: () => readPhoneState(userId), staleTime: 15_000, retry: false });
 }
 
-/** Ask for access when needed, fetch the next 14 days + reminders, then write them into the ÖRZA calendar. */
+/**
+ * Ask for access when needed, fetch the next 14 days + reminders, then write them into the ÖRZA calendar.
+ * `ask: false` is the quiet re-sync when Calendar opens: it never prompts and only refreshes a calendar this account
+ * already added. Every sync shares `calendarKeys.phoneSync()`, and they run one at a time (deviceCalendar.ts).
+ */
 export function usePhoneCalendarSync(tz: string, today: string) {
   const qc = useQueryClient();
+  const userId = useSignedInUser().id;
   return useMutation({
+    mutationKey: calendarKeys.phoneSync(),
     mutationFn: async ({ ask = true }: { ask?: boolean } = {}) => {
       let permission = await getPhonePermission();
       if (permission !== 'granted' && ask && permission !== 'blocked') permission = await requestPhonePermission();
@@ -140,9 +160,15 @@ export function usePhoneCalendarSync(tz: string, today: string) {
         );
       }
       const { from, to } = syncRange(today);
-      const [events, reminders] = await Promise.all([calendarApi.events(from, to), remindersApi.list()]);
-      const calendarReminders = new Map(reminders.filter((r) => r.active && r.channels?.calendar).map((r) => [r.id, r.kind as string]));
-      return syncPhoneCalendar({ events: events.events, calendarReminders, tz: events.tz || tz });
+      return syncPhoneCalendar({
+        userId,
+        onlyIfLinked: !ask,
+        load: async () => {
+          const [events, reminders] = await Promise.all([calendarApi.events(from, to), remindersApi.list()]);
+          const calendarReminders = new Map(reminders.filter((r) => r.active && r.channels?.calendar).map((r) => [r.id, r.kind as string]));
+          return { events: events.events, calendarReminders, tz: events.tz || tz };
+        },
+      });
     },
     onSettled: () => qc.invalidateQueries({ queryKey: calendarKeys.phone() }),
   });

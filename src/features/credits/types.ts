@@ -18,6 +18,7 @@ export interface CreditTransaction {
   /** + grant, − spend */
   amount: number;
   reason: string;
+  /** The `CreditAction` key on AI spends and refunds (absent on grants and older rows) — see `transactionAction`. */
   action?: string;
   balance_after: number;
   created_at: string;

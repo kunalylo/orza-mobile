@@ -136,10 +136,10 @@ export function daysBetweenISO(a: string, b: string): number {
   return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
 }
 
-/** Today's YYYY-MM-DD in the user's timezone. */
-export function todayIn(tz: string): string {
+/** The YYYY-MM-DD an instant falls on in the user's timezone (e.g. a UTC `created_at`). */
+export function dateIn(tz: string, at: Date = new Date()): string {
   try {
-    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(at);
     const get = (t: string) => parts.find((p) => p.type === t)?.value;
     const y = get('year');
     const m = get('month');
@@ -148,8 +148,12 @@ export function todayIn(tz: string): string {
   } catch {
     // fall through
   }
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+}
+
+/** Today's YYYY-MM-DD in the user's timezone. */
+export function todayIn(tz: string): string {
+  return dateIn(tz);
 }
 
 /** Wall-clock time in the user's timezone, e.g. "8:04 pm". */

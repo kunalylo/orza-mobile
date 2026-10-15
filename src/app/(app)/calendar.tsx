@@ -29,6 +29,21 @@ import { Chip, GlassCard, Icon, IconButton, Screen, ScreenHeader, Text, toast } 
 const enter = (i: number) => FadeInDown.delay(40 + i * 60).springify().damping(18);
 const NOT_CONNECTED: ExternalCalendarState = { connected: false };
 
+/**
+ * The screen's one external-calendar state (banner, legend, busy days and "Connect your calendar" all read it). GET
+ * /api/calendar never sends the calendar's name or a failed refresh — only /calendar/events does — so the events copy
+ * wins. Connect / disconnect patch every cached range (features/calendar/api.ts), but while a new month loads the
+ * previous month's copy is a frozen placeholder: it only stands in while it still describes the same link.
+ */
+function screenExternal(
+  fromEvents: ExternalCalendarState | undefined,
+  placeholder: boolean,
+  fromStatus: ExternalCalendarState | undefined
+): ExternalCalendarState {
+  const sameLink = !fromStatus || !fromEvents || (fromStatus.connected === fromEvents.connected && fromStatus.url_preview === fromEvents.url_preview);
+  return (placeholder && !sameLink ? fromStatus : fromEvents) ?? fromStatus ?? NOT_CONNECTED;
+}
+
 export default function CalendarScreen() {
   const user = useSignedInUser();
   const qc = useQueryClient();
@@ -52,7 +67,7 @@ export default function CalendarScreen() {
   const events = loadedRange && eventsQ.data ? eventsQ.data.events : [];
   const eventsTz = eventsQ.data?.tz || tz;
   const byDate = groupByDate(events, eventsTz);
-  const external = eventsQ.data?.external ?? statusQ.data?.external ?? NOT_CONNECTED;
+  const external = screenExternal(eventsQ.data?.external, eventsQ.isPlaceholderData, statusQ.data?.external);
   const busyDates = new Set(external.connected ? dates.filter((d) => busyMinutes(events, d, eventsTz) >= BUSY_DAY_MINUTES) : []);
   const monthEvents = events.filter((e) => e.kind !== 'external');
   const doseCount = dates.filter((d) => d.startsWith(month)).reduce((n, d) => n + (byDate.get(d)?.filter((e) => e.kind === 'medication').length ?? 0), 0);
@@ -194,7 +209,7 @@ export default function CalendarScreen() {
             <SubscribeCard feed={statusQ.data?.feed ?? null} isLocal={statusQ.data?.is_local ?? false} loading={statusQ.isPending} />
           </Animated.View>
           <Animated.View entering={enter(4)} style={styles.section}>
-            <ConnectCard external={statusQ.data?.external ?? external} loading={statusQ.isPending} />
+            <ConnectCard external={external} loading={statusQ.isPending} />
           </Animated.View>
         </>
       )}

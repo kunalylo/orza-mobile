@@ -9,7 +9,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Alert, StyleSheet, Switch, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 
-import { fieldError, useLocalToday, useMedication, useMedicationPhotos, useMedications, useMedsTimezone, useSaveMedication } from '@/features/meds/api';
+import { useLocalToday, useMedication, useMedicationPhotos, useMedications, useMedsTimezone, useSaveMedication } from '@/features/meds/api';
 import { pickUploadPhotos, PhotoGrid, type PhotoItem } from '@/features/meds/PhotoGrid';
 import { draftFromSchedule, draftKey, scheduleFromDraft, type ScheduleDraft } from '@/features/meds/schedule';
 import { ScheduleEditor } from '@/features/meds/ScheduleEditor';
@@ -24,8 +24,8 @@ import {
   TIMING_OPTIONS,
 } from '@/features/meds/shared';
 import { ErrorPanel } from '@/features/meds/StatusViews';
-import type { DoseTiming, MedForm, MedicationClient, MedicationCreateInput, MedicationPatchInput } from '@/features/meds/types';
-import { ApiError, errorMessage } from '@/lib/api';
+import type { DoseTiming, MedForm, MedicationClient, MedicationCreateInput, MedicationPatchInput, MedStock } from '@/features/meds/types';
+import { ApiError, errorMessage, validationField } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
 import type { PhotoSource } from '@/lib/image';
 import { colors, radii, spacing } from '@/theme';
@@ -42,6 +42,8 @@ interface Draft {
   for_person: string;
   stockOn: boolean;
   stockCount: string;
+  /** "Left now" was typed in — until then it follows the server's count (Takes lower it while the form is open). */
+  stockCountTouched: boolean;
   stockUnit: string;
   refillAt: string;
   schedule: ScheduleDraft;
@@ -61,6 +63,7 @@ function draftFor(med: MedicationClient | null, today: string): Draft {
     for_person: med?.for_person || '',
     stockOn: !!med?.stock,
     stockCount: med?.stock ? String(med.stock.count) : '',
+    stockCountTouched: false,
     stockUnit: med?.stock?.unit || stockUnitFor(med?.form || 'tablet'),
     refillAt: med?.stock?.refill_alert_at != null ? String(med.stock.refill_alert_at) : '',
     schedule: draftFromSchedule(med?.schedule || null, med?.as_needed || false, today),
@@ -69,9 +72,26 @@ function draftFor(med: MedicationClient | null, today: string): Draft {
 
 /** What counts as an unsaved change. */
 function formKey(d: Draft): string {
-  const { doseTouched: _ignored, schedule, ...rest } = d;
+  const { doseTouched: _ignored, stockCountTouched: _ignoredToo, schedule, ...rest } = d;
   void _ignored;
+  void _ignoredToo;
   return JSON.stringify({ ...rest, name: rest.name.trim(), schedule: draftKey(schedule) });
+}
+
+/**
+ * The PATCH `stock`. The server replaces the whole object while every Take lowers `stock.count`, so re-sending the
+ * count the form opened with would undo Takes recorded meanwhile (here, on the web, another phone or the alarm).
+ * Left out when no stock field changed; when only the unit or refill alert changed, the latest known count goes.
+ */
+function stockPatch(draft: Draft, seed: Draft, live: MedStock | undefined): MedicationPatchInput['stock'] {
+  if (!draft.stockOn) return seed.stockOn ? null : undefined;
+  const countEdited = !seed.stockOn || draft.stockCount !== seed.stockCount;
+  if (!countEdited && draft.stockUnit === seed.stockUnit && draft.refillAt === seed.refillAt) return undefined;
+  return {
+    count: countEdited || !live ? Number(draft.stockCount) : live.count,
+    unit: draft.stockUnit,
+    refill_alert_at: draft.refillAt === '' ? null : Number(draft.refillAt),
+  };
 }
 
 const isInt = (s: string, min: number, max: number) => s !== '' && Number.isInteger(Number(s)) && Number(s) >= min && Number(s) <= max;
@@ -117,22 +137,28 @@ export default function EditMedicine() {
 
   const current = editing ? (medQ.data ?? null) : null;
   const [draft, setDraft] = useState<Draft>(() => draftFor(current, today));
-  const [baseline, setBaseline] = useState(() => formKey(draftFor(current, today)));
+  /** What the form was filled with — the unsaved-changes baseline and what `stockPatch` compares against. */
+  const [seed, setSeed] = useState<Draft>(() => draftFor(current, today));
   const [initFor, setInitFor] = useState<string | null>(current?.id ?? null);
   const [newPhotos, setNewPhotos] = useState<PhotoItem[]>([]);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [exit, setExit] = useState(false);
 
+  const liveCount = current?.stock ? String(current.stock.count) : null;
   // Seed the form once the medicine arrives (edit mode opened before the data was cached).
   if (current && initFor !== current.id) {
     const seeded = draftFor(current, today);
     setInitFor(current.id);
     setDraft(seeded);
-    setBaseline(formKey(seeded));
+    setSeed(seeded);
+  } else if (liveCount !== null && !draft.stockCountTouched && draft.stockCount !== liveCount) {
+    // A Take landed after the form opened (the detail refetch, the alarm, another device) — show the new count.
+    setDraft((d) => ({ ...d, stockCount: liveCount }));
+    setSeed((s) => ({ ...s, stockCount: liveCount }));
   }
 
-  const dirty = !exit && (formKey(draft) !== baseline || newPhotos.length > 0);
+  const dirty = !exit && (formKey(draft) !== formKey(seed) || newPhotos.length > 0);
   const saving = save.isPending;
 
   usePreventRemove(!exit && (dirty || saving), ({ data }) => {
@@ -242,13 +268,10 @@ export default function EditMedicine() {
       toast.error('Please check the highlighted fields.');
       return;
     }
-    const stock = draft.stockOn
-      ? { count: Number(draft.stockCount), unit: draft.stockUnit, refill_alert_at: draft.refillAt === '' ? null : Number(draft.refillAt) }
-      : null;
     const schedule = sched.schedule;
 
     const onError = (e: Error) => {
-      const fe = fieldError(e);
+      const fe = validationField(e);
       const known: (keyof Errors)[] = ['name', 'dose', 'strength', 'schedule', 'stock', 'for_person', 'instructions', 'photos'];
       if (fe && (known as string[]).includes(fe.field)) {
         setErrors((x) => ({ ...x, [fe.field]: fe.message }));
@@ -273,7 +296,7 @@ export default function EditMedicine() {
         for_person: draft.for_person.trim() || null,
         schedule: { ...schedule, end_date: schedule.end_date ?? null, every_n_days: every && every > 1 ? every : null },
         as_needed: draft.schedule.as_needed,
-        stock,
+        stock: stockPatch(draft, seed, current.stock),
       };
       save.mutate(
         { id: current.id, patch },
@@ -298,7 +321,9 @@ export default function EditMedicine() {
       for_person: draft.for_person.trim() || undefined,
       schedule,
       as_needed: draft.schedule.as_needed,
-      stock: stock ?? undefined,
+      stock: draft.stockOn
+        ? { count: Number(draft.stockCount), unit: draft.stockUnit, refill_alert_at: draft.refillAt === '' ? null : Number(draft.refillAt) }
+        : undefined,
       photos: newPhotos.map((p) => p.url),
     };
     save.mutate(
@@ -512,7 +537,7 @@ export default function EditMedicine() {
                 label="Left now"
                 value={draft.stockCount}
                 onChangeText={(t) => {
-                  set({ stockCount: t.replace(/[^0-9]/g, '') });
+                  set({ stockCount: t.replace(/[^0-9]/g, ''), stockCountTouched: true });
                   clearError('stock');
                 }}
                 placeholder="e.g. 30"

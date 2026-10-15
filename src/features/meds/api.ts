@@ -67,16 +67,11 @@ export const medsApi = {
 /* ───────────────────────────── Errors ───────────────────────────── */
 
 /**
- * A validation error that belongs next to a form field. The server answers zod failures as
- * `400 {error: "schedule.times.0: Use 24-hour times…", code: "validation"}` — the first path segment is the field.
+ * A dose action failed because the dose no longer exists on the server (medicine deleted, schedule changed or made
+ * SOS — on another device, the web or by the scheduler): 404 "Medicine not found" / 400 "…isn't on this medicine's schedule".
  */
-export function fieldError(e: unknown): { field: string; message: string } | null {
-  if (!(e instanceof ApiError) || e.status !== 400) return null;
-  if (e.field) return { field: e.field, message: e.message };
-  const m = /^([a-z_]+)(?:\.[\w.]+)?:\s*(.+)$/i.exec(e.message);
-  if (m && e.code === 'validation') return { field: m[1], message: m[2] };
-  return null;
-}
+export const isStaleDoseError = (e: unknown) =>
+  e instanceof ApiError && (e.status === 404 || (e.status === 400 && /schedule/i.test(e.message)));
 
 /* ───────────────────────────── Time ───────────────────────────── */
 
@@ -227,6 +222,13 @@ export function useMedicationPhotos() {
 }
 
 /**
+ * Dose writes in flight per date, across every screen. Today's list refetches (cancelling any GET already running)
+ * once the last write settles: a GET that started mid-write — the minute poll, another screen — may have read the
+ * dose before the POST committed and would otherwise put a confirmed Take back to "due" until the next poll.
+ */
+const doseWrites = new Map<string, { inFlight: number; refetch: boolean }>();
+
+/**
  * Take / Skip / Snooze with an optimistic update of today's list, haptics and toasts.
  * `pendingFor(dose)` tells which action is in flight for that dose.
  */
@@ -245,6 +247,9 @@ export function useDoseActions(date: string, tz: string) {
     if (inflight.current.has(key)) return false;
     inflight.current.add(key);
     setPending((p) => ({ ...p, [key]: action }));
+    const writes = doseWrites.get(date) ?? { inFlight: 0, refetch: false };
+    writes.inFlight += 1;
+    doseWrites.set(date, writes);
     // The pressed Button already gave a tap; confirm with a success / soft tick once the server agrees.
     await qc.cancelQueries({ queryKey: medsKeys.today(date) });
     replaceDose(key, withAction(d, action));
@@ -252,6 +257,7 @@ export function useDoseActions(date: string, tz: string) {
       const log = await medsApi.dose(d, action);
       const updated = withAction(d, action, log);
       replaceDose(key, updated);
+      writes.refetch = true;
       if (action === 'take') toast.success(`${d.name} — marked as taken`); // success haptic comes with the toast
       else haptics.soft();
       if (action === 'skip') toast.info(`${d.name} — skipped`);
@@ -266,7 +272,16 @@ export function useDoseActions(date: string, tz: string) {
       return true;
     } catch (e) {
       replaceDose(key, d);
-      toast.error(errorMessage(e));
+      if (isStaleDoseError(e)) {
+        // Changed or removed elsewhere — drop the stale row now instead of failing every tap until the next poll.
+        writes.refetch = true;
+        qc.invalidateQueries({ queryKey: medsKeys.list() }, { cancelRefetch: false });
+        qc.invalidateQueries({ queryKey: medsKeys.detail(d.medication_id) }, { cancelRefetch: false });
+        emitOwn({ type: 'meds-changed', medId: d.medication_id });
+        toast.info(`${d.name} was changed or removed — refreshing today's doses.`);
+      } else {
+        toast.error(errorMessage(e));
+      }
       return false;
     } finally {
       inflight.current.delete(key);
@@ -275,6 +290,11 @@ export function useDoseActions(date: string, tz: string) {
         delete next[key];
         return next;
       });
+      writes.inFlight -= 1;
+      if (!writes.inFlight) {
+        doseWrites.delete(date);
+        if (writes.refetch) void qc.invalidateQueries({ queryKey: medsKeys.today(date) });
+      }
     }
   };
 

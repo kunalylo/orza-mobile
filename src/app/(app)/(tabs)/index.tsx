@@ -76,7 +76,8 @@ export default function Today() {
 
   /* ─── navigation ─── */
 
-  const dayParam = (): Record<string, string> => (isToday ? {} : { date });
+  // Always name the day (today included): Meals / Snap stay mounted and keep whatever day they were left on.
+  const dayParam = (): Record<string, string> => ({ date });
   const openSnap = () => router.navigate({ pathname: '/snap', params: dayParam() });
   const openCompose = () => router.navigate({ pathname: '/meals', params: { compose: '1', ...dayParam() } });
   const openLog = (type?: MealType) => router.navigate({ pathname: '/meals', params: { ...(type ? { meal_type: type } : {}), ...dayParam() } });

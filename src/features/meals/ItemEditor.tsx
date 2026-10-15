@@ -10,7 +10,7 @@ import { colors, fonts, radii, spacing } from '@/theme';
 import { Button, IconButton, Tag, Text } from '@/ui';
 
 import { Stepper } from './Stepper';
-import type { MealItem, Nutrients } from './types';
+import type { MealItem, MealItemInput, Nutrients } from './types';
 import { ITEM_LIMITS, MAX_ITEMS, round, sumNutrients } from './utils';
 
 export type DraftItem = {
@@ -42,8 +42,12 @@ export function toNum(s: string): number {
   return Number.isFinite(n) ? n : NaN;
 }
 
+/** A stored optional number (MongoDB returns missing ones as `null`) → a finite number or undefined. */
+const optNum = (v: number | null | undefined): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+
 export function toDraft(i: MealItem): DraftItem {
   const q = i.quantity > 0 ? i.quantity : 1;
+  const grams = optNum(i.grams);
   return {
     uid: uid(),
     name: i.name,
@@ -54,15 +58,15 @@ export function toDraft(i: MealItem): DraftItem {
     carbs_g: String(round(i.carbs_g, 1)),
     fat_g: String(round(i.fat_g, 1)),
     fiber_g: i.fiber_g || 0,
-    grams: i.grams,
-    confidence: i.confidence,
+    grams,
+    confidence: optNum(i.confidence),
     per: {
       calories: i.calories / q,
       protein_g: i.protein_g / q,
       carbs_g: i.carbs_g / q,
       fat_g: i.fat_g / q,
       fiber_g: (i.fiber_g || 0) / q,
-      grams: i.grams != null ? i.grams / q : undefined,
+      grams: grams != null ? grams / q : undefined,
     },
   };
 }
@@ -100,21 +104,24 @@ export function rowErrors(d: DraftItem): RowErrors {
 
 export const draftsValid = (rows: DraftItem[]) => rows.length > 0 && rows.every((r) => Object.keys(rowErrors(r)).length === 0);
 
-/** A valid draft → the API item shape. */
-export function fromDraft(d: DraftItem): MealItem {
+/** A valid draft → the API item shape. Optional numbers are only sent when known (never as `null`). */
+export function fromDraft(d: DraftItem): MealItemInput {
   const n = (s: string) => Math.max(0, toNum(s) || 0);
-  return {
+  const item: MealItemInput = {
     name: d.name.trim(),
     quantity: round(toNum(d.quantity), 2),
     unit: d.unit.trim() || 'serving',
-    grams: d.grams != null ? Math.min(ITEM_LIMITS.grams, Math.round(d.grams)) : undefined,
     calories: Math.round(n(d.calories)),
     protein_g: round(n(d.protein_g), 1),
     carbs_g: round(n(d.carbs_g), 1),
     fat_g: round(n(d.fat_g), 1),
     fiber_g: Math.min(ITEM_LIMITS.fiber_g, round(d.fiber_g || 0, 1)),
-    confidence: d.confidence,
   };
+  const grams = optNum(d.grams);
+  if (grams != null) item.grams = Math.min(ITEM_LIMITS.grams, Math.max(0, Math.round(grams)));
+  const confidence = optNum(d.confidence);
+  if (confidence != null) item.confidence = Math.min(1, Math.max(0, round(confidence, 2)));
+  return item;
 }
 
 export function draftTotals(rows: DraftItem[]): Nutrients {

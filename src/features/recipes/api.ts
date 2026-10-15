@@ -1,9 +1,9 @@
 /** Recipes API calls + React Query hooks. */
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { matchMutation, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { AI_TIMEOUT_MS, invalidateMealQueries } from '@/features/chat/ai';
 import type { Meal } from '@/features/chat/types';
-import { api } from '@/lib/api';
+import { ApiError, api } from '@/lib/api';
 
 import type { GenerateRequest, GenerateResponse, Recipe, RecipesResponse } from './types';
 
@@ -12,6 +12,8 @@ export const recipeKeys = {
   list: ['recipes', 'list'] as const,
   detail: (id: string) => ['recipes', 'detail', id] as const,
 };
+
+const deleteKey = ['recipes', 'delete'] as const;
 
 export function useRecipes() {
   return useQuery({ queryKey: recipeKeys.list, queryFn: ({ signal }) => api.get<RecipesResponse>('/recipes', { signal }) });
@@ -56,14 +58,30 @@ export function useToggleSave() {
     mutationFn: (r: Pick<Recipe, 'id' | 'saved'>) =>
       api.post<{ recipe: Recipe }>(`/recipes/${encodeURIComponent(r.id)}/save`, { saved: !r.saved }).then((x) => x.recipe),
     onSuccess: (recipe) => putRecipe(qc, recipe),
+    // Deleted elsewhere (another device): stop listing it.
+    onError: (e, r) => {
+      if (e instanceof ApiError && e.status === 404) dropRecipe(qc, r.id);
+    },
   });
 }
 
 export function useDeleteRecipe() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: deleteKey,
     mutationFn: (id: string) => api.del<{ ok: true }>(`/recipes/${encodeURIComponent(id)}`).then(() => id),
     onSuccess: (id) => dropRecipe(qc, id),
+  });
+}
+
+/**
+ * Calls `onDeleted(id)` whenever a recipe delete succeeds anywhere in the app (e.g. on the detail screen pushed
+ * above the Recipes screen), so a screen holding its own copy of a recipe can let go of it. Returns the unsubscribe.
+ */
+export function onRecipeDeleted(qc: QueryClient, onDeleted: (id: string) => void) {
+  return qc.getMutationCache().subscribe((event) => {
+    if (event.type !== 'updated' || event.action.type !== 'success') return;
+    if (matchMutation({ mutationKey: deleteKey }, event.mutation)) onDeleted(event.action.data as string);
   });
 }
 

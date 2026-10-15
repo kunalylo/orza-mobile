@@ -54,12 +54,12 @@ export function scanProblem(e: unknown): ScanProblem {
   }
   if (e instanceof PhotoError) return { kind: 'error', message: e.message, retry: false };
   if (e instanceof ApiError) {
-    if (e.code === 'ai_disabled' || e.status === 503) {
-      return { kind: 'ai_disabled', message: e.code === 'ai_disabled' ? e.message : "Photo scanning isn't available right now. You can type or speak your meal instead." };
-    }
+    // Only the server's "AI is switched off" turns scanning off. Other 503s are temporary — `ai_busy` (the AI provider
+    // is rate-limiting) or a gateway hiccup — so they fall through to a retryable error for the same photo.
+    if (e.code === 'ai_disabled') return { kind: 'ai_disabled', message: e.message };
     if (e.status === 402 || e.code === 'no_credits' || e.code === 'insufficient_credits') return { kind: 'no_credits', message: e.message };
     if (e.status === 429 || e.code === 'rate_limited') return { kind: 'rate_limited', message: e.message };
-    // 422 no_food / 400 bad photo: try another photo; network / timeout / 5xx: the same photo can be retried.
+    // 422 no_food / 400 bad photo: try another photo; network / timeout / 5xx (incl. 503 ai_busy): the same photo can be retried.
     return { kind: 'error', message: errorMessage(e), retry: e.status !== 422 && e.status !== 400 };
   }
   return { kind: 'error', message: errorMessage(e, "We couldn't read that photo. Please try another."), retry: false };

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Alert, BackHandler, Linking, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
-import { ApiError, errorMessage } from '@/lib/api';
+import { ApiError, errorMessage, validationField } from '@/lib/api';
 import { useAuth, useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
 import { pickPhotos, toUploadDataUrl, type PhotoSource } from '@/lib/image';
@@ -169,8 +169,10 @@ export default function Snap() {
           haptics.error();
           // A photo with no food can still use credits once the daily refunds are used up — resync the balance.
           if (e instanceof ApiError && (e.code === 'no_food' || e.status === 402)) void refresh().catch(() => null);
-          if (e instanceof ApiError && e.status === 400 && e.field === 'note') {
-            setNoteError(e.message);
+          // The server's zod 400 reads "note: Keep the note under 200 characters" (no `field`).
+          const invalid = validationField(e);
+          if (invalid?.field === 'note') {
+            setNoteError(invalid.message);
             return;
           }
           setProblem(scanProblem(e));
@@ -253,8 +255,8 @@ export default function Snap() {
   /* ─── navigation ─── */
 
   const openMeals = (compose = false) => {
-    const p: Record<string, string> = {};
-    if (!isToday) p.date = date;
+    // Always name the day (today included): the Meals tab stays mounted and keeps whatever day it was left on.
+    const p: Record<string, string> = { date };
     if (compose) p.compose = '1';
     router.navigate({ pathname: '/meals', params: p });
   };

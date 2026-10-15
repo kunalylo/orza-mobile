@@ -239,6 +239,7 @@ export default function PrescriptionScan() {
           onRetry={() => void history.refetch()}
           retrying={history.isFetching}
           year={year}
+          tz={tz}
         />
       </Animated.View>
     </Screen>

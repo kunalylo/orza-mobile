@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import { AppState, Linking, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
-import { useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useQueryClient } from '@tanstack/react-query';
 
 import { timeAgo } from '@/features/health/format';
 import { CardHeader, ConfirmStrip } from '@/features/reminders/parts';
@@ -45,10 +45,13 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
   const granted = data?.permission === 'granted';
   const blocked = data?.permission === 'blocked';
 
-  // Quiet re-sync when the copy on the phone is older than a few hours or ÖRZA data changed.
+  // Quiet re-sync when the copy on the phone is older than a few hours or ÖRZA data changed. "Syncing" counts any
+  // sync still running — including one started before this screen was last closed — so reopening Calendar mid-sync
+  // doesn't start another.
   const linked = !!link;
   const syncedAtIso = link?.syncedAt ?? null;
-  const { mutate: runSync, isPending: syncing, isError: syncFailed } = sync;
+  const { mutate: runSync, isError: syncFailed } = sync;
+  const syncing = useIsMutating({ mutationKey: calendarKeys.phoneSync() }) > 0;
   useEffect(() => {
     if (!linked || !granted || syncing || syncFailed) return;
     const syncedAt = syncedAtIso ? Date.parse(syncedAtIso) : 0;

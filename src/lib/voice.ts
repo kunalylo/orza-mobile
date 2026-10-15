@@ -8,7 +8,8 @@
  *   import time when the module is missing, e.g. in Expo Go) — so a build without it simply reports `available: false`.
  * - Availability: Android needs a speech RecognitionService (Google app / Speech Services); re-checked on foreground.
  *   iOS always has SFSpeechRecognizer — when it can't run (offline, Dictation off) the attempt ends with a friendly error.
- * - One listening session app-wide: starting in one screen cancels a session another screen left running.
+ * - One listening session app-wide: starting in one screen ends a session another screen left running; that screen
+ *   stops "listening" and gets whatever it had heard so far through its `onFinal`.
  * - Final text arrives through `onFinal` (trimmed, non-empty) once recognition ends — the final result, or the last
  *   partial transcript when the platform ended without one (unless the user cancelled).
  */
@@ -178,6 +179,8 @@ interface Owner {
   onNoMatch: () => void;
   onError: (e: ExpoSpeechRecognitionErrorEvent) => void;
   onEnd: () => void;
+  /** Another screen took the recogniser over: its events (incl. `end`) no longer reach this owner, so wrap up now. */
+  onAbandon: () => void;
 }
 
 /** The native session in flight; `owner: null` = orphaned (being aborted, its events are ignored). */
@@ -240,6 +243,8 @@ interface Session {
   final: string;
   partial: string;
   cancelled: boolean;
+  /** Wrapped up already — `end`, stop / cancel, the stop safety net and a takeover can race to finish a session. */
+  done: boolean;
 }
 
 /**
@@ -270,15 +275,23 @@ export function useVoiceInput(opts: { onFinal: (text: string) => void }): VoiceI
     stopTimer.current = null;
   }, []);
 
-  /** Wrap up this hook's session: reset the UI and (unless cancelled) hand over the text. */
+  /** Wrap up this hook's session (once): reset the UI and (unless cancelled) hand over the text. */
   const finish = useCallback(
     (session: Session, deliver: boolean) => {
-      clearStopTimer();
-      ownerRef.current = null;
-      sessionRef.current = null;
+      if (session.done) return;
+      session.done = true;
+      // A late wrap-up of an older session must not reset a newer one.
+      const current = sessionRef.current === session;
+      if (current) {
+        clearStopTimer();
+        ownerRef.current = null;
+        sessionRef.current = null;
+      }
       if (!mountedRef.current) return;
-      setListening(false);
-      setPartial('');
+      if (current) {
+        setListening(false);
+        setPartial('');
+      }
       const text = (session.final || session.partial).replace(/\s+/g, ' ').trim();
       if (deliver && !session.cancelled && text) onFinalRef.current(text);
     },
@@ -345,15 +358,18 @@ export function useVoiceInput(opts: { onFinal: (text: string) => void }): VoiceI
         }
         setBlocked(false);
 
-        // Another screen (or a stale session) holds the recogniser — end it first.
+        // Another screen (or a stale session) holds the recogniser — end it first, and tell that screen: once orphaned,
+        // its session's `end` never reaches it, so it would otherwise stay "listening" (and its own mic stay locked).
         if (active) {
+          const previous = active.owner;
           abortActive(mod);
+          previous?.onAbandon();
           await waitForIdle();
           if (!mountedRef.current || abandonRef.current) return;
         }
 
         ensureListeners(mod);
-        const session: Session = { lang, final: '', partial: '', cancelled: false };
+        const session: Session = { lang, final: '', partial: '', cancelled: false, done: false };
         const owner: Owner = {
           onStart: () => {
             if (mountedRef.current) setListening(true);
@@ -389,6 +405,8 @@ export function useVoiceInput(opts: { onFinal: (text: string) => void }): VoiceI
             setError(errorText(e.error, session.lang));
           },
           onEnd: () => finish(session, true),
+          // Taken over by another screen: stop "listening" here and keep what was heard so far.
+          onAbandon: () => finish(session, true),
         };
         ownerRef.current = owner;
         sessionRef.current = session;

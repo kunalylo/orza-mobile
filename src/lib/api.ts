@@ -51,6 +51,22 @@ export function errorMessage(e: unknown, fallback = GENERIC_MESSAGE): string {
   return e instanceof ApiError && e.message ? e.message : fallback;
 }
 
+/**
+ * The form field a 400 belongs to. Routes answer zod failures as `{error: "<path>: <message>", code: "validation"}`
+ * with no `field` (web `route()`, e.g. `"schedule.times.0: Use 24-hour times"`); the auth routes name it in `field`.
+ * `field` is the first path segment (`schedule`), `path` the whole path (`schedule.times.0`) and `message` the text
+ * without the `path: ` prefix, capitalised. Anything else (another status or code, no path prefix) gives null.
+ */
+export function validationField(e: unknown): { field: string; path: string; message: string } | null {
+  if (!(e instanceof ApiError) || e.status !== 400) return null;
+  if (e.field) return { field: e.field, path: e.field, message: e.message };
+  if (e.code !== 'validation') return null;
+  const m = /^([a-z_]\w*)((?:\.[\w.]+)?):\s*([\s\S]+)$/i.exec(e.message);
+  if (!m) return null;
+  const msg = m[3].trim();
+  return { field: m[1], path: m[1] + m[2], message: msg.charAt(0).toUpperCase() + msg.slice(1) };
+}
+
 /* ───────────────────────────── Session plumbing ───────────────────────────── */
 
 let sessionToken: string | null = null;

@@ -11,6 +11,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { AccountCard } from '@/features/more/AccountCard';
 import { MENU } from '@/features/more/menu';
 import { SettingsGroup, SettingsRow } from '@/features/settings/parts';
+import { getSessionToken } from '@/lib/api';
 import { firstName, useAuth, useSignedInUser } from '@/lib/auth';
 import { APP_VERSION } from '@/lib/config';
 import { colors, spacing } from '@/theme';
@@ -31,13 +32,10 @@ export default function More() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    try {
-      await refresh();
-    } catch {
-      toast.error("Couldn't refresh — check your connection.");
-    } finally {
-      setRefreshing(false);
-    }
+    const me = await refresh(); // never throws: null when ÖRZA couldn't answer, or the session ended
+    setRefreshing(false);
+    // An ended session (401) has already cleared the token and is signing out — no connection toast on top of that.
+    if (!me && getSessionToken()) toast.error("Couldn't refresh — check your connection.");
   };
 
   const name = firstName(user);

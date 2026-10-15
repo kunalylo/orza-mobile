@@ -5,7 +5,7 @@
 import { ApiError, errorMessage } from '@/lib/api';
 import { PhotoError } from '@/lib/image';
 
-export type RxProblemKind = 'ai_disabled' | 'no_credits' | 'rate_limited' | 'offline' | 'photo' | 'error';
+export type RxProblemKind = 'ai_disabled' | 'ai_busy' | 'no_credits' | 'rate_limited' | 'offline' | 'photo' | 'error';
 
 export interface RxProblem {
   kind: RxProblemKind;
@@ -24,11 +24,20 @@ export function rxProblem(e: unknown): RxProblem {
     return { kind: 'photo', title: "That photo didn't work", message: e.message };
   }
   if (e instanceof ApiError) {
-    if (e.code === 'ai_disabled' || e.status === 503) {
+    // Only `ai_disabled` means scanning is switched off. Other 503s are temporary — `ai_busy` (the AI provider is
+    // rate-limiting for a moment) or a gateway hiccup — and stay retryable.
+    if (e.code === 'ai_disabled') {
       return {
         kind: 'ai_disabled',
         title: "Scanning isn't available right now",
         message: e.message || "Prescription scanning isn't switched on yet. You can type the medicines from your prescription instead.",
+      };
+    }
+    if (e.code === 'ai_busy') {
+      return {
+        kind: 'ai_busy',
+        title: "ÖRZA's AI is busy",
+        message: e.message || "ÖRZA's AI is busy right now. Please try again in a moment.",
       };
     }
     if (e.status === 402 || e.code === 'no_credits' || e.code === 'insufficient_credits') {

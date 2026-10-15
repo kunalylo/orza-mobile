@@ -1,7 +1,7 @@
 /** Credit action rows, transaction labels and formatting (same wording as the web's `src/components/account/options.ts`). */
 import type { IconName } from '@/ui';
 
-import type { CreditAction } from './types';
+import type { CreditAction, CreditTransaction } from './types';
 
 /** Longest note a member can add to a "Request more credits" message. */
 export const CREDIT_REQUEST_MESSAGE_MAX = 800;
@@ -35,7 +35,7 @@ export const ACTION_TONES: Record<CreditAction, { bg: string; fg: string }> = {
   report_insight: { bg: 'rgba(255,255,255,0.8)', fg: '#5B5B5B' },
 };
 
-const ACTION_LABELS: Record<string, string> = {
+const ACTION_LABELS: Record<CreditAction, string> = {
   scan: 'Meal photo scan',
   meal_text: 'AI meal log',
   chat: 'Chat message',
@@ -44,20 +44,33 @@ const ACTION_LABELS: Record<string, string> = {
   report_insight: 'Report insight',
 };
 
+const CREDIT_ACTIONS = new Set<string>(Object.keys(ACTION_LABELS));
+
+/** A known credit action key (own keys only — never `constructor`, `toString` …). */
+export const isCreditAction = (v: unknown): v is CreditAction => typeof v === 'string' && CREDIT_ACTIONS.has(v);
+
 /** Friendly label for a stored transaction reason ("chat", "Refund: scan", "Welcome credits" …). */
 export function transactionLabel(reason: string): string {
   const r = (reason || '').trim();
   if (!r) return 'Credit update';
   const refund = r.match(/^refund:\s*(.+)$/i);
-  if (refund) return `Refund · ${ACTION_LABELS[refund[1].trim()] ?? refund[1].trim()}`;
-  return ACTION_LABELS[r] ?? r;
+  if (refund) {
+    const what = refund[1].trim();
+    return `Refund · ${isCreditAction(what) ? ACTION_LABELS[what] : what}`;
+  }
+  return isCreditAction(r) ? ACTION_LABELS[r] : r;
 }
 
-/** The credit action a transaction reason refers to, when recognisable. */
-export function transactionAction(reason: string): CreditAction | null {
-  const r = (reason || '').replace(/^refund:\s*/i, '').trim().toLowerCase();
-  if (r in ACTION_LABELS) return r as CreditAction;
+/**
+ * The credit action a transaction is for: the server's `action` when it recorded one (every spend and refund
+ * does), otherwise read from the reason ("Ask ÖRZA", "Snap & Know scan", "Refund: Recipe — …") for older rows.
+ */
+export function transactionAction(tx: Pick<CreditTransaction, 'reason' | 'action'>): CreditAction | null {
+  if (isCreditAction(tx.action)) return tx.action;
+  const r = (tx.reason || '').replace(/^refund:\s*/i, '').trim().toLowerCase();
+  if (isCreditAction(r)) return r;
   if (r.startsWith('rebalance')) return 'compensation';
+  if (r.startsWith('ask')) return 'chat';
   if (r.includes('scan') || r.includes('photo')) return 'scan';
   if (r.includes('recipe')) return 'recipe';
   if (r.includes('chat')) return 'chat';

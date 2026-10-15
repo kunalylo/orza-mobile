@@ -4,7 +4,7 @@
  */
 import type { QueryClient } from '@tanstack/react-query';
 
-import { ApiError, errorMessage } from '@/lib/api';
+import { ApiError, errorMessage, validationField } from '@/lib/api';
 
 import { DAY_SUMMARY_ROOTS } from '@/features/meals/api';
 
@@ -13,7 +13,7 @@ export const AI_TIMEOUT_MS = 65_000;
 
 export interface AiErrorInfo {
   message: string;
-  /** Server code (`no_credits`, `ai_disabled`, `rate_limited`, `network`, `timeout`, …). */
+  /** Server code (`no_credits`, `ai_disabled`, `rate_limited`, `network`, `timeout`, `validation`, …). */
   code: string;
   /** Validation errors name the offending field — show the message next to it. */
   field?: string;
@@ -26,13 +26,14 @@ export interface AiErrorInfo {
 export function aiErrorInfo(e: unknown): AiErrorInfo {
   if (e instanceof ApiError) {
     const needsCredits = e.status === 402 || e.code === 'no_credits';
-    let message = e.message;
+    const invalid = validationField(e);
+    let message = invalid?.message ?? e.message;
     if (e.code === 'ai_disabled' || e.status === 503) message = e.message || "ÖRZA's AI isn't available right now. Please try again later.";
     if (needsCredits && !message) message = "You're out of AI credits. Manual logging stays free.";
     return {
       message: message || errorMessage(e),
       code: e.code,
-      field: e.status === 400 ? e.field : undefined,
+      field: invalid?.field,
       needsCredits,
       retryable: e.isNetwork || e.status === 429 || e.status >= 500,
     };

@@ -142,8 +142,8 @@ export default function Meals() {
     });
 
   const openSnap = () => {
-    const p: Record<string, string> = {};
-    if (!isToday) p.date = date;
+    // Always name the day (today included): Snap stays mounted and keeps a past day while a photo / review is in hand.
+    const p: Record<string, string> = { date };
     if (composerType !== 'auto') p.meal_type = composerType;
     router.push({ pathname: '/snap', params: p });
   };

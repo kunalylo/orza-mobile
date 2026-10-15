@@ -6,7 +6,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
-import { ApiError, api } from '@/lib/api';
+import { ApiError, api, validationField } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { Preferences, PublicUser, Targets } from '@/lib/types';
 
@@ -27,15 +27,13 @@ export const accountKeys = {
 /* ───────────────────────────── Errors ───────────────────────────── */
 
 /**
- * The API reports validation problems as `{error: "<path>: <message>", code: "validation"}` (zod path, no `field`).
- * Returns the field path (e.g. `profile.age`, `new_password`) and the message without the prefix.
+ * An API error split for a settings form: a validation 400 (see `validationField`) gives its whole field path
+ * (e.g. `profile.age`, `new_password`) and the message without the prefix; any other API error gives just its message.
  */
 export function splitFieldError(e: unknown): { field?: string; message: string } | null {
   if (!(e instanceof ApiError)) return null;
-  if (e.field) return { field: e.field, message: e.message };
-  const m = /^([a-z_][\w.]*):\s*(.+)$/i.exec(e.message);
-  if (e.status === 400 && m) return { field: m[1], message: m[2] };
-  return { message: e.message };
+  const v = validationField(e);
+  return v ? { field: v.path, message: v.message } : { message: e.message };
 }
 
 /* ───────────────────────────── Sync ───────────────────────────── */

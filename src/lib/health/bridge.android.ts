@@ -37,8 +37,12 @@ const READ_TYPES = Object.keys(RECORDS) as ReadType[];
 const PERMISSIONS: Permission[] = READ_TYPES.map((recordType) => ({ accessType: 'read', recordType }));
 
 const SLEEP_LOOKBACK_MS = 18 * 60 * 60 * 1000;
-/** Stage values that are not sleep (SleepStageType.AWAKE / OUT_OF_BED). */
-const AWAKE_STAGES = new Set([1, 3]);
+/**
+ * Stage values that are not sleep: AWAKE (1), OUT_OF_BED (3) and AWAKE_IN_BED (7). The library passes the platform's
+ * raw stage int through, and its JS `SleepStageType` stops at REM (6) — but Health Connect (androidx connect-client
+ * 1.1, Android 14+) also has `STAGE_TYPE_AWAKE_IN_BED = 7`, which the website likewise doesn't count as asleep.
+ */
+const AWAKE_STAGES = new Set([1, 3, 7]);
 
 type TimeRange = ReadRecordsOptions['timeRangeFilter'];
 type HealthConnect = typeof import('react-native-health-connect');

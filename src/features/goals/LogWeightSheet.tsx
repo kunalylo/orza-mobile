@@ -5,13 +5,13 @@
 import { useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 
-import { errorMessage } from '@/lib/api';
+import { errorMessage, validationField } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
 import { colors, fonts, radii, spacing } from '@/theme';
 import { Button, Icon, IconButton, Sheet, Text, toast } from '@/ui';
 
-import { fieldError, useLogWeight } from './api';
+import { useLogWeight } from './api';
 import { MAX_WEIGHT_KG, MIN_WEIGHT_KG, formatDecimal, kgToUnit, parseNum, round, unitToKg, weightRange, weightUnit } from './math';
 
 export function LogWeightSheet({
@@ -73,7 +73,7 @@ export function LogWeightSheet({
       },
       onError: (e) => {
         haptics.error();
-        const f = fieldError(e);
+        const f = validationField(e);
         if (f) setError(f.message);
         else toast.error(errorMessage(e));
       },

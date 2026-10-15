@@ -1,17 +1,18 @@
 /** Recipes: generate (AI or ÖRZA's curated collection), save, and browse Saved / Recent. See src/features/recipes. */
-import { useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { aiErrorInfo } from '@/features/chat/ai';
-import { useGenerateRecipe, useRecipes, useToggleSave } from '@/features/recipes/api';
+import { onRecipeDeleted, useGenerateRecipe, useRecipes, useToggleSave } from '@/features/recipes/api';
 import { KitchenCard } from '@/features/recipes/KitchenCard';
 import { RecipeGenerator, type GeneratorErrors } from '@/features/recipes/RecipeGenerator';
 import { GeneratingCard, RecipeResultCard } from '@/features/recipes/RecipeResult';
 import { RecipeTile } from '@/features/recipes/RecipeTile';
 import type { GenerateRequest, Recipe } from '@/features/recipes/types';
-import { errorMessage } from '@/lib/api';
+import { ApiError, errorMessage } from '@/lib/api';
 import { useAuth, useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
 import { colors, gutter, spacing } from '@/theme';
@@ -25,6 +26,7 @@ export default function Recipes() {
   const { setUser, refresh } = useAuth();
   const reduce = useReducedMotion();
   const insets = useSafeAreaInsets();
+  const qc = useQueryClient();
   const q = useRecipes();
   const generate = useGenerateRecipe();
   const save = useToggleSave();
@@ -43,6 +45,9 @@ export default function Recipes() {
   const list = activeTab === 'saved' ? saved : recipes;
   // The open result follows save / unsave made anywhere (list cache is the source of truth).
   const live = result ? (recipes.find((r) => r.id === result.recipe.id) ?? result.recipe) : null;
+
+  // Deleting the result's recipe (on its detail screen, pushed above this one) closes the result card too.
+  useEffect(() => onRecipeDeleted(qc, (id) => setResult((cur) => (cur?.recipe.id === id ? null : cur))), [qc]);
 
   const scrollToResult = () =>
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, resultY.current - spacing.md), animated: !reduce }));
@@ -83,6 +88,8 @@ export default function Recipes() {
       onError: (e) => {
         haptics.error();
         toast.error(errorMessage(e));
+        // Deleted on another device: the result card has nothing left to show.
+        if (e instanceof ApiError && e.status === 404) setResult((cur) => (cur?.recipe.id === r.id ? null : cur));
       },
     });
   }

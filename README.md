@@ -47,7 +47,10 @@ src/
 ### Conventions
 - **API**: `api.get/post/patch/put/del` from `@/lib/api` (JSON, Bearer token, timeouts, `ApiError {status, code, field}`,
   friendly offline/timeout messages; an authenticated 401 signs out, except `code: "wrong_password"`). Photos:
-  `mediaSource(url)` for `expo-image`.
+  `mediaSource(url)` for `expo-image`. Errors on screen: `errorMessage(e)`; a 400 that belongs next to a form field:
+  `validationField(e)` → `{field, path, message}` (parses the server's `"<path>: <message>"` zod errors).
+- **Sheets**: `Sheet` from `@/ui`; `dismissible={false}` blocks closing (while saving), and `onBlockedDismiss` lets a
+  form with unsaved changes ask "Discard changes?" from the backdrop, close button and Android back.
 - **Data**: React Query (`useQuery` / `useMutation`) — the client is provided by `AuthProvider`.
 - **User**: `useAuth()` (`signIn/signUp/signOut/refresh/setUser`), `useSignedInUser()` inside member screens.
 - **UI**: `Screen` (safe area, cream canvas / `orb` / `hero` backdrop, keyboard, `tabBar` spacing), `ScreenHeader`, `Text`

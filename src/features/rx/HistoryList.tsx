@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { Alert, StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
 
-import { formatDateShort, medicineTitle } from '@/features/meds/shared';
+import { dateIn, formatDateShort, medicineTitle } from '@/features/meds/shared';
 import { ErrorPanel } from '@/features/meds/StatusViews';
 import { errorMessage, mediaSource } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
@@ -21,6 +21,16 @@ import type { PrescriptionClient } from './types';
 
 export function rxTitle(p: PrescriptionClient): string {
   return p.doctor || (p.medicines.length ? p.medicines.slice(0, 3).map((m) => m.name).join(', ') : 'Prescription');
+}
+
+/**
+ * The date to show: the one written on the prescription, else the day it was scanned or typed in the member's
+ * timezone (`created_at` is a UTC instant — a 01:30 IST scan is the previous day in UTC).
+ */
+function rxDate(p: PrescriptionClient, tz: string): string {
+  if (p.issued_on) return p.issued_on.slice(0, 10);
+  const at = new Date(p.created_at);
+  return Number.isNaN(at.getTime()) ? p.created_at.slice(0, 10) : dateIn(tz, at);
 }
 
 function medicineCount(p: PrescriptionClient): number {
@@ -56,11 +66,11 @@ export function HistorySkeleton() {
   );
 }
 
-function HistoryRow({ p, index, year, onPress }: { p: PrescriptionClient; index: number; year: number; onPress: () => void }) {
+function HistoryRow({ p, index, year, tz, onPress }: { p: PrescriptionClient; index: number; year: number; tz: string; onPress: () => void }) {
   const applied = p.status === 'applied';
   const count = medicineCount(p);
   const title = rxTitle(p);
-  const date = formatDateShort((p.issued_on || p.created_at).slice(0, 10), year);
+  const date = formatDateShort(rxDate(p, tz), year);
   return (
     <Animated.View entering={FadeInDown.delay(Math.min(index, 6) * 45).springify().damping(18)} exiting={FadeOut.duration(180)} layout={LinearTransition.springify().damping(20)}>
       <GlassCard
@@ -88,7 +98,7 @@ function HistoryRow({ p, index, year, onPress }: { p: PrescriptionClient; index:
   );
 }
 
-function DetailSheet({ p, year, onClose }: { p: PrescriptionClient | null; year: number; onClose: () => void }) {
+function DetailSheet({ p, year, tz, onClose }: { p: PrescriptionClient | null; year: number; tz: string; onClose: () => void }) {
   const { height } = useWindowDimensions();
   const remove = useDeletePrescription();
   const [shown, setShown] = useState<PrescriptionClient | null>(p);
@@ -128,7 +138,7 @@ function DetailSheet({ p, year, onClose }: { p: PrescriptionClient | null; year:
     <Sheet
       visible={!!p}
       onClose={onClose}
-      eyebrow={formatDateShort((rx.issued_on || rx.created_at).slice(0, 10), year)}
+      eyebrow={formatDateShort(rxDate(rx, tz), year)}
       title={rxTitle(rx)}
       dismissible={!remove.isPending}
       footer={
@@ -209,6 +219,7 @@ export function HistoryList({
   onRetry,
   retrying,
   year,
+  tz,
 }: {
   items: PrescriptionClient[] | undefined;
   isPending: boolean;
@@ -216,6 +227,8 @@ export function HistoryList({
   onRetry: () => void;
   retrying: boolean;
   year: number;
+  /** The member's timezone — dates prescriptions that have no written date. */
+  tz: string;
 }) {
   const [selected, setSelected] = useState<PrescriptionClient | null>(null);
 
@@ -232,7 +245,7 @@ export function HistoryList({
     body = (
       <View style={styles.list}>
         {items.map((p, i) => (
-          <HistoryRow key={p.id} p={p} index={i} year={year} onPress={() => setSelected(p)} />
+          <HistoryRow key={p.id} p={p} index={i} year={year} tz={tz} onPress={() => setSelected(p)} />
         ))}
       </View>
     );
@@ -240,7 +253,7 @@ export function HistoryList({
   return (
     <>
       {body}
-      <DetailSheet p={selected} year={year} onClose={() => setSelected(null)} />
+      <DetailSheet p={selected} year={year} tz={tz} onClose={() => setSelected(null)} />
     </>
   );
 }

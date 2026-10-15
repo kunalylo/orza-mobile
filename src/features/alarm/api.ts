@@ -6,11 +6,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 
-import { medsApi, medsKeys } from '@/features/meds/api';
+import { isStaleDoseError, medsApi, medsKeys } from '@/features/meds/api';
 import { emitDoseEvent } from '@/features/meds/events';
 import { clockIn, doseKey, withAction } from '@/features/meds/shared';
 import type { DoseAction, DoseItem, DueResponse } from '@/features/meds/types';
-import { api, ApiError, errorMessage } from '@/lib/api';
+import { api, errorMessage } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
 import { toast } from '@/ui';
 
@@ -50,10 +50,6 @@ export function useAlarmDoses(at: string | null) {
   });
 }
 
-/** The dose no longer exists on the server (medicine deleted, schedule changed, made SOS). */
-const isStale = (e: unknown) =>
-  e instanceof ApiError && (e.status === 404 || (e.status === 400 && /schedule/i.test(e.message)));
-
 export type HandledDose = DoseItem & { gone?: boolean };
 
 /**
@@ -67,7 +63,8 @@ export function useAlarmActions(tz: string) {
   const inflight = useRef(new Set<string>());
 
   const refreshScreens = (d: DoseItem, action: DoseAction) => {
-    qc.invalidateQueries({ queryKey: medsKeys.todayAll() }, { cancelRefetch: false });
+    // Cancels a today GET already running — it may have read the dose before this POST committed.
+    qc.invalidateQueries({ queryKey: medsKeys.todayAll() });
     qc.invalidateQueries({ queryKey: medsKeys.adherenceAll() }, { cancelRefetch: false });
     if (action === 'take') {
       // Stock goes down by one on "take".
@@ -86,8 +83,8 @@ export function useAlarmActions(tz: string) {
       const log = await medsApi.dose(d, action);
       const updated = withAction(d, action, log);
       setHandled((h) => ({ ...h, [key]: updated }));
-      emitDoseEvent({ type: 'dose-updated', medId: d.medication_id, at: d.scheduled_for });
       refreshScreens(d, action);
+      emitDoseEvent({ type: 'dose-updated', medId: d.medication_id, at: d.scheduled_for });
       if (!opts.quiet) {
         if (action === 'take') toast.success(`${d.name} — marked as taken`);
         else if (action === 'snooze') {
@@ -100,7 +97,7 @@ export function useAlarmActions(tz: string) {
       }
       return true;
     } catch (e) {
-      if (isStale(e)) {
+      if (isStaleDoseError(e)) {
         setHandled((h) => ({ ...h, [key]: { ...d, gone: true } }));
         emitDoseEvent({ type: 'meds-changed', medId: d.medication_id });
         if (!opts.quiet) toast.info(`${d.name} was changed or removed — nothing to do for this dose.`);

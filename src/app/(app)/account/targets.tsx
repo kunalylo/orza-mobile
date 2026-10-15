@@ -23,6 +23,9 @@ type Errors = Partial<Record<TargetKey, string>>;
 const toDraft = (t: Targets | undefined): Draft =>
   Object.fromEntries(TARGET_FIELDS.map((f) => [f.key, String(t?.[f.key] ?? DEFAULT_TARGETS[f.key])])) as Draft;
 const keyOf = (d: Draft) => TARGET_FIELDS.map((f) => d[f.key]).join('|');
+/** Moves a draft onto fresher targets: every field still equal to `from` takes its value from `to`; edits stay. */
+const rebase = (draft: Draft, from: Draft, to: Draft): Draft =>
+  Object.fromEntries(TARGET_FIELDS.map((f) => [f.key, draft[f.key] === from[f.key] ? to[f.key] : draft[f.key]])) as Draft;
 
 const MACROS = [
   { key: 'protein_g', label: 'Protein', kcal: 4, color: colors.coral },
@@ -94,14 +97,16 @@ export default function TargetsSettings() {
   const baseline = toDraft(user.targets);
   const baseKey = keyOf(baseline);
   const [draft, setDraft] = useState<Draft>(baseline);
-  const [seenBase, setSeenBase] = useState(baseKey);
+  // The server copy the draft is edited from.
+  const [base, setBase] = useState<Draft>(baseline);
   const [errors, setErrors] = useState<Errors>({});
   const [refreshing, setRefreshing] = useState(false);
 
-  // Follow outside changes (refresh, a profile save that recalculated targets) unless there are unsaved edits.
-  if (seenBase !== baseKey) {
-    setSeenBase(baseKey);
-    if (keyOf(draft) === seenBase) setDraft(baseline);
+  // Follow outside changes (refresh, a profile save that recalculated targets). Untouched targets take the fresh value
+  // and unsaved edits stay, so Save never puts back a stale copy of a target that wasn't edited here.
+  if (keyOf(base) !== baseKey) {
+    setBase(baseline);
+    setDraft(rebase(draft, base, baseline));
   }
 
   const dirty = keyOf(draft) !== baseKey;
@@ -148,10 +153,14 @@ export default function TargetsSettings() {
       return;
     }
     if (!Object.keys(body).length) return;
+    const sent = draft;
     saveTargets.mutate(body, {
       onSuccess: (res) => {
         haptics.success();
-        setDraft(toDraft(res.user.targets));
+        // The saved targets replace what was sent; anything edited while saving stays as typed.
+        const saved = toDraft(res.user.targets);
+        setDraft((d) => rebase(d, sent, saved));
+        setBase(saved);
         toast.success('Daily targets saved');
       },
       onError: (e) => {

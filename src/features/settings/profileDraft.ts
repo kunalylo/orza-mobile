@@ -80,6 +80,25 @@ export function toDraft(user: PublicUser, units: Units): ProfileDraft {
 
 export const draftKey = (d: ProfileDraft) => JSON.stringify(d);
 
+const REBASED_FIELDS = ['name', 'age', 'sex', 'weight', 'activity_level', 'diet', 'allergies', 'region', 'language', 'household_mode', 'lifestyle'] as const;
+const HEIGHT_FIELDS = ['height_cm', 'height_ft', 'height_in'] as const;
+
+/**
+ * Moves a draft onto a fresher server copy: every field still equal to `from` (the copy it was edited from, or the copy
+ * that was just sent) takes its value from `to`; fields edited since keep the edit. Height (cm / ft / in) moves as one
+ * field. `from` and `to` must be in the draft's units.
+ */
+export function rebaseDraft(draft: ProfileDraft, from: ProfileDraft, to: ProfileDraft): ProfileDraft {
+  const next: ProfileDraft = { ...draft };
+  const same = (k: ProfileField) => JSON.stringify(draft[k]) === JSON.stringify(from[k]);
+  const take = <K extends ProfileField>(k: K) => {
+    next[k] = to[k];
+  };
+  for (const k of REBASED_FIELDS) if (same(k)) take(k);
+  if (HEIGHT_FIELDS.every(same)) HEIGHT_FIELDS.forEach(take);
+  return next;
+}
+
 const toNum = (s: string) => {
   const t = s.trim().replace(',', '.');
   if (!t) return null;

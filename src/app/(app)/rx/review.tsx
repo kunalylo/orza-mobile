@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 
-import { fieldError, useLocalToday, useMedications, useMedsTimezone } from '@/features/meds/api';
+import { useLocalToday, useMedications, useMedsTimezone } from '@/features/meds/api';
 import { DatePickerSheet } from '@/features/meds/PickerSheets';
 import { formatDateLong, formatDateShort, isISODate } from '@/features/meds/shared';
 import { ErrorPanel } from '@/features/meds/StatusViews';
@@ -20,7 +20,7 @@ import { ReviewRowCard } from '@/features/rx/ReviewRowCard';
 import { RowEditorSheet } from '@/features/rx/RowEditorSheet';
 import { emptyRow, isLowConfidence, MAX_ROWS, rowProblem, rxPhotoDraft, toApplyMedicine, toRows } from '@/features/rx/rows';
 import type { ReviewRow } from '@/features/rx/types';
-import { ApiError, errorMessage, mediaSource } from '@/lib/api';
+import { ApiError, errorMessage, mediaSource, validationField } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
 import { PhotoError, type PhotoSource } from '@/lib/image';
 import { colors, fonts, radii, shadows, spacing } from '@/theme';
@@ -207,7 +207,7 @@ export default function PrescriptionReview() {
         return;
       }
       haptics.error();
-      const f = fieldError(e);
+      const f = validationField(e);
       if (f && (f.field === 'for_person' || f.field === 'start_date')) setFormError(f);
       else toast.error(errorMessage(e));
     } finally {

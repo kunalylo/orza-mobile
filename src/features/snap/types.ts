@@ -1,7 +1,7 @@
 /**
  * Snap & Know types — field names identical to the web API (`E:\aylo\orza\src\lib\types.ts` Scan, `/api/meals/scan*`).
  */
-import type { Meal, MealItem, MealType, Nutrients } from '@/features/meals/types';
+import type { Meal, MealItem, MealItemInput, MealType, Nutrients } from '@/features/meals/types';
 
 /** An unconfirmed AI estimate of one photo (the photo itself is never stored). */
 export interface Scan {
@@ -36,7 +36,7 @@ export interface ConfirmInput {
   id: string;
   meal_type?: MealType;
   date?: string;
-  items?: MealItem[];
+  items?: MealItemInput[];
 }
 
 /** `POST /api/meals/scan/[id]/confirm` */

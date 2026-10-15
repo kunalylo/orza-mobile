@@ -1,7 +1,7 @@
 /** Goals API calls + React Query hooks (goal, weigh-ins, targets). */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { ApiError, api } from '@/lib/api';
+import { api } from '@/lib/api';
 
 import type { GoalCalculateRequest, GoalCalculateResponse, GoalsActiveResponse, TrackWeightResponse, WeightPoint } from './types';
 
@@ -63,15 +63,3 @@ export function useLogWeight(today: string) {
   });
 }
 
-/**
- * Field-level message from a 400. The server's zod errors read `"<field>: <message>"` (code `validation`);
- * `ApiError.field` is used when the server names it directly.
- */
-export function fieldError(e: unknown): { field: string; message: string } | null {
-  if (!(e instanceof ApiError) || e.status !== 400) return null;
-  if (e.field) return { field: e.field, message: e.message };
-  const m = /^([a-z_]+): (.+)$/i.exec(e.message);
-  if (!m) return null;
-  const msg = m[2].trim();
-  return { field: m[1], message: msg.charAt(0).toUpperCase() + msg.slice(1) };
-}

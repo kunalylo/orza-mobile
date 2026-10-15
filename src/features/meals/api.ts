@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
-import type { AiStatus, FoodHit, Meal, MealItem, MealsResponse, MealType, TextLogResponse } from './types';
+import type { AiStatus, FoodHit, Meal, MealItemInput, MealsResponse, MealType, TextLogResponse } from './types';
 import { sumNutrients } from './utils';
 
 export const mealKeys = {
@@ -18,8 +18,12 @@ export const mealKeys = {
   foods: (q: string) => ['meals', 'foods', q.toLowerCase()] as const,
 };
 
-/** AI calls can take a while (the server falls back to its free parser if the AI is slow). */
-const AI_TIMEOUT_MS = 45_000;
+/**
+ * AI calls can take a while. The server gives its AI 45 s, then falls back to its free parser and still logs the meal,
+ * so the phone must wait longer than that (+ auth, credits, fallback, DB, network) or it would report a failure for a
+ * meal that does get logged — and a retry would log it twice. Same headroom as chat / recipes.
+ */
+const AI_TIMEOUT_MS = 75_000;
 
 /* ───────────────────────────── Cache helpers ───────────────────────────── */
 
@@ -142,16 +146,25 @@ export function useLogMealText() {
       }
       invalidateDaySummaries(qc, res.meal.date);
     },
-    onError: (e) => {
+    onError: (e, input) => {
+      if (!(e instanceof ApiError)) return;
       // Text the AI found no food in can still use a credit once the daily refunds are used up.
-      if (e instanceof ApiError && (e.code === 'no_items' || e.status === 402)) void refresh().catch(() => {});
+      if (e.code === 'no_items' || e.status === 402) void refresh().catch(() => {});
+      // No answer (timeout / dropped connection): the server may still have finished — logged the meal and spent a
+      // credit. Refetch the day (also on reconnect, as it's now stale) and the balance, so the list shows it before
+      // anyone retries.
+      if (e.isNetwork) {
+        invalidateDaySummaries(qc, input.date);
+        void qc.invalidateQueries({ queryKey: mealKeys.aiStatus });
+        void refresh().catch(() => {});
+      }
     },
   });
 }
 
 export type AddFoodInput =
   | { date: string; meal_type: MealType; food_key: string; quantity: number; restaurant: boolean }
-  | { date: string; meal_type: MealType; items: MealItem[] };
+  | { date: string; meal_type: MealType; items: MealItemInput[] };
 
 /** `POST /api/meals/manual` — from the food list (by key + servings) or custom items. Always free. */
 export function useAddManualMeal() {
@@ -169,8 +182,8 @@ export function useAddManualMeal() {
 export function useUpdateMeal() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { id: string; meal_type?: MealType; items?: MealItem[] }) => {
-      const body: { meal_type?: MealType; items?: MealItem[] } = {};
+    mutationFn: (input: { id: string; meal_type?: MealType; items?: MealItemInput[] }) => {
+      const body: { meal_type?: MealType; items?: MealItemInput[] } = {};
       if (input.meal_type) body.meal_type = input.meal_type;
       if (input.items) body.items = input.items;
       return api.patch<{ meal: Meal }>(`/meals/${encodeURIComponent(input.id)}`, body);

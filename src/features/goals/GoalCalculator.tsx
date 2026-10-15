@@ -6,13 +6,13 @@
 import { useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View, type TextInput } from 'react-native';
 
-import { errorMessage } from '@/lib/api';
+import { errorMessage, validationField } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
 import type { ActivityLevel, GoalType, Profile, Sex, Targets } from '@/lib/types';
 import { colors, radii, spacing } from '@/theme';
 import { Button, Chip, GlassCard, Icon, Segmented, Text, TextField, toast } from '@/ui';
 
-import { fieldError, useCalculateGoal } from './api';
+import { useCalculateGoal } from './api';
 import {
   ACTIVITY_OPTIONS,
   GAIN_PACES,
@@ -180,7 +180,7 @@ export function GoalCalculator({
         },
         onError: (e) => {
           haptics.error();
-          const f = fieldError(e);
+          const f = validationField(e);
           const key = f ? SERVER_FIELD[f.field] : undefined;
           if (f && key) setServerErrors({ [key]: f.message });
           else toast.error(errorMessage(e));

@@ -166,3 +166,62 @@ IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
   - Checks: `npm run typecheck` ✓ (typed routes regenerated; every link resolves), `npx expo lint` ✓, `npx expo-doctor` 21/21 ✓,
     `npx expo export --platform android` ✓ (6.5 MB HBC) and `--platform ios` ✓ (6.4 MB HBC), exported outside the repo.
   - Next: Phase C (native alarms & notifications), then D1 device testing of everything above.
+- 2026-10-15: pushed `81e8516` to origin. Web: `619f0cc` (local, NOT pushed) — `/api/health/import` accepts `health_connect`
+  (web is now 3 commits ahead of live: A1 `3583c79` + `96a63af`, and `619f0cc`; push needs the user's OK).
+  Phase B review launched (find → refute → fix per area: food, meds, coach, account+shared core, care; then integrate + commit).
+  Run: workflow `orza-mobile-phase-b-review`, run id `wf_4b919118-66d`, script
+  `C:\Users\ADMIN\.claude\projects\E--aylo-orza\28092694-1d2e-42df-925f-dfe01d5728c5\workflows\scripts\orza-mobile-phase-b-review-wf_4b919118-66d.js`.
+  If interrupted: re-run it with resumeFromRunId (finished agents are cached); fixers keep `docs/notes/review-<area>.md` checklists.
+  Plan after the review: Phase C (C1 scheduler, C2 Android alarm module, C3 iOS notifications), then D1 on the emulator against a
+  LOCAL web server (JSON-file DB, `EXPO_PUBLIC_API_URL=http://10.0.2.2:3100`) so testing never touches production data.
+- 2026-10-15: review finding food-1 is also a LIVE web bug: editing a meal whose stored items hold `null` (grams / confidence —
+  MongoDB keeps missing values as null) failed with 400. Fixed server-side in web `3aac35a` (local, NOT pushed): the meal item
+  schema treats null as "not given"; the web editor no longer sends null. Web is now 4 commits ahead of live.
+- 2026-10-15: user OK'd "push web" → web pushed `b8e37d7..3aac35a` (A1 Bearer auth + devices, health_connect import source,
+  meal-edit null fix); Vercel auto-deploys. `next build` passed locally before the push. The app can now sign in to production.
+- 2026-10-15: **Phase B review** (workflow `orza-mobile-phase-b-review`, run `wf_4b919118-66d`, resumed after a usage-limit
+  stop; find → skeptic refute → fix per area → integrate). Each fixer's checklist and notes: `docs/notes/review-<area>.md`.
+
+  | Area | Found | Confirmed | Fixed | Ids |
+  |---|---|---|---|---|
+  | food (Today, Meals, Snap, meal edit, voice) | 6 | 6 | 6 | food-1 (high) … food-6 |
+  | meds (medicines, med edit, rx, alarm) | 6 | 6 | 6 | meds-1 … meds-6 |
+  | coach (chat, recipes, rebalance, goals, reports, credits) | 4 | 4 | 4 | chat-1, contract-1, recipes-1, credits-1 |
+  | account + shared core (settings, more, auth, api, ui) | 5 | 5 | 5 | account-1 … account-5 |
+  | care (health, calendar, reminders) | 5 | 5 | 5 | calendar-1/2/3, health-1/2 |
+  | **Total** | **26** | **26** | **26** | none refuted, none "needs device", none left unfixed |
+
+  - Highlights: editing a meal sent `confidence: null` → 400 (food-1, also a live web bug, fixed server-side in web `3aac35a`);
+    a quantity typed into the Stepper was dropped when Save was tapped with the field focused (food-2); the text-log timeout
+    equalled the server's AI timeout, so a retry could log twice (food-3, now 75 s + "may still have logged" message);
+    `ai_busy` 503s treated as "AI off" (food-4 / meds-3); a Take could be overwritten by an in-flight refetch (meds-2) and
+    the edit form re-sent an old stock count (meds-1); the phone-calendar link outlived sign-out and passed to the next
+    account (calendar-2) and two syncs could duplicate events (calendar-3); late `/auth/me` / mutation answers could bring a
+    signed-out user back (account-5); Profile / Targets saves put back stale values (account-2/3).
+  - Integration (shared requests): `DailyReportView` passes the report's `date` to `/meals` (stale-day bug like food-5);
+    `Sheet` gains `onBlockedDismiss` (backdrop, X and Android back call it while `dismissible={false}`; swipe stays off) and
+    the rx row editor uses it, so every way out asks "Discard changes?"; one zod-400 parser `validationField(e)` →
+    `{field, path, message}` in `lib/api.ts` replaces the copies in chat, goals, meds and settings, and is also used by the
+    meal text composer (`text`) and Snap (`note`), which checked an `e.field` the meals routes never send; `signOut`
+    deletes the phone's ÖRZA calendar (`clearPhoneCalendar`, dynamic import, ≤ 4 s, deliberate sign-out / account deletion
+    only). README conventions: `validationField`, `Sheet` `onBlockedDismiss`.
+  - Checks: `npm run typecheck` ✓, `npx expo lint` ✓, `npx expo-doctor` 21/21 ✓, `npx expo export --platform android` ✓
+    (6.5 MB HBC) and `--platform ios` ✓ (6.4 MB HBC), exported outside the repo.
+  - Backend issues (web, not changed here):
+    1. `src/lib/db.ts:78` builds the `MongoClient` without `ignoreUndefined: true`, so `undefined` optional fields are stored
+       as `null` and echoed back to every client. `3aac35a` (meal item schemas accept null) is pushed; still consider
+       `ignoreUndefined: true` (or stripping undefined before insert) so other routes whose `.optional()` schemas get stored
+       documents sent back don't hit the same 400.
+    2. `/api/meals/text` (worst case ≈ 45 s AI + parser fallback + DB write) and `/api/meals/scan` (60 s vision timeout) set
+       no `maxDuration`; if the Vercel plan's default is lower the platform answers 504 instead of the fallback. Consider
+       `export const maxDuration = 60` on both (health import / sync and cron already do).
+  - Check on device (D1): the review flagged nothing as "needs device" and left nothing unfixed. Worth a look on the phone
+    because the fixes touch platform behaviour: rx row editor with edits → Android back / backdrop / X ask "Discard
+    changes?" and swipe-down does nothing; Stepper typing ("1." stays, Save with the field focused keeps the value); mic
+    takeover between the meal composer and chat (the first screen stops "listening" and keeps its text); scrolling over a
+    Health chart doesn't select a day; Health Connect "awake in bed" not counted as sleep; phone calendar deleted on
+    sign-out and not inherited by another account, a single sync when Calendar is reopened mid-sync; a slow text log
+    (> 45 s) shows the "may still have logged" message and the meal appears after the refetch.
+    Known narrow edge (food-5, left as is): if Meals' own `today` is stale across midnight while unfocused, an incoming
+    `date` equal to the new today is ignored until its focus sync runs.
+  - Next: Phase C (C1 scheduler, C2 Android alarm module, C3 iOS notifications), then D1 against a LOCAL web server.
