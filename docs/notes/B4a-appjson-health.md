@@ -75,7 +75,7 @@ Owner files: `app.json`, `src/lib/health/**`, `src/app/(app)/health.tsx`, `src/f
 - [x] src/features/health/types.ts + api.ts (days query)
 - [x] src/features/health/format.ts
 - [x] src/features/health/charts.tsx (BarChart, LineChart, ChartCard)
-- [ ] src/features/health/ConnectCard.tsx
-- [ ] src/features/health/StatTiles.tsx + SourcesCard.tsx + PrivacyNote
-- [ ] src/app/(app)/health.tsx
-- [ ] npm run typecheck + npx expo lint clean
+- [x] src/features/health/ConnectCard.tsx
+- [x] src/features/health/StatTiles.tsx + SourcesCard.tsx + PrivacyNote
+- [x] src/app/(app)/health.tsx
+- [x] npm run typecheck + npx expo lint clean (re-verified after resume; introspect re-run: HealthKit entitlement, health READ_* perms, ViewPermissionUsageActivity alias, minSdk 26 / compile+target 36; no android/ or ios/ folders)
