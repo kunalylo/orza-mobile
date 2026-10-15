@@ -1,0 +1,43 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Medicine alarms: post the alarm, ring at the exact minute, open over the lock screen, survive reboots. -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- User-grantable "Alarms & reminders" access (not pre-granted on Android 14+). USE_EXACT_ALARM is deliberately NOT
+       declared: Google Play restricts it to apps whose core function is an alarm clock or calendar. -->
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <uses-permission android:name="android.permission.VIBRATE" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+  <application>
+    <!-- Fired by AlarmManager through our own PendingIntents only. -->
+    <receiver
+      android:name="expo.modules.orzaalarms.AlarmReceiver"
+      android:enabled="true"
+      android:exported="false" />
+
+    <!-- Take / Snooze / Skip buttons on the alarm notification. -->
+    <receiver
+      android:name="expo.modules.orzaalarms.ActionReceiver"
+      android:enabled="true"
+      android:exported="false" />
+
+    <!-- Re-schedules the stored alarms after a reboot, an app update, a clock / time-zone change, or when the user
+         grants "Alarms & reminders". Exported so system / OEM boot broadcasts always arrive; it reads nothing from the
+         intent except its action. -->
+    <receiver
+      android:name="expo.modules.orzaalarms.BootReceiver"
+      android:enabled="true"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+        <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+        <action android:name="android.intent.action.TIME_SET" />
+        <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+        <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+      </intent-filter>
+    </receiver>
+  </application>
+</manifest>

@@ -1,0 +1,21 @@
+// ÖRZA medicine alarms — local Expo module (autolinked from ./modules). Pattern: expo-haptics / expo-linking 57.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'in.co.ylo.orza'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.orzaalarms"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  // NotificationCompat / NotificationManagerCompat (same version expo-notifications 57 uses).
+  implementation 'androidx.core:core:1.17.0'
+}

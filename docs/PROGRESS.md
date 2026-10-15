@@ -225,3 +225,15 @@ IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
     Known narrow edge (food-5, left as is): if Meals' own `today` is stale across midnight while unfocused, an incoming
     `date` equal to the new today is ignored until its focus sync runs.
   - Next: Phase C (C1 scheduler, C2 Android alarm module, C3 iOS notifications), then D1 against a LOCAL web server.
+- 2026-10-15: web follow-ups from the Phase B review: (1) explicit `maxDuration` on the six AI routes (60 s text, 90 s vision) —
+  web `c3e234c`, local, NOT pushed (needs the user's OK); (2) audit of every web write route for the stored-null echo bug class
+  (workflow `orza-web-null-echo-audit`): 0 further cases — only meal items were affected (fixed + live in `3aac35a`); not switching
+  MongoClient `ignoreUndefined` globally because 78 `$set` sites would change meaning (undefined would stop clearing fields).
+- 2026-10-15: **Phase C launched** (workflow `orza-mobile-phase-c`, run `wf_8fc4efa1-cae`, script
+  `C:\Users\ADMIN\.claude\projects\E--aylo-orza\28092694-1d2e-42df-925f-dfe01d5728c5\workflows\scripts\orza-mobile-phase-c-wf_8fc4efa1-cae.js`):
+  C1 engine (pure planner mirroring web dispatch.ts + schedule.ts port, photo cache, action queue, sync orchestrator, tests) →
+  C2 Android local Expo module `modules/orza-alarms` (exact alarms, insistent alarm channel, BigPicture photo, full-screen over lock
+  screen, Take/Snooze/Skip receivers, boot reschedule, synthesised alarm tone) ‖ C3 iOS (time-sensitive local notifications with photo
+  attachments, ≤60 pending window, categories/actions, app.json) → C4 integration + "Alarms on this phone" card + test alarm → review/fix.
+  Decision: quiet hours keep web parity (doses inside quiet hours don't ring) + the phone warns about such doses.
+  If interrupted: re-run with resumeFromRunId; each step keeps `docs/notes/C*.md`.

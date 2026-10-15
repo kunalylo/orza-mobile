@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 
+import { useAlarmSync } from '@/lib/alarms/useAlarmSync';
 import { useHealthAutoSync } from '@/lib/health/sync';
 import { colors } from '@/theme';
 
@@ -10,6 +11,8 @@ export default function AppLayout() {
   // Apple Health / Health Connect: sync on launch and on every return to the foreground (throttled inside;
   // skips admins and members who haven't connected).
   useHealthAutoSync();
+  // Medicine alarms + reminders on this phone: plan, schedule and keep them current (offline, app killed, locked).
+  useAlarmSync();
 
   return (
     <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: colors.canvas } }}>

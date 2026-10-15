@@ -67,7 +67,8 @@
     "lint": "expo lint",
     "icons": "node scripts/generate-icons.mjs",
     "typecheck": "node scripts/gen-routes.cjs && tsc --noEmit",
-    "routes": "node scripts/gen-routes.cjs"
+    "routes": "node scripts/gen-routes.cjs",
+    "test:alarms": "npx --yes tsx --test scripts/tests/alarm-plan.test.ts"
   },
   "private": true
 }

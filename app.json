@@ -19,6 +19,9 @@
       "config": {
         "usesNonExemptEncryption": false
       },
+      "entitlements": {
+        "com.apple.developer.usernotifications.time-sensitive": true
+      },
       "infoPlist": {
         "NSCalendarsWriteOnlyAccessUsageDescription": "ÖRZA adds your medicine and wellness reminders to your calendar."
       }
@@ -109,7 +112,8 @@
         "expo-notifications",
         {
           "icon": "./assets/images/android-icon-monochrome.png",
-          "color": "#FF7A6A"
+          "color": "#FF7A6A",
+          "sounds": ["./assets/sounds/orza_alarm.wav"]
         }
       ],
       "expo-background-task",

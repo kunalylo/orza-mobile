@@ -141,7 +141,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUserState(null);
     setStatus('signedOut');
     queryClient.clear();
-    await Promise.all([writeSecure(KEYS.token, null), writeSecure(KEYS.user, null)]);
+    await Promise.all([
+      writeSecure(KEYS.token, null),
+      writeSecure(KEYS.user, null),
+      // This account's alarms: cancel them and forget their cached data and photos (loaded on demand; never throws).
+      import('./alarms/cleanup').then((m) => m.clearAlarmsOnSignOut()).catch(() => undefined),
+    ]);
   }, [queryClient]);
 
   const refresh = useCallback(async (): Promise<PublicUser | null> => {
