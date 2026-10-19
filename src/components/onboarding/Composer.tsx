@@ -61,20 +61,24 @@ function Field({
   maxLength = 200,
   suffix,
   returnKeyType = 'send',
+  multiline,
 }: {
   value: string;
   onChangeText: (t: string) => void;
   placeholder?: string;
   label: string;
-  onSubmit: () => void;
+  /** Gets the field's own text: a fast "type + Return" can reach JS before the render with the last characters. */
+  onSubmit: (text: string) => void;
   keyboardType?: 'default' | 'decimal-pad' | 'number-pad';
   maxLength?: number;
   suffix?: string;
   returnKeyType?: 'send' | 'search' | 'done';
+  /** Longer free text: wraps (and so does a long placeholder) instead of scrolling sideways; Return still sends. */
+  multiline?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   return (
-    <View style={[styles.field, focused && styles.fieldFocused]}>
+    <View style={[styles.field, multiline && styles.fieldMultiline, focused && styles.fieldFocused]}>
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -84,8 +88,10 @@ function Field({
         keyboardType={keyboardType}
         maxLength={maxLength}
         returnKeyType={returnKeyType}
-        onSubmitEditing={onSubmit}
+        onSubmitEditing={(e) => onSubmit(e.nativeEvent.text)}
         submitBehavior="submit"
+        multiline={multiline}
+        textAlignVertical={multiline ? 'center' : undefined}
         autoCorrect={false}
         autoComplete="off"
         selectionColor={colors.cyan600}
@@ -93,7 +99,7 @@ function Field({
         maxFontSizeMultiplier={1.4}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        style={styles.input}
+        style={[styles.input, multiline && styles.inputMultiline]}
       />
       {suffix ? (
         <Text variant="mono" tone="subtle" style={styles.suffix}>
@@ -104,17 +110,33 @@ function Field({
   );
 }
 
-function InlineText({ placeholder, busy, label, maxLength, onSubmit }: { placeholder?: string; busy: boolean; label: string; maxLength?: number; onSubmit: (t: string) => void }) {
+function InlineText({
+  placeholder,
+  busy,
+  label,
+  maxLength,
+  clearOnSubmit,
+  onSubmit,
+}: {
+  placeholder?: string;
+  busy: boolean;
+  label: string;
+  maxLength?: number;
+  /** Empty the field after each submit (multi-select "Add another": ready for the next item). */
+  clearOnSubmit?: boolean;
+  onSubmit: (t: string) => void;
+}) {
   const [value, setValue] = useState('');
-  const submit = () => {
-    const t = value.trim();
+  const submit = (raw: string = value) => {
+    const t = raw.trim();
     if (!t || busy) return;
     onSubmit(t);
+    if (clearOnSubmit) setValue('');
   };
   return (
     <View style={styles.inline}>
       <Field value={value} onChangeText={setValue} placeholder={placeholder} label={label} onSubmit={submit} maxLength={maxLength} />
-      <SendButton disabled={busy || !value.trim()} onPress={submit} />
+      <SendButton disabled={busy || !value.trim()} onPress={() => submit()} />
     </View>
   );
 }
@@ -184,26 +206,30 @@ function SearchPicker({ prompt, busy, onAnswer }: PickerProps) {
   const [showAll, setShowAll] = useState(false);
   const options = useMemo(() => prompt.options ?? [], [prompt.options]);
   const featured = (prompt.featured ?? []).map((v) => options.find((o) => o.value === v) ?? { value: v, label: v });
+  const matchesFor = (q: string) =>
+    q
+      ? options
+          .filter((o) => o.label.toLowerCase().includes(q))
+          .sort((a, b) => Number(!a.label.toLowerCase().startsWith(q)) - Number(!b.label.toLowerCase().startsWith(q)))
+          .slice(0, 12)
+      : [];
   const q = query.trim().toLowerCase();
-  const matches = q
-    ? options
-        .filter((o) => o.label.toLowerCase().includes(q))
-        .sort((a, b) => Number(!a.label.toLowerCase().startsWith(q)) - Number(!b.label.toLowerCase().startsWith(q)))
-        .slice(0, 12)
-    : [];
+  const matches = matchesFor(q);
   const list: StepOption[] = q ? matches : showAll ? options : featured;
 
-  const submit = () => {
-    if (busy || !q) return;
-    if (matches.length === 1) onAnswer(matches[0].value, matches[0].label);
-    else onAnswer(query.trim(), query.trim()); // cities & nicknames are resolved server-side
+  const submit = (raw: string = query) => {
+    const text = raw.trim();
+    if (busy || !text) return;
+    const found = matchesFor(text.toLowerCase());
+    if (found.length === 1) onAnswer(found[0].value, found[0].label);
+    else onAnswer(text, text); // cities & nicknames are resolved server-side
   };
 
   return (
     <View style={styles.stack}>
       <View style={styles.inline}>
         <Field value={query} onChangeText={setQuery} placeholder={prompt.placeholder || 'Search your state or city'} label="Search your state or city" onSubmit={submit} maxLength={80} returnKeyType="search" />
-        <SendButton disabled={busy || !q} onPress={submit} />
+        <SendButton disabled={busy || !q} onPress={() => submit()} />
       </View>
       <ChipWrap label={q ? 'Matching places' : showAll ? 'All states and territories' : 'Popular choices'}>
         {list.map((o) => (
@@ -281,7 +307,7 @@ function MultiPicker({ prompt, busy, onAnswer }: PickerProps) {
           <Chip key={`custom-${c}`} label={c} role="button" selected icon="x" accessibilityHint="Removes this item" disabled={busy} onPress={() => removeCustom(c)} />
         ))}
       </View>
-      {prompt.allow_custom ? <InlineText label="Add another" placeholder={prompt.placeholder} busy={busy} maxLength={40} onSubmit={addCustom} /> : null}
+      {prompt.allow_custom ? <InlineText label="Add another" placeholder={prompt.placeholder} busy={busy} maxLength={40} clearOnSubmit onSubmit={addCustom} /> : null}
       <Button
         label={count === 0 ? 'Pick at least one' : selected.some((s) => exclusive.has(s)) ? 'Continue' : `Continue (${count})`}
         iconRight={count > 0 ? 'arrow-right' : undefined}
@@ -313,7 +339,9 @@ function NumberAnswer({ prompt, busy, onAnswer }: PickerProps) {
   // Example numbers in the server's placeholder are metric; convert for pounds.
   const example = Number(prompt.placeholder?.match(/\d+(?:\.\d+)?/)?.[0]);
   const placeholder = Number.isFinite(example) ? `e.g. ${unit === 'lb' ? Math.round(example * 2.2046) : example}` : undefined;
-  const canSend = imperialHeight ? NUMERIC.test(feet.trim()) && (!inches.trim() || NUMERIC.test(inches.trim())) : !!value.trim();
+  const sendable = (v: string, ft: string, inch: string) =>
+    imperialHeight ? NUMERIC.test(ft.trim()) && (!inch.trim() || NUMERIC.test(inch.trim())) : !!v.trim();
+  const canSend = sendable(value, feet, inches);
 
   function changeUnit(u: string) {
     setUnit(u);
@@ -322,15 +350,19 @@ function NumberAnswer({ prompt, busy, onAnswer }: PickerProps) {
     setInches('');
   }
 
-  function submit() {
-    if (busy || !canSend) return;
+  /** `typed`: the submitting field's own text (Return on the keyboard), fresher than state after fast typing. */
+  function submit(typed: { value?: string; feet?: string; inches?: string } = {}) {
+    const v = typed.value ?? value;
+    const ft = typed.feet ?? feet;
+    const inch = typed.inches ?? inches;
+    if (busy || !sendable(v, ft, inch)) return;
     if (imperialHeight) {
-      const f = Math.floor(Number(feet.replace(',', '.')));
-      const i = inches.trim() ? Number(inches.replace(',', '.')) : 0;
+      const f = Math.floor(Number(ft.replace(',', '.')));
+      const i = inch.trim() ? Number(inch.replace(',', '.')) : 0;
       onAnswer(`${f}'${i}"`, `${f} ft ${i} in`);
       return;
     }
-    const raw = value.trim().replace(',', '.');
+    const raw = v.trim().replace(',', '.');
     if (!NUMERIC.test(raw)) {
       onAnswer(raw, raw); // free text like "5'8" or "70kg" — the server parses it
       return;
@@ -361,8 +393,8 @@ function NumberAnswer({ prompt, busy, onAnswer }: PickerProps) {
       <View style={styles.inline}>
         {imperialHeight ? (
           <>
-            <Field value={feet} onChangeText={setFeet} suffix="ft" label="Height — feet" placeholder="5" keyboardType="number-pad" maxLength={1} onSubmit={submit} />
-            <Field value={inches} onChangeText={setInches} suffix="in" label="Height — inches" placeholder="6" keyboardType="decimal-pad" maxLength={4} onSubmit={submit} />
+            <Field value={feet} onChangeText={setFeet} suffix="ft" label="Height — feet" placeholder="5" keyboardType="number-pad" maxLength={1} onSubmit={(t) => submit({ feet: t })} />
+            <Field value={inches} onChangeText={setInches} suffix="in" label="Height — inches" placeholder="6" keyboardType="decimal-pad" maxLength={4} onSubmit={(t) => submit({ inches: t })} />
           </>
         ) : (
           <Field
@@ -373,10 +405,10 @@ function NumberAnswer({ prompt, busy, onAnswer }: PickerProps) {
             placeholder={placeholder}
             keyboardType="decimal-pad"
             maxLength={12}
-            onSubmit={submit}
+            onSubmit={(t) => submit({ value: t })}
           />
         )}
-        <SendButton disabled={busy || !canSend} onPress={submit} />
+        <SendButton disabled={busy || !canSend} onPress={() => submit()} />
       </View>
       {skip.length > 0 ? (
         <View style={styles.wrap}>
@@ -394,12 +426,14 @@ function NumberAnswer({ prompt, busy, onAnswer }: PickerProps) {
 function TextAnswer({ prompt, busy, onAnswer }: PickerProps) {
   const [text, setText] = useState('');
   const [picked, setPicked] = useState<string[]>([]);
-  const answer = [...picked, text.trim()].filter(Boolean).join(', ');
+  const answerWith = (typed: string) => [...picked, typed.trim()].filter(Boolean).join(', ');
+  const answer = answerWith(text);
   const suggestions = prompt.options ?? [];
 
-  const submit = () => {
-    if (busy || !answer || answer.length > 300) return;
-    onAnswer(answer, answer);
+  const submit = (typed: string = text) => {
+    const a = answerWith(typed);
+    if (busy || !a || a.length > 300) return;
+    onAnswer(a, a);
   };
 
   return (
@@ -423,16 +457,17 @@ function TextAnswer({ prompt, busy, onAnswer }: PickerProps) {
           })}
         </View>
       ) : null}
-      <View style={styles.inline}>
+      <View style={[styles.inline, styles.inlineBottom]}>
         <Field
           value={text}
           onChangeText={setText}
           placeholder={picked.length ? 'Anything else? (optional)' : prompt.placeholder}
           label="Tell ÖRZA about your routine"
           maxLength={240}
+          multiline
           onSubmit={submit}
         />
-        <SendButton disabled={busy || !answer || answer.length > 300} onPress={submit} />
+        <SendButton disabled={busy || !answer || answer.length > 300} onPress={() => submit()} />
       </View>
       {prompt.optional ? (
         <Pressable accessibilityRole="button" hitSlop={8} disabled={busy} onPress={() => onAnswer('skip', 'Skip for now')} style={styles.link}>
@@ -463,6 +498,7 @@ const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   cards: { gap: spacing.sm },
   inline: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  inlineBottom: { alignItems: 'flex-end' },
   field: {
     flex: 1,
     flexDirection: 'row',
@@ -473,8 +509,10 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
     backgroundColor: colors.glassSolid,
   },
+  fieldMultiline: { borderRadius: 25 },
   fieldFocused: { borderColor: colors.cyan, backgroundColor: colors.white },
   input: { flex: 1, minHeight: 48, paddingHorizontal: 18, fontFamily: fonts.body, fontSize: 16, color: colors.ink },
+  inputMultiline: { maxHeight: 112, paddingTop: 12, paddingBottom: 12 },
   suffix: { paddingRight: 18, textTransform: 'uppercase' },
   send: { width: 50, height: 50, borderRadius: 25, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
   sendDisabled: { opacity: 0.3 },

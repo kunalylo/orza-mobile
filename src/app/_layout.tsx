@@ -85,7 +85,7 @@ function App() {
 }
 
 function RootNavigator() {
-  const { status, user, retry } = useAuth();
+  const { status, user, retry, retrying } = useAuth();
   const ready = status !== 'loading';
 
   useEffect(() => {
@@ -100,7 +100,7 @@ function RootNavigator() {
       <Screen backdrop="orb" scroll={false} contentContainerStyle={styles.center}>
         <View>
           <EmptyState eyebrow="Offline" title="Can't reach ÖRZA" body="Check your internet connection, then try again. Your data is safe." />
-          <Button label="Try again" icon="refresh-cw" onPress={retry} variant="primary" style={styles.retry} />
+          <Button label="Try again" icon="refresh-cw" onPress={retry} loading={retrying} variant="primary" style={styles.retry} />
         </View>
       </Screen>
     );

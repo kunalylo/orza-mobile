@@ -374,3 +374,12 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   lint` ✓, `npm run test:alarms` 34/34 ✓, `npx expo config --type introspect` ✓, `npx expo export` android ✓ (6.7 MB) /
   ios ✓ (6.6 MB) outside the repo, `npx expo-doctor` 20/21 (same three patch updates as before). Kotlin still uncompiled —
   the D1 dev build is the compile check.
+- 2026-10-19: Phase C complete + pushed (`0b45fa1`: C4 integration, 16 review findings fixed). First native build with
+  `modules/orza-alarms` compiles (`--max-workers=2`; the C++ "unspecified system_category error" is a transient Windows file lock —
+  re-run). App launches with the module, no crash. Metro now serves JS from the MAIN repo (`.env.local` → local server) so D1 fixes
+  hot-reload. Safety gate `node scripts/e2e/verify-local-bundle.mjs` + helpers `scripts/e2e/adb.sh` (`baf87eb`).
+  **D1 launched**: workflow `orza-mobile-d1-e2e`, run `wf_13c9ee26-f64`, script
+  `C:\Users\ADMIN\.claude\projects\E--aylo-orza\28092694-1d2e-42df-925f-dfe01d5728c5\workflows\scripts\orza-mobile-d1-e2e-wf_13c9ee26-f64.js`
+  — 9 areas sequential on the emulator (auth-onboarding, today-meals, snap, meds-rx, alarms, coach, progress-account, care, layout-a11y),
+  each test → fix JS → retest → commit; then wrap-up (native fixes, rebuild, retest, PROGRESS, push). Each area keeps `docs/notes/D1-<area>.md`.
+  If interrupted: restart emulator / `orza-localtest` / `orza-mobile-metro-local`, run the safety gate, re-run the workflow with resumeFromRunId.

@@ -8,7 +8,7 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 import { Bubble, Typing, type ChatItem } from '@/components/onboarding/ChatBits';
 import { Composer } from '@/components/onboarding/Composer';
-import { errorMessage } from '@/lib/api';
+import { ApiError, errorMessage } from '@/lib/api';
 import { firstName, useAuth } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
 import { onboardingApi, type Answer, type ChatLine, type OnboardingProgress, type OnboardingStepResult, type StepPrompt } from '@/lib/onboarding';
@@ -18,6 +18,12 @@ import { EmptyState, IconButton, Orb, ProgressBar, Screen, Skeleton, Text, toast
 const TYPING_MS = 650;
 const DONE_REDIRECT_MS = 2200;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** A failed answer / restart: say why — except for an ended session (401), which signs out and the sign-in screen explains. */
+function toastError(e: unknown) {
+  if (e instanceof ApiError && e.status === 401) return;
+  toast.error(errorMessage(e));
+}
 
 let seq = 0;
 const nextId = () => `m${++seq}`;
@@ -42,6 +48,8 @@ export default function Onboarding() {
   const [answered, setAnswered] = useState(0);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  /** Sign-out can take a few seconds (server logout + phone-calendar clean-up): show it and lock the screen meanwhile. */
+  const [signingOut, setSigningOut] = useState(false);
   const [round, setRound] = useState(0);
   const inflight = useRef(false);
   const scrollRef = useRef<ScrollView>(null);
@@ -129,7 +137,31 @@ export default function Onboarding() {
       applyResult(res);
     } catch (e) {
       setItems((s) => s.filter((i) => i.id !== mine.id));
-      toast.error(errorMessage(e));
+      toastError(e);
+    } finally {
+      inflight.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function restart() {
+    if (inflight.current) return;
+    inflight.current = true;
+    setBusy(true);
+    try {
+      const res = await onboardingApi.restart();
+      if (res.done || !res.prompt) {
+        await refresh();
+        return;
+      }
+      setItems([promptItem(res.prompt)]);
+      setPrompt(res.prompt);
+      setProgress(res.progress);
+      setAnswered(0);
+      setRound((r) => r + 1);
+      toast.success('Starting fresh');
+    } catch (e) {
+      toastError(e);
     } finally {
       inflight.current = false;
       setBusy(false);
@@ -138,66 +170,59 @@ export default function Onboarding() {
 
   function confirmRestart() {
     haptics.warning();
-    Alert.alert('Start over?', "Your answers so far will be cleared and we'll begin again from the first question.", [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Start over',
-        style: 'destructive',
-        onPress: async () => {
-          if (inflight.current) return;
-          inflight.current = true;
-          setBusy(true);
-          try {
-            const res = await onboardingApi.restart();
-            if (res.done || !res.prompt) {
-              await refresh();
-              return;
-            }
-            setItems([promptItem(res.prompt)]);
-            setPrompt(res.prompt);
-            setProgress(res.progress);
-            setAnswered(0);
-            setRound((r) => r + 1);
-            toast.success('Starting fresh');
-          } catch (e) {
-            toast.error(errorMessage(e));
-          } finally {
-            inflight.current = false;
-            setBusy(false);
-          }
-        },
-      },
-    ]);
+    Alert.alert(
+      'Start over?',
+      "Your answers so far will be cleared and we'll begin again from the first question.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Start over', style: 'destructive', onPress: () => void restart() },
+      ],
+      // Android: the back button (or a tap outside) dismisses it like Cancel.
+      { cancelable: true }
+    );
   }
 
   function confirmSignOut() {
     haptics.warning();
-    Alert.alert('Sign out?', 'Your answers so far are saved — you can continue next time you sign in.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: () => void signOut() },
-    ]);
+    Alert.alert(
+      'Sign out?',
+      'Your answers so far are saved — you can continue next time you sign in.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign out',
+          style: 'destructive',
+          onPress: () => {
+            setSigningOut(true);
+            signOut().catch(() => setSigningOut(false));
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   }
 
   const total = Math.max(1, progress.total);
   const stepNo = Math.min(progress.index + 1, total);
   const pct = done ? 1 : Math.max(progress.value, 0.02);
   const canRestart = status === 'ready' && !done && answered > 0;
+  const locked = busy || signingOut;
 
   const header = (
     <View style={styles.header}>
       <View style={styles.headerRow}>
         <View style={styles.brand}>
-          <Orb size={44} tone="light" orbits={false} active={busy} />
+          <Orb size={44} tone="light" orbits={false} active={locked} />
           <View>
             <Text variant="title">ÖRZA</Text>
             <Text variant="eyebrow" tone="subtle" style={styles.stepLabel}>
-              {done ? 'All set' : status === 'ready' ? `Step ${stepNo} of ${total}` : 'Getting ready'}
+              {signingOut ? 'Signing out…' : done ? 'All set' : status === 'ready' ? `Step ${stepNo} of ${total}` : 'Getting ready'}
             </Text>
           </View>
         </View>
         <View style={styles.headerActions}>
-          {canRestart ? <IconButton icon="rotate-ccw" accessibilityLabel="Start over" onPress={confirmRestart} size={40} disabled={busy} /> : null}
-          <IconButton icon="log-out" accessibilityLabel="Sign out" onPress={confirmSignOut} size={40} />
+          {canRestart ? <IconButton icon="rotate-ccw" accessibilityLabel="Start over" onPress={confirmRestart} size={40} disabled={locked} /> : null}
+          <IconButton icon="log-out" accessibilityLabel="Sign out" onPress={confirmSignOut} size={40} disabled={signingOut} />
         </View>
       </View>
       <ProgressBar value={status === 'ready' || done ? pct : 0} height={5} accessibilityLabel="Onboarding progress" style={styles.progress} />
@@ -238,7 +263,7 @@ export default function Onboarding() {
               showsVerticalScrollIndicator={false}
               bounces={false}
             >
-              <Composer prompt={prompt} busy={busy} onAnswer={answer} />
+              <Composer prompt={prompt} busy={locked} onAnswer={answer} />
             </ScrollView>
           </Animated.View>
         ) : null
@@ -252,6 +277,8 @@ export default function Onboarding() {
         keyboardDismissMode="interactive"
         showsVerticalScrollIndicator={false}
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+        // The answer area below grows and shrinks (unit toggle, "Show all", keyboard): keep the latest question in view.
+        onLayout={() => scrollRef.current?.scrollToEnd({ animated: false })}
       >
         <Animated.View entering={FadeIn.duration(400)} style={styles.intro}>
           <Text variant="eyebrow" tone="subtle" align="center">

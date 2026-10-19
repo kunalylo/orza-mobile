@@ -51,6 +51,8 @@ export interface AuthContextValue {
   setUser: (user: PublicUser) => void;
   /** Boot retry after `unreachable`. */
   retry: () => void;
+  /** A `retry` is in flight: the offline screen stays up with a busy button (never a blank screen). */
+  retrying: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -113,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<PublicUser | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [bootKey, setBootKey] = useState(0);
+  const [retrying, setRetrying] = useState(false);
   const lastRefresh = useRef(0);
   /** Id of the user in state, readable synchronously by late answers (`setUser`). */
   const userId = useRef<string | null>(null);
@@ -204,8 +207,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         if (e instanceof ApiError && e.status === 401) return; // handler already signed out
         setStatus('unreachable');
+        if (bootKey > 0) haptics.error(); // a retry that failed again: the unchanged screen alone says nothing
       }
-    })();
+    })().finally(() => {
+      if (!cancelled) setRetrying(false);
+    });
     return () => {
       cancelled = true;
     };
@@ -296,12 +302,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut,
       refresh,
       setUser,
+      // Keeps `unreachable` on screen (status is not reset to `loading`, which renders nothing) until the boot answers.
       retry: () => {
-        setStatus('loading');
+        setRetrying(true);
         setBootKey((k) => k + 1);
       },
+      retrying,
     }),
-    [status, user, sessionExpired, signIn, signUp, signOut, refresh, setUser]
+    [status, user, sessionExpired, signIn, signUp, signOut, refresh, setUser, retrying]
   );
 
   return (

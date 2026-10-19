@@ -105,17 +105,23 @@ export default function Settings() {
 
   const signOutHere = () => {
     haptics.warning();
-    Alert.alert('Sign out of ÖRZA?', 'Medicine alarms on this phone stop until you sign in again.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: () => {
-          setSigningOut('here');
-          void signOut();
+    Alert.alert(
+      'Sign out of ÖRZA?',
+      'Medicine alarms on this phone stop until you sign in again.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign out',
+          style: 'destructive',
+          onPress: () => {
+            setSigningOut('here');
+            void signOut();
+          },
         },
-      },
-    ]);
+      ],
+      // Android: the back button (or a tap outside) dismisses it like Cancel.
+      { cancelable: true }
+    );
   };
 
   const signOutEverywhere = () => {
@@ -142,7 +148,8 @@ export default function Settings() {
             }
           },
         },
-      ]
+      ],
+      { cancelable: true }
     );
   };
 

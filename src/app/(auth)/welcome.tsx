@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useIsFocused } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -20,6 +20,9 @@ const SIGNALS = [
 export default function Welcome() {
   const { width, height } = useWindowDimensions();
   const { sessionExpired } = useAuth();
+  // Light status-bar icons only while this dark hero is on screen: sign-in / sign-up are pushed on top of it (it
+  // stays mounted underneath), and their cream canvas needs the root's dark icons back.
+  const focused = useIsFocused();
   const compact = height < 700;
   const orbSize = Math.round(Math.min(width * 0.8, height * (compact ? 0.28 : 0.4), 360));
 
@@ -30,7 +33,7 @@ export default function Welcome() {
 
   return (
     <Screen backdrop="hero" contentContainerStyle={styles.content}>
-      <StatusBar style="light" />
+      {focused ? <StatusBar style="light" /> : null}
       <Animated.View entering={FadeIn.duration(500)} style={styles.brandRow}>
         <Text variant="h3" tone="inverse" style={styles.wordmark}>
           ÖRZA
