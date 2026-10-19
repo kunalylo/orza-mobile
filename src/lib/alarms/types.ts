@@ -92,7 +92,7 @@ export interface QuietDose {
 
 /** The medicine fields the planner reads (a `MedicationClient` fits). */
 export type PlanMedication = Pick<MedicationClient, 'id' | 'name' | 'dose'> &
-  Partial<Pick<MedicationClient, 'strength' | 'timing' | 'for_person' | 'instructions' | 'photo_ids' | 'photo_urls' | 'stock' | 'created_at'>> & {
+  Partial<Pick<MedicationClient, 'strength' | 'form' | 'timing' | 'for_person' | 'instructions' | 'photo_ids' | 'photo_urls' | 'stock' | 'created_at'>> & {
     schedule: ScheduleLike;
     as_needed?: boolean;
     active?: boolean;

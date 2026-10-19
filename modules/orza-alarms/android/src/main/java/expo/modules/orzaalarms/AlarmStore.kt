@@ -6,6 +6,7 @@ import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
 
 /**
@@ -161,6 +162,14 @@ internal object AlarmStore {
     list.filter { now - it.at <= ACTION_MAX_AGE_MS }
   }
 
+  /** Forgets every recorded action (sign-out; the engine always collects them before it cancels for any other reason). */
+  fun clearActions(context: Context) {
+    locked {
+      val seq = readActionsFile(context).first
+      writeActionsFile(context, seq, emptyList())
+    }
+  }
+
   fun hasAction(context: Context, id: Long): Boolean = locked {
     readActionsFile(context).second.any { it.id == id }
   }
@@ -175,13 +184,11 @@ internal object AlarmStore {
 
   private fun readObject(context: Context, name: String): JSONObject {
     return try {
-      val f = file(context, name)
-      if (!f.baseFile.exists()) {
-        JSONObject()
-      } else {
-        val text = String(f.readFully(), Charsets.UTF_8)
-        if (text.isBlank()) JSONObject() else JSONObject(text)
-      }
+      // readFully() also restores an interrupted write's backup; a file never written throws FileNotFoundException.
+      val text = String(file(context, name).readFully(), Charsets.UTF_8)
+      if (text.isBlank()) JSONObject() else JSONObject(text)
+    } catch (e: FileNotFoundException) {
+      JSONObject()
     } catch (e: Exception) {
       Log.w(AlarmConst.TAG, "Unreadable $name — starting empty", e)
       JSONObject()

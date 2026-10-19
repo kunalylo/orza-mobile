@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
@@ -28,7 +29,7 @@ class OrzaAlarmsModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("OrzaAlarms")
 
-    Events(EVENT_ACTION)
+    Events(EVENT_ACTION, EVENT_SHOWN)
 
     OnCreate {
       current = WeakReference(this@OrzaAlarmsModule)
@@ -90,7 +91,8 @@ class OrzaAlarmsModule : Module() {
         "sdkInt" to Build.VERSION.SDK_INT,
         "scheduled" to AlarmStore.pendingCount(ctx),
         "customSound" to (AlarmNotifier.customSoundId(ctx) != 0),
-        "overLockScreen" to AlarmLockScreen.isShownOverLockScreen
+        "overLockScreen" to AlarmLockScreen.isShownOverLockScreen,
+        "batteryUnrestricted" to batteryUnrestricted(ctx)
       )
     }
 
@@ -152,6 +154,12 @@ class OrzaAlarmsModule : Module() {
       return@AsyncFunction startSettings(appDetailsIntent(context.packageName))
     }
 
+    /** The battery-optimisation list ("Unrestricted" / "Don't optimise"), else the app's info page. */
+    AsyncFunction("openBatterySettings") {
+      return@AsyncFunction startSettings(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) ||
+        startSettings(appDetailsIntent(context.packageName))
+    }
+
     /** Stop showing over the lock screen (the alarm screen closed). True when there was an activity to release. */
     AsyncFunction("releaseLockScreen") {
       return@AsyncFunction AlarmLockScreen.releaseFromAnyThread()
@@ -172,6 +180,14 @@ class OrzaAlarmsModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
   }
+
+  /** The app is exempt from battery optimisation (Doze / app standby can't hold its alarms back as much). */
+  private fun batteryUnrestricted(ctx: Context): Boolean =
+    try {
+      ctx.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(ctx.packageName) ?: false
+    } catch (e: Exception) {
+      false
+    }
 
   private fun appDetailsIntent(pkg: String): Intent =
     Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$pkg"))
@@ -196,6 +212,7 @@ class OrzaAlarmsModule : Module() {
 
   companion object {
     private const val EVENT_ACTION = "onAlarmAction"
+    private const val EVENT_SHOWN = "onAlarmShown"
 
     @Volatile
     private var current: WeakReference<OrzaAlarmsModule>? = null
@@ -214,6 +231,23 @@ class OrzaAlarmsModule : Module() {
         )
       } catch (t: Throwable) {
         Log.w(AlarmConst.TAG, "Couldn't notify JS of an alarm action", t)
+      }
+    }
+
+    /** Called when a ring alarm is posted while the app is in the foreground: JS opens the alarm screen. */
+    internal fun notifyAlarmShown(item: AlarmItem) {
+      val module = current?.get() ?: return
+      try {
+        module.sendEvent(
+          EVENT_SHOWN,
+          mapOf<String, Any?>(
+            "key" to item.key,
+            "deepLink" to item.deepLink,
+            "at" to item.at.toDouble()
+          )
+        )
+      } catch (t: Throwable) {
+        Log.w(AlarmConst.TAG, "Couldn't notify JS of a ringing alarm", t)
       }
     }
   }

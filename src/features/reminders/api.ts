@@ -1,11 +1,13 @@
 /**
  * Reminders — API calls + React Query hooks (GET/POST/PATCH/DELETE /api/reminders, GET /api/integrations,
  * PUT /api/integrations/quiet-hours, PUT /api/integrations/whatsapp, POST …/whatsapp/test, PUT /api/settings/preferences).
- * Every reminder change also refreshes the calendar (it shows reminders) and marks the phone calendar for a re-sync.
+ * Every reminder change also refreshes the calendar (it shows reminders), marks the phone calendar for a re-sync and
+ * tells the alarm engine to re-plan this phone's reminder notifications (quiet hours and "Gentle reminders" too).
  */
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { markPhoneCalendarStale } from '@/features/calendar/deviceCalendar';
+import { emitAlarmDataChanged } from '@/lib/alarms/events';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { PublicUser } from '@/lib/types';
@@ -61,6 +63,8 @@ function afterChange(qc: QueryClient) {
   // The calendar shows reminders; the phone calendar copies the ones with Calendar switched on.
   void qc.invalidateQueries({ queryKey: ['calendar'] });
   markPhoneCalendarStale();
+  // The phone schedules reminder notifications itself.
+  emitAlarmDataChanged('reminders-changed');
 }
 
 /* ───────────────────────────── Mutations ───────────────────────────── */
@@ -137,7 +141,11 @@ export function useQuietHours() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (next: QuietHours | null) => remindersApi.quietHours(next),
-    onSuccess: (view) => qc.setQueryData(remindersKeys.integrations(), view),
+    onSuccess: (view) => {
+      qc.setQueryData(remindersKeys.integrations(), view);
+      // The signed-in user isn't updated by this PUT: tell the alarm engine (doses inside quiet hours don't ring).
+      emitAlarmDataChanged('quiet-hours-changed');
+    },
   });
 }
 
@@ -162,6 +170,7 @@ export function useResumeReminders() {
     onSuccess: (res) => {
       if (res.user) setUser(res.user);
       qc.setQueryData<IntegrationsView>(remindersKeys.integrations(), (v) => (v ? { ...v, reminders_enabled: true } : v));
+      emitAlarmDataChanged('preferences-changed');
     },
   });
 }

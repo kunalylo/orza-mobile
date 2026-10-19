@@ -37,6 +37,12 @@ internal object AlarmNotifier {
 
   private const val SOUND_NAME = "orza_alarm"
   private const val QUIET_TIMEOUT_MS = 12 * 60 * 60_000L
+
+  /**
+   * Hard stop for a ringing copy: the silencer re-posts it quietly after RING_LIMIT_MS, but an inexact silencer (no
+   * "Alarms & reminders" access) may run late — the sound must never go on for long, even if the alarm then vanishes.
+   */
+  private const val RINGING_TIMEOUT_MS = AlarmConst.RING_LIMIT_MS + 20 * 60_000L
   private const val REMINDER_TIMEOUT_MS = 6 * 60 * 60_000L
   private const val ACCENT = 0xFFFF7A6A.toInt()
   private val VIBRATION = longArrayOf(0, 800, 400, 800, 400, 800, 1600)
@@ -206,7 +212,7 @@ internal object AlarmNotifier {
       .setContentIntent(contentPendingIntent(context, item))
       .setAutoCancel(!item.ring)
       .setOnlyAlertOnce(quiet)
-      .setTimeoutAfter(if (item.ring) QUIET_TIMEOUT_MS else REMINDER_TIMEOUT_MS)
+      .setTimeoutAfter(if (ringing) RINGING_TIMEOUT_MS else if (item.ring) QUIET_TIMEOUT_MS else REMINDER_TIMEOUT_MS)
 
     val photos = AlarmPhotos.load(item.photos)
     if (photos != null) {

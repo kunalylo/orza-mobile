@@ -60,6 +60,8 @@ internal object AlarmFiring {
     if (item.ring) {
       AlarmStore.putShown(context, item, quiet = false, shownAt = now)
       AlarmScheduler.setSilencer(context, item.key, now + AlarmConst.RING_LIMIT_MS)
+      // The member is using the app (no full-screen intent then, only a heads-up): JS opens the alarm screen too.
+      if (AlarmLockScreen.isAppResumed) OrzaAlarmsModule.notifyAlarmShown(item)
     }
   }
 

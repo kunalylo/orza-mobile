@@ -4,12 +4,13 @@
  *
  *   node scripts/make-alarm-sound.mjs
  *
- * Output: assets/sounds/orza_alarm.wav — 6 s, 16-bit PCM, mono, 44.1 kHz.
+ * Output: assets/sounds/orza_alarm.wav — 27 s, 16-bit PCM, mono, 22.05 kHz (≈ 1.2 MB).
  *
- * The tone is three soft "ding-dong" chimes (A5 → E5, a perfect fourth) with a bell-like timbre: a fundamental plus a
- * few gently inharmonic partials, a 12 ms attack (no click) and an exponential decay. It starts and ends in silence, so
- * Android's FLAG_INSISTENT can loop it until the alarm is answered without an audible seam, and it stays well under
- * iOS's 30 s notification-sound limit (linear PCM in a .wav container is an accepted iOS format).
+ * The tone is a soft "ding-dong" chime (A5 → E5, a perfect fourth) repeated every 1.85 s, with a bell-like timbre: a
+ * fundamental plus a few gently inharmonic partials (all well below the 11 kHz Nyquist limit), a 12 ms attack (no
+ * click) and an exponential decay. iOS plays a notification sound ONCE, so the file itself is long (27 s, under iOS's
+ * 30 s limit; linear PCM in a .wav container is an accepted iOS format). It starts and ends in silence, so Android's
+ * FLAG_INSISTENT can loop it until the alarm is answered without an audible seam.
  *
  * The file name becomes the Android raw resource `orza_alarm` (expo-notifications plugin `sounds`), which the
  * orza-alarms native module looks up by name; iOS uses the bundled file name `orza_alarm.wav`.
@@ -19,20 +20,17 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const SAMPLE_RATE = 44_100;
-const DURATION_S = 6;
+const SAMPLE_RATE = 22_050;
+const DURATION_S = 27;
 const PEAK = 0.72; // ≈ −3 dBFS: loud enough to wake, no clipping on small speakers
 const FADE_OUT_S = 0.35;
 
-/** [start s, frequency Hz, gain] — ding (A5) then dong (E5), three times. */
-const NOTES = [
-  [0.0, 880.0, 1.0],
-  [0.42, 659.25, 0.9],
-  [1.85, 880.0, 1.0],
-  [2.27, 659.25, 0.9],
-  [3.7, 880.0, 1.0],
-  [4.12, 659.25, 0.95],
-];
+const CHIME_EVERY_S = 1.85;
+/** [start s, frequency Hz, gain] — ding (A5) then dong (E5), repeated until ~1.6 s before the end (the last decay). */
+const NOTES = [];
+for (let start = 0; start + 1.6 <= DURATION_S - 0.35; start += CHIME_EVERY_S) {
+  NOTES.push([start, 880.0, 1.0], [start + 0.42, 659.25, 0.92]);
+}
 
 /** Bell partials: [frequency ratio, relative gain, decay multiplier] (higher partials die faster). */
 const PARTIALS = [

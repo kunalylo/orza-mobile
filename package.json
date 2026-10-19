@@ -1,6 +1,6 @@
 {
   "name": "orza-mobile",
-  "main": "expo-router/entry",
+  "main": "index.ts",
   "version": "1.0.0",
   "dependencies": {
     "@expo-google-fonts/figtree": "^0.4.1",

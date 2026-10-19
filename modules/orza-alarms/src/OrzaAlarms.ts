@@ -12,6 +12,7 @@ import { NativeModule, requireOptionalNativeModule } from 'expo';
 
 import type {
   AlarmActionRecordedEvent,
+  AlarmShownEvent,
   DoseAction,
   NativeAlarmItem,
   NativeAlarmStatus,
@@ -33,6 +34,7 @@ declare class OrzaAlarmsNativeModule extends NativeModule<OrzaAlarmsEvents> {
   openFullScreenSettings(): Promise<boolean>;
   openNotificationSettings(): Promise<boolean>;
   openAppSettings(): Promise<boolean>;
+  openBatterySettings?(): Promise<boolean>;
   releaseLockScreen(): Promise<boolean>;
   requestUnlock(): Promise<boolean>;
 }
@@ -110,6 +112,13 @@ export async function openAppSettings(): Promise<boolean> {
   return native ? native.openAppSettings() : false;
 }
 
+/** The phone's battery-optimisation list (set ÖRZA to "Unrestricted"); the app's info page as a fallback. */
+export async function openBatterySettings(): Promise<boolean> {
+  if (!native) return false;
+  if (typeof native.openBatterySettings === 'function') return native.openBatterySettings();
+  return native.openAppSettings();
+}
+
 /**
  * The alarm screen is closing: stop showing the app over the lock screen (it only does for an alarm's full-screen
  * launch, and releases itself when the app goes to the background or after 10 min anyway).
@@ -127,6 +136,12 @@ export async function requestUnlock(): Promise<boolean> {
 export function addActionListener(listener: (event: AlarmActionRecordedEvent) => void): { remove(): void } {
   if (!native) return { remove: () => undefined };
   return native.addListener('onAlarmAction', listener);
+}
+
+/** A ringing alarm was posted while the app is in the foreground — open the alarm screen. */
+export function addShownListener(listener: (event: AlarmShownEvent) => void): { remove(): void } {
+  if (!native) return { remove: () => undefined };
+  return native.addListener('onAlarmShown', listener);
 }
 
 /* ───────────────────────────── Parsing ───────────────────────────── */

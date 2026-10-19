@@ -2,6 +2,7 @@
 export * from './src/OrzaAlarms';
 export type {
   AlarmActionRecordedEvent,
+  AlarmShownEvent,
   DoseAction,
   NativeAlarmDose,
   NativeAlarmItem,

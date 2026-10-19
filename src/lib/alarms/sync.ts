@@ -30,7 +30,7 @@ import { MAX_HORIZON_DAYS, PHOTOS_PER_MEDICINE, planAlarms, planHash, type Alarm
 import { enqueueDoseActions, flushDoseQueue, pendingDoseActions } from './queue';
 import { addDays, safeTimeZone, utcToZoned, validQuietHours } from './schedule';
 import { loadAlarmCache, saveAlarmCache, type AlarmCache, type AlarmSettings } from './store';
-import type { PendingDoseAction, PlanDoseState, PlanMedication, PlanReminder, QuietDose } from './types';
+import type { AlarmPlanItem, PendingDoseAction, PlanDoseState, PlanMedication, PlanReminder, QuietDose } from './types';
 
 /* ───────────────────────────── Tunables ───────────────────────────── */
 
@@ -64,6 +64,34 @@ export interface SyncResult {
   error?: string;
 }
 
+/** An alarm coming up on this phone (the status card shows the next ones with their medicine names). */
+export interface UpcomingAlarm {
+  key: string;
+  kind: AlarmPlanItem['kind'];
+  /** Epoch ms. */
+  at: number;
+  ring: boolean;
+  title: string;
+  /** Medicine labels ("Telma 40 mg") for dose / snooze alarms; the reminder title otherwise. */
+  labels: string[];
+  /** Local photo of the first medicine, when downloaded. */
+  photo?: string;
+}
+
+const UPCOMING_KEEP = 6;
+
+function upcomingOf(items: AlarmPlanItem[]): UpcomingAlarm[] {
+  return items.slice(0, UPCOMING_KEEP).map((i) => ({
+    key: i.key,
+    kind: i.kind,
+    at: i.at,
+    ring: i.ring,
+    title: i.title,
+    labels: i.doses?.length ? i.doses.map((d) => d.label) : [i.title.replace(/^\S+\s/, '')],
+    ...(i.photos[0] ? { photo: i.photos[0] } : {}),
+  }));
+}
+
 export interface AlarmSyncState {
   running: boolean;
   lastAttemptAt: number | null;
@@ -71,6 +99,10 @@ export interface AlarmSyncState {
   lastSyncAt: number | null;
   /** Alarms pending on the phone after the last successful run. */
   scheduled: number;
+  /** Medicine alarms (doses + snoozes) among them. */
+  doseAlarms: number;
+  /** The next alarms on the phone (empty when nothing is scheduled). */
+  next: UpcomingAlarm[];
   /** Every alarm before this instant is scheduled (epoch ms). */
   coveredUntil: number | null;
   /** Doses that won't ring because they fall inside quiet hours (screens show a warning). */
@@ -91,6 +123,8 @@ const INITIAL_STATE: AlarmSyncState = {
   lastAttemptAt: null,
   lastSyncAt: null,
   scheduled: 0,
+  doseAlarms: 0,
+  next: [],
   coveredUntil: null,
   quietDoses: [],
   quietReminders: 0,
@@ -222,16 +256,20 @@ export async function checkAlarmsOnForeground(): Promise<void> {
   }
 }
 
-/** Take / Snooze / Skip pressed on an alarm while the app runs: queue it, send it and re-plan. */
-export function recordAlarmAction(event: AlarmActionEvent): void {
+/**
+ * Take / Snooze / Skip pressed on an alarm while the app runs (or on the alarm screen while offline): queue it, send
+ * it (now or once back online) and re-plan. False when there's no signed-in member to queue it for.
+ */
+export function recordAlarmAction(event: AlarmActionEvent): boolean {
   const userId = foreground?.user.id;
-  if (!userId || event.action === 'open' || !event.doses.length) return;
+  if (!userId || event.action === 'open' || !event.doses.length) return false;
   const action = event.action;
   enqueueDoseActions(
     userId,
     event.doses.map((d) => ({ medId: d.medId, scheduledFor: d.scheduledFor, action, snoozeMinutes: event.snoozeMinutes, createdAt: event.at }))
   );
   requestAlarmSync('action', { delayMs: 300 });
+  return true;
 }
 
 /** Ask for notification permission, then re-plan (the alarms can only be scheduled once it's granted). */
@@ -368,7 +406,7 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
       lastScheduled = null;
       lastStatusKey = statusKey;
       saveAlarmCache({ ...cache, scheduled: undefined });
-      setState({ scheduled: 0, coveredUntil: null, lastSyncAt: now });
+      setState({ scheduled: 0, doseAlarms: 0, next: [], coveredUntil: null, lastSyncAt: now });
       await declare(false, opts.reason, stale);
       return result({ ok: true, skipped: 'no-permission', scheduled: 0, offline: data.offline });
     }
@@ -401,7 +439,13 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
     }
     lastStatusKey = statusKey;
     saveAlarmCache(cache);
-    setState({ scheduled, coveredUntil: plan.coveredUntil, lastSyncAt: now });
+    setState({
+      scheduled,
+      doseAlarms: Math.min(scheduled, plan.items.filter((i) => i.ring).length),
+      next: scheduled > 0 ? upcomingOf(plan.items) : [],
+      coveredUntil: plan.coveredUntil,
+      lastSyncAt: now,
+    });
 
     // 9. Tell the server whether this phone rings the medicine alarms (it then skips their Web Push).
     await declare(status.exact !== false && scheduled > 0, opts.reason, stale);
@@ -425,6 +469,7 @@ const trimMed = (m: MedicationClient): PlanMedication => ({
   id: m.id,
   name: m.name,
   strength: m.strength,
+  form: m.form,
   dose: m.dose,
   timing: m.timing,
   for_person: m.for_person,

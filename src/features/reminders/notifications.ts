@@ -1,17 +1,23 @@
 /**
- * Notification permission on this phone (expo-notifications). Reminders are delivered by ÖRZA's server today;
- * scheduling alarms on the phone itself is Phase C — this only checks / asks for permission.
- * Android 13+ shows the permission prompt only once a notification channel exists, so one is created first.
+ * Notification permission on this phone (expo-notifications) — check / ask. The alarms and reminder notifications
+ * themselves are scheduled on the phone by the alarm engine (`@/lib/alarms`); every permission request here tells it
+ * to re-plan at once (the Android 13 dialog doesn't trigger an AppState change).
+ * Android 13+ shows the permission prompt only once a notification channel exists: the alarm module
+ * (`modules/orza-alarms`) creates its channels at start-up; builds without it get the same "Reminders" channel here.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, Linking, Platform } from 'react-native';
 
+import { emitAlarmDataChanged } from '@/lib/alarms/events';
+
+import { isOrzaAlarmsAvailable } from '../../../modules/orza-alarms';
+
 export type NotificationPermission = 'granted' | 'undetermined' | 'denied' | 'blocked' | 'unsupported';
 
-/** Android channel for reminder notifications (Phase C's local alarms can reuse or add their own). */
-export const REMINDERS_CHANNEL_ID = 'reminders';
+/** Android channel for reminder notifications — the alarm module's own "Reminders" channel (one channel, not two). */
+export const REMINDERS_CHANNEL_ID = 'orza_reminders';
 
 const PERMISSION_KEY = ['notifications', 'permission'] as const;
 
@@ -24,14 +30,14 @@ function toState(p: Notifications.NotificationPermissionsStatus): NotificationPe
 }
 
 async function ensureAndroidChannel() {
-  if (Platform.OS !== 'android') return;
+  // The native alarm module made its channels at start-up (re-creating one never changes its importance or sound).
+  if (Platform.OS !== 'android' || isOrzaAlarmsAvailable()) return;
   try {
     await Notifications.setNotificationChannelAsync(REMINDERS_CHANNEL_ID, {
       name: 'Reminders',
-      description: 'Meal, water and weigh-in reminders from ÖRZA',
-      importance: Notifications.AndroidImportance.HIGH,
+      description: 'Meal, water and weigh-in reminders and refill alerts from ÖRZA',
+      importance: Notifications.AndroidImportance.DEFAULT,
       lightColor: '#FF7A6A',
-      vibrationPattern: [0, 250, 150, 250],
     });
   } catch {
     // The prompt may not show without a channel; the status check still works.
@@ -54,6 +60,9 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
     return toState(await Notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowBadge: true, allowSound: true } }));
   } catch {
     return 'unsupported';
+  } finally {
+    // Granted or not: the alarm engine schedules (or clears) this phone's alarms straight away.
+    emitAlarmDataChanged('permission-changed');
   }
 }
 

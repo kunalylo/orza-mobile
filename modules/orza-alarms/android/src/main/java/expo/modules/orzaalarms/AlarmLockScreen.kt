@@ -34,6 +34,11 @@ internal object AlarmLockScreen {
   @Volatile
   var isShownOverLockScreen = false
     private set
+
+  /** The app's (React) activity is in the foreground right now — an alarm firing then also opens the alarm screen. */
+  @Volatile
+  var isAppResumed = false
+    private set
   private var shownAt = 0L
 
   private val stopKeepingOn = Runnable {
@@ -120,13 +125,20 @@ internal object AlarmLockScreen {
         handler.removeCallbacks(stopKeepingOn)
         handler.removeCallbacks(autoRelease)
         isShownOverLockScreen = false
+        isAppResumed = false
       }
+    }
+
+    override fun onActivityResumed(activity: Activity) {
+      if (activity === activityRef?.get()) isAppResumed = true
+    }
+
+    override fun onActivityPaused(activity: Activity) {
+      if (activity === activityRef?.get()) isAppResumed = false
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
     override fun onActivityStarted(activity: Activity) {}
-    override fun onActivityResumed(activity: Activity) {}
-    override fun onActivityPaused(activity: Activity) {}
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
   }
 }
@@ -149,6 +161,7 @@ class AlarmActivityListener : ReactActivityLifecycleListener {
   }
 
   override fun onResume(activity: Activity?) {
+    // The resumed state itself comes from the Application callbacks registered in onCreate (this runs deferred).
     if (activity != null) AlarmLockScreen.attach(activity)
   }
 

@@ -268,7 +268,8 @@ function handleResponse(response: Notifications.NotificationResponse, receivedAt
 
 /** A ringing alarm fired while the app is open: the engine's listener opens the alarm screen. */
 function presentInApp(data: OrzaNotificationData): boolean {
-  if (!actionListeners.size || !data.doses.length) return false;
+  // Dose alarms — and the "Test alarm" (no doses, `test:` key), which opens its demo alarm screen.
+  if (!actionListeners.size || (!data.doses.length && !data.key.startsWith('test:'))) return false;
   emit({ key: data.key, action: 'open', doses: data.doses, path: data.path, at: Date.now() });
   return true;
 }

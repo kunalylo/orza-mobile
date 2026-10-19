@@ -96,6 +96,10 @@ foreground handler + response routing), `app.json`, this notes file. Everything 
   the app container moved.
 - `assets/sounds/orza_alarm.wav` (C2) exists: PCM 16-bit mono 44.1 kHz, 6.0 s (iOS limit 30 s) → the plugin's
   prebuild copy will succeed.
+- Re-verified on resume (after the dad2f72 WIP checkpoint, with C2's partial module in the tree): typecheck ✓, lint ✓,
+  introspect ✓ (time-sensitive + aps-environment + healthkit entitlements, no duplicate Android permissions, no
+  android/ ios/ folders), scratch adapter test 10/10. Still open outside C3: the root layout doesn't call
+  `installNotificationHandling()` yet; there's no `index.ts` headless entry yet (C1's request).
 
 ## Notes for C4 / integration
 - iOS plays a notification sound ONCE (≤ 30 s): the 6 s chime is short for an alarm → ask C2 for a ~28 s version

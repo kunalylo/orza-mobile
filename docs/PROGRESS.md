@@ -237,3 +237,18 @@ IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
   attachments, ≤60 pending window, categories/actions, app.json) → C4 integration + "Alarms on this phone" card + test alarm → review/fix.
   Decision: quiet hours keep web parity (doses inside quiet hours don't ring) + the phone warns about such doses.
   If interrupted: re-run with resumeFromRunId; each step keeps `docs/notes/C*.md`.
+- 2026-10-15→19: **D1 setup (local Android builds)** — Temurin JDK 17.0.20.1 at `C:\Users\ADMIN\.jdks\jdk-17.0.20.1+1` (sha256 verified);
+  build worktree `E:\aylo\orza-mobile-build` (detached, prebuild → `gradlew assembleDebug -PreactNativeArchitectures=x86_64`, first
+  build 14 min, incremental ~5 min; JAVA_HOME/ANDROID_HOME passed per command, nothing changed system-wide); local web test copy
+  `E:\aylo\orza-localtest` (worktree of the web repo, `.env.local` WITHOUT MONGODB_URI → JSON-file DB `.data/`, test accounts in
+  `.data/test-accounts.json`); emulator AVD Medium_Phone (Android 16, x86_64) started detached; Metro via launch config
+  `orza-mobile-metro-local` with `EXPO_PUBLIC_API_URL` from the build copy's `.env.local`.
+  Findings:
+  1. Blank screen on Android dev builds: the dev-client network inspector corrupts Metro's chunked multipart bundle response
+     (`ProtocolException: Expected leading [0-9a-fA-F] character but was 0xd`). Fix: `expo-build-properties` → `android.networkInspector: false`.
+  2. INCIDENT: the first emulator sign-up went to PRODUCTION — `set "EXPO_PUBLIC_API_URL=…"` inside the cmd launcher never reached Expo,
+     and `config.ts` silently defaults to the production origin. One QA account (`qa1@orza.test`) was created live 15:53 UTC and removed
+     minutes later (user + 1 credit_transaction + 1 session + 1 device, nothing else existed); production re-checked clean. Fixes: env via
+     `.env.local`, Metro launched with `--clear`, the bundle is grepped for the local origin before any interaction, and dev builds must
+     never silently fall back to production (config guard — C4 task).
+  Local sign-up against the test server then worked.

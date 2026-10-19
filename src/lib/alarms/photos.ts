@@ -244,6 +244,43 @@ function prune(cached: Map<string, File>, keep: Set<string>, inUse: Set<string>)
   }
 }
 
+/** The downloaded alarm photo of media `id` on this phone (`file://…`), or null. Synchronous, never throws. */
+export function cachedAlarmPhotoUri(id: string): string | null {
+  try {
+    const stem = fileStem(id);
+    for (const ext of ['jpg', 'png']) {
+      const f = new File(Paths.document, DIR_NAME, `${stem}.${ext}`);
+      if (f.exists) return f.uri;
+    }
+  } catch {
+    // web preview / storage unavailable
+  }
+  return null;
+}
+
+/**
+ * One photo on the phone (downloaded now when missing, within `budgetMs`) — for the test alarm. Unlike
+ * `attachAlarmPhotos` it never prunes the cache. Resolves with the local URI, or null.
+ */
+export async function ensureAlarmPhoto(ref: PhotoRef, budgetMs = 8_000): Promise<string | null> {
+  const cached = cachedAlarmPhotoUri(ref.id);
+  if (cached) return cached;
+  const dir = photoDir();
+  if (!dir) return null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), budgetMs);
+  });
+  try {
+    const file = await Promise.race([download(ref, dir), timeout]);
+    return file?.uri ?? null;
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** Delete every cached alarm photo (sign-out). */
 export function clearAlarmPhotos(): void {
   failedAt.clear();

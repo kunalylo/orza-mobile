@@ -52,6 +52,8 @@ export interface NativeAlarmStatus {
   customSound: boolean;
   /** The app is showing over the lock screen (opened by an alarm). */
   overLockScreen: boolean;
+  /** Exempt from battery optimisation ("Unrestricted"). Missing on builds made before it was added. */
+  batteryUnrestricted?: boolean;
 }
 
 export interface NativeScheduledAlarm {
@@ -80,6 +82,16 @@ export interface AlarmActionRecordedEvent {
   action: DoseAction;
 }
 
+/** Event: a ringing alarm was just posted while the app is in the foreground (only a heads-up shows then). */
+export interface AlarmShownEvent {
+  key: string;
+  /** e.g. `orza://alarm?at=…&med=…` */
+  deepLink: string;
+  /** Epoch ms the alarm was scheduled for. */
+  at: number;
+}
+
 export type OrzaAlarmsEvents = {
   onAlarmAction: (event: AlarmActionRecordedEvent) => void;
+  onAlarmShown: (event: AlarmShownEvent) => void;
 };

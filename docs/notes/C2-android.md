@@ -58,8 +58,8 @@ Android toolchain) — every Kotlin file was re-read for compile errors; the fir
 - **DND**: alarms with `CATEGORY_ALARM` / `USAGE_ALARM` pass "Priority only" DND when the user allows alarms (default).
 
 ## Decisions
-- **Persistence**: `noBackupFilesDir/orza-alarms/{pending,shown,actions}.json` via `android.util.AtomicFile`, one
-  process-wide lock (`AlarmStore`). Not backed up (alarm state must not be restored to another phone).
+- **Persistence**: `noBackupFilesDir/orza-alarms/{pending,shown,actions}.json` via `android.util.AtomicFile`
+  (`readFully()` restores an interrupted write; missing file → empty), one process-wide lock (`AlarmStore`). Not backed up (alarm state must not be restored to another phone).
 - **Scheduling** (`AlarmScheduler`): `scheduleAll(json)` replaces the pending set: keys missing from the new set are
   cancelled; kept: future `test:` items (C4's test alarm) and native snoozes whose action JS hasn't collected yet (a
   plan computed before the Snooze press must not cancel it). Exact allowed → ring items `setAlarmClock` (show intent =
@@ -72,17 +72,24 @@ Android toolchain) — every Kotlin file was re-read for compile errors; the fir
 - **Firing** (`AlarmReceiver`, `goAsync` + background thread, the alarm wakelock is held until `finish`): ring items →
   channel `orza_alarms` (HIGH, `USAGE_ALARM`, `res/raw/orza_alarm` or the default alarm tone, long vibration), CATEGORY_ALARM,
   FLAG_INSISTENT, full-screen intent (deep link + `orza_alarm=true`), content intent (deep link), actions Take /
-  Snooze 10 min / Skip, BigPicture = collage of up to 4 medicine photos (each med's first photo first; decoded with
-  inSampleSize, centre-cropped cells on a 1024×512 canvas), large icon = first photo thumbnail. After **10 min** of
-  ringing a silencer alarm re-posts it on the silent `orza_alarms_quiet` channel (stays in the shade with its actions,
-  times out after 12 h). Reminders / refills → `orza_reminders` (DEFAULT importance, normal sound, auto-cancel, no
+  Snooze 10 min / Skip, BigPicture = ONE 1024×576 (16:9) picture: a single photo fitted whole (Android caps a big
+  picture at ~284 dp and centre-crops taller ones — a portrait pack photo would lose the medicine name); several (one
+  per medicine, up to 4) side by side, each centre-cropped into its cell only while ≥ 75 % of it stays visible, else
+  fitted whole; decoded with bounds + inSampleSize, sources recycled; large icon = first photo thumbnail. After
+  **10 min** of ringing a silencer alarm re-posts it on the silent `orza_alarms_quiet` channel (stays in the shade with
+  its actions, times out after 12 h). The ringing copy itself times out after 30 min — a hard stop for the sound if
+  an inexact silencer (no exact-alarm access) runs late. A ring alarm posted while the app's activity is resumed
+  (Android then shows only a heads-up) also sends `onAlarmShown` → the adapter emits an `open` action → the engine
+  opens the alarm screen (iOS parity). Reminders / refills → `orza_reminders` (DEFAULT importance, normal sound, auto-cancel, no
   full screen / insistent, times out after 6 h). Visibility PUBLIC (the photo + name is the point; the alarm screen
   shows them over the lock screen anyway).
 - **Actions** (`ActionReceiver`): cancel the notification + silencer, record `{id, key, action, doses, snoozeMinutes, at}`
   in `actions.json`, Snooze → schedule a copy at now + 10 min under `item.snoozeKey` (JS passes
   `snoozeAlarmKey(scheduledFor, medIds)`), tagged with the action id (protected until drained). Then emit
   `onAlarmAction` if the module is alive. `takeNativeActions()` drains the queue atomically; the adapter's `onAction`
-  drains on each event (exactly-once hand-over whichever path collects first). Test items: no action recorded.
+  drains on each event (exactly-once hand-over whichever path collects first) and confirms with a toast while the app
+  is active (iOS parity). Test items: no action recorded. `cancelAll` (sign-out / no permission) also forgets
+  recorded actions — the engine always collects them first (sync step 1) — so they never reach the next account.
 - **Boot / time** (`BootReceiver`, exported — system broadcast; validates the action): BOOT_COMPLETED, QUICKBOOT_POWERON
   (OEMs), MY_PACKAGE_REPLACED, TIME_SET, TIMEZONE_CHANGED, SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED → re-schedule
   `pending`; ring items missed by ≤ 30 min while the phone was off ring immediately; older past items are dropped.
@@ -108,6 +115,10 @@ Android toolchain) — every Kotlin file was re-read for compile errors; the fir
       ActionReceiver, BootReceiver, AlarmLockScreen + OrzaAlarmsPackage, OrzaAlarmsModule
 - [x] JS: `modules/orza-alarms/index.ts`, `src/OrzaAlarms.types.ts`, `src/OrzaAlarms.ts`
 - [x] `src/lib/alarms/adapter.android.ts` (PlatformAdapter on the module; no-op fallback)
-- [ ] Re-read every Kotlin file (imports, nullability, API levels, PendingIntent flags, exported, R refs)
-- [ ] `npm run typecheck` ✓, `npx expo lint` ✓
-- [ ] device test plan + cross-area requests in the report
+- [x] Re-read every Kotlin file (imports, nullability, API levels, PendingIntent flags, exported, R refs) — resumed
+      session: fixes = photo composition (16:9 fit), ringing timeout cap, AtomicFile read, `clearActions` on
+      `cancelAll`, foreground `onAlarmShown` → `open`, action toasts; no `R.` references (all by `getIdentifier`);
+      every API ≥ 27/31/34 call is behind `Build.VERSION` checks (minSdk 26); all PendingIntents FLAG_IMMUTABLE.
+- [x] `npx expo-modules-autolinking resolve --platform android` lists `orza-alarms` (module + OrzaAlarmsPackage)
+- [x] `npm run typecheck` ✓, `npx expo lint` ✓ (owned files)
+- [x] device test plan + cross-area requests in the report

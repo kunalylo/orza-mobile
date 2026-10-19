@@ -69,7 +69,10 @@ internal object AlarmScheduler {
     return true
   }
 
-  /** Cancels every pending alarm and silencer and removes every ÖRZA alarm notification (sign-out, permission gone). */
+  /**
+   * Cancels every pending alarm and silencer, removes every ÖRZA alarm notification and forgets recorded actions
+   * (sign-out, permission gone — the engine collects pending actions before it ever cancels for a permission reason).
+   */
   fun cancelAll(context: Context) {
     val shown = AlarmStore.locked {
       val pending = AlarmStore.readPending(context)
@@ -77,6 +80,7 @@ internal object AlarmScheduler {
       for (key in pending.keys) cancelAlarm(context, key)
       val showing = AlarmStore.readShown(context)
       AlarmStore.clearShown(context)
+      AlarmStore.clearActions(context)
       showing
     }
     for (key in shown.keys) cancelSilencer(context, key)

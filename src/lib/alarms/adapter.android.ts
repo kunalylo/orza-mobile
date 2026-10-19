@@ -9,22 +9,25 @@
  * - Take / Snooze / Skip work with the app killed: the module records them (and schedules the snooze re-ring under
  *   `snoozeAlarmKey`), the engine collects them with `takeNativeActions()` — or right away through `onAction` while JS
  *   runs (each action is handed over exactly once, whichever path collects it first).
- * - Tapping an alarm opens its deep link through React Native's Linking (expo-router navigates), so no `open` action
- *   is emitted here.
+ * - Tapping an alarm opens its deep link through React Native's Linking (expo-router navigates). An `open` action is
+ *   emitted only when a ringing alarm fires while the app is in the foreground (Android then shows just a heads-up,
+ *   no full-screen alarm), so the engine opens the alarm screen — as on iOS.
+ * - Actions pressed in the shade while the app is open are confirmed with a toast (as on iOS).
  * - Builds without the module (Expo Go, an older dev build) get the no-op adapter: `maxScheduled` 0, so the engine
  *   never declares `alarmsLocal: true` and the server keeps sending the medicine Web Push.
  *
  * Contract: see `./adapter.ts`. Platform file: imports only TYPES from './adapter'.
  */
 import * as Notifications from 'expo-notifications';
-import { Linking } from 'react-native';
+import { AppState, Linking } from 'react-native';
 
 import * as OrzaAlarms from '../../../modules/orza-alarms';
-import type { NativeAlarmItem, NativeRecordedAction } from '../../../modules/orza-alarms';
+import type { AlarmShownEvent, NativeAlarmItem, NativeRecordedAction } from '../../../modules/orza-alarms';
 
 import type { AdapterStatus, AlarmActionEvent, NativeAlarmAction, PlatformAdapter, ScheduleResult, SettingsKind } from './adapter';
 import { createNoopAdapter } from './noop';
-import { snoozeAlarmKey, type AlarmPlanItem } from './types';
+import { DEFAULT_SNOOZE_MINUTES } from './plan';
+import { snoozeAlarmKey, type AlarmPlanItem, type DoseActionKind } from './types';
 
 export type { AdapterStatus, AlarmActionEvent, NativeAlarmAction, PlatformAdapter, ScheduleResult, SettingsKind } from './adapter';
 
@@ -82,6 +85,26 @@ function toEvent(a: NativeRecordedAction): AlarmActionEvent {
   };
 }
 
+/** `orza://alarm?at=…` → `/alarm?at=…` (the in-app route of a deep link); undefined for anything else. */
+export function pathOfDeepLink(deepLink: string): string | undefined {
+  const m = /^orza:\/\/(.+)$/.exec(deepLink);
+  return m ? `/${m[1].replace(/^\/+/, '')}` : undefined;
+}
+
+/** A Take / Snooze / Skip pressed in the shade while the app is open: say it went through. */
+async function confirm(action: DoseActionKind, count: number): Promise<void> {
+  if (AppState.currentState !== 'active' || count < 1) return;
+  try {
+    const { toast } = await import('@/ui/Toast');
+    const many = count > 1;
+    if (action === 'take') toast.success(many ? `Marked ${count} medicines as taken` : 'Marked as taken');
+    else if (action === 'skip') toast.info(many ? `Skipped ${count} medicines` : 'Dose skipped');
+    else toast.info(`Snoozed — ringing again in ${DEFAULT_SNOOZE_MINUTES} minutes`);
+  } catch {
+    // no toast — the action still went through
+  }
+}
+
 function toNativeActions(recorded: NativeRecordedAction[]): NativeAlarmAction[] {
   return recorded.flatMap((a) =>
     a.doses.map((d) => ({
@@ -118,9 +141,26 @@ async function readStatus(): Promise<AdapterStatus> {
 
 function createAndroidAdapter(): PlatformAdapter {
   const listeners = new Set<(event: AlarmActionEvent) => void>();
-  let subscription: { remove(): void } | null = null;
+  let subscriptions: { remove(): void }[] = [];
   let draining = false;
   let drainAgain = false;
+
+  const emit = (event: AlarmActionEvent) => {
+    for (const listener of [...listeners]) {
+      try {
+        listener(event);
+      } catch {
+        // One listener's failure must not lose the event for the others.
+      }
+    }
+  };
+
+  /** A ringing alarm fired while the app is in the foreground: open the alarm screen. */
+  const opened = (e: AlarmShownEvent) => {
+    const path = pathOfDeepLink(e.deepLink);
+    if (!path || !listeners.size) return;
+    emit({ key: e.key, action: 'open', doses: [], path, at: Date.now() });
+  };
 
   /** A native action was recorded: collect everything waiting and hand it to the listeners (once). */
   const deliver = async () => {
@@ -136,14 +176,8 @@ function createAndroidAdapter(): PlatformAdapter {
         if (!listeners.size) return;
         const recorded = await OrzaAlarms.takeNativeActions().catch((): NativeRecordedAction[] => []);
         for (const action of recorded) {
-          const event = toEvent(action);
-          for (const listener of [...listeners]) {
-            try {
-              listener(event);
-            } catch {
-              // One listener's failure must not lose the action for the others.
-            }
-          }
+          emit(toEvent(action));
+          void confirm(action.action, action.doses.length);
         }
       } while (drainAgain);
     } finally {
@@ -187,12 +221,14 @@ function createAndroidAdapter(): PlatformAdapter {
     onAction(listener: (event: AlarmActionEvent) => void): () => void {
       listeners.add(listener);
       // Actions recorded while nobody listened (JS just started) are collected by the engine's own sync.
-      if (!subscription) subscription = OrzaAlarms.addActionListener(() => void deliver());
+      if (!subscriptions.length) {
+        subscriptions = [OrzaAlarms.addActionListener(() => void deliver()), OrzaAlarms.addShownListener(opened)];
+      }
       return () => {
         listeners.delete(listener);
-        if (!listeners.size && subscription) {
-          subscription.remove();
-          subscription = null;
+        if (!listeners.size && subscriptions.length) {
+          for (const sub of subscriptions) sub.remove();
+          subscriptions = [];
         }
       };
     },

@@ -16,11 +16,15 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { useBrandFonts } from '@/lib/fonts';
+import { installNotificationHandling } from '@/lib/notifications';
 import { colors } from '@/theme';
 import { Button, EmptyState, Screen, ToastHost } from '@/ui';
 
 void SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: 320, fade: true });
+// Foreground notification behaviour + the tap that launched the app, as early as possible (idempotent; the alarm
+// adapters install it too). Medicine alarms and reminders are scheduled by the member area (`useAlarmSync`).
+installNotificationHandling();
 
 const navTheme: Theme = {
   ...DefaultTheme,

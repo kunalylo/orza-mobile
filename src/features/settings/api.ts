@@ -6,6 +6,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
+import { emitAlarmDataChanged } from '@/lib/alarms/events';
 import { ApiError, api, validationField } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { Preferences, PublicUser, Targets } from '@/lib/types';
@@ -86,7 +87,11 @@ export function useSavePreference() {
   const { setUser } = useAuth();
   return useMutation({
     mutationFn: (body: Partial<Preferences>) => api.put<UserResponse>('/settings/preferences', body),
-    onSuccess: (res) => setUser(res.user),
+    onSuccess: (res, body) => {
+      setUser(res.user);
+      // "Gentle reminders" decides whether this phone rings meal / water / weigh-in / custom reminders.
+      if ('reminders' in body) emitAlarmDataChanged('preferences-changed');
+    },
   });
 }
 
