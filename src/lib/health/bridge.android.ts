@@ -226,6 +226,33 @@ export const healthBridge: HealthBridge = {
     return collector.rows();
   },
 
+  async stepsBetween(ranges) {
+    const none = ranges.map(() => null);
+    if (!ranges.length) return none;
+    try {
+      const hc = await client();
+      if (!(await readableTypes(hc)).has('Steps')) return none;
+      return await Promise.all(
+        ranges.map(async (r) => {
+          if (!(r.end > r.start)) return 0;
+          try {
+            // Health Connect's aggregate de-duplicates overlapping apps / devices (its own priority list).
+            const res = await hc.aggregateRecord({
+              recordType: 'Steps',
+              timeRangeFilter: { operator: 'between', startTime: new Date(r.start).toISOString(), endTime: new Date(r.end).toISOString() },
+            });
+            const n = res.COUNT_TOTAL;
+            return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.round(n) : 0;
+          } catch {
+            return null; // e.g. read from the background without background-read access
+          }
+        })
+      );
+    } catch {
+      return none;
+    }
+  },
+
   async openManage() {
     try {
       (await healthConnect()).openHealthConnectSettings();

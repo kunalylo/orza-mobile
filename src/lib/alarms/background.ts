@@ -1,7 +1,9 @@
 /**
  * Background refresh of the phone's alarms (expo-background-task, Android WorkManager / iOS BGTaskScheduler): every
  * hour or so — when the OS allows, with network — send queued alarm actions and re-plan the next 7 days, so alarms keep
- * coming even when the app isn't opened for days, and declare the phone active to the server.
+ * coming even when the app isn't opened for days, and declare the phone active to the server. The same task saves the
+ * member's automatic step count (`lib/steps/sync`), so the website stays current without opening the app (one task:
+ * the OS budgets background work per app).
  *
  * `TaskManager.defineTask` must run in the bundle's GLOBAL scope (v57 docs): when the OS launches the app just for the
  * task, no views are mounted, so Expo Router's route files (and anything only they import) never load. This module
@@ -21,11 +23,15 @@ const supported = Platform.OS === 'android' || Platform.OS === 'ios';
 
 if (supported && !TaskManager.isTaskDefined(ALARM_SYNC_TASK)) {
   TaskManager.defineTask(ALARM_SYNC_TASK, async () => {
+    // Steps run alongside and never decide the result (it reports the alarms, as before).
+    const steps = import('../steps/sync').then((m) => m.syncStepsInBackground()).catch(() => false);
     try {
       const { syncAlarms } = await import('./sync');
       const r = await syncAlarms({ reason: 'background' });
+      await steps;
       return r.ok || r.skipped === 'signed-out' ? BackgroundTask.BackgroundTaskResult.Success : BackgroundTask.BackgroundTaskResult.Failed;
     } catch {
+      await steps;
       return BackgroundTask.BackgroundTaskResult.Failed;
     }
   });

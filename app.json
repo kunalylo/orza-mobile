@@ -43,6 +43,7 @@
         "android.permission.USE_FULL_SCREEN_INTENT",
         "android.permission.VIBRATE",
         "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.ACTIVITY_RECOGNITION",
         "android.permission.READ_CALENDAR",
         "android.permission.WRITE_CALENDAR",
         "android.permission.health.READ_STEPS",
@@ -117,6 +118,12 @@
         }
       ],
       "expo-background-task",
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "ÖRZA counts your steps with your iPhone's motion sensors, so Today shows them without you typing anything."
+        }
+      ],
       [
         "expo-build-properties",
         {

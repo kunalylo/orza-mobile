@@ -21,6 +21,9 @@ export const healthBridge: HealthBridge = {
   async readDays() {
     return [];
   },
+  async stepsBetween(ranges) {
+    return ranges.map(() => null);
+  },
   async openManage() {},
   async openStore() {},
 };

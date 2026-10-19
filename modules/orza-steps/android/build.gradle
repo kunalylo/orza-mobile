@@ -1,0 +1,16 @@
+// ÖRZA automatic step counting — local Expo module (autolinked from ./modules). Same pattern as modules/orza-alarms.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'in.co.ylo.orza'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.orzasteps"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}

@@ -13,17 +13,21 @@ import type { Meal, MealType } from '@/features/meals/types';
 import { DEFAULT_TZ, hourInTz, todayInTz } from '@/features/meals/utils';
 import { medsKeys } from '@/features/meds/api';
 import { useTodayDashboard } from '@/features/today/api';
-import { StepsSheet, StepsTile, WeightSheet, WeightTile } from '@/features/today/BodyCards';
+import { StepsSheet, WeightSheet, WeightTile } from '@/features/today/BodyCards';
 import { EnergyCard } from '@/features/today/EnergyCard';
 import { InsightCard } from '@/features/today/InsightCard';
 import { MealsSection } from '@/features/today/MealsSection';
 import { MedsCard } from '@/features/today/MedsCard';
 import { QuickActions } from '@/features/today/QuickActions';
+import { DEFAULT_STEP_TARGET, StepsCard } from '@/features/today/StepsCard';
 import { TodayHeader, WeekStrip } from '@/features/today/TodayHeader';
 import { TodaySkeleton } from '@/features/today/TodaySkeleton';
 import { WaterCard } from '@/features/today/WaterCard';
 
-/** Today — the daily dashboard: energy ring + macros, ÖRZA's insight, quick actions, medicines, water, steps, weight, meals. */
+/**
+ * Today — the daily dashboard: energy ring + macros, ÖRZA's insight, quick actions, medicines, water, steps (counted
+ * automatically), weight, meals.
+ */
 export default function Today() {
   const user = useSignedInUser();
   const { refresh } = useAuth();
@@ -152,8 +156,19 @@ export default function Today() {
           <WaterCard key={`water-${view.date}`} date={view.date} glasses={view.tracking.water_glasses || 0} target={view.targets.water_glasses} />
         </Animated.View>
 
-        <Animated.View entering={enter(250)} style={[styles.section, styles.row]}>
-          <StepsTile steps={view.tracking.steps || 0} target={view.targets.steps} onPress={() => setSheet('steps')} />
+        {/* Steps count themselves (this phone / Health Connect / Apple Health); typing is only a fallback. */}
+        <Animated.View entering={enter(250)} style={styles.section}>
+          <StepsCard
+            date={view.date}
+            today={view.today}
+            serverSteps={view.tracking.steps || 0}
+            target={view.targets.steps > 0 ? view.targets.steps : DEFAULT_STEP_TARGET}
+            tz={tz}
+            onLog={() => setSheet('steps')}
+          />
+        </Animated.View>
+
+        <Animated.View entering={enter(270)} style={[styles.section, styles.row]}>
           <WeightTile
             date={view.date}
             today={view.today}
@@ -209,7 +224,7 @@ export default function Today() {
             date={shown.date}
             today={shown.today}
             steps={shown.tracking.steps || 0}
-            target={shown.targets.steps}
+            target={shown.targets.steps > 0 ? shown.targets.steps : DEFAULT_STEP_TARGET}
           />
           <WeightSheet
             visible={sheet === 'weight'}

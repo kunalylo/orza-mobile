@@ -89,6 +89,14 @@ src/
   medicine / prescription adds alarms. Android-only native calls (`silenceRinging`, `releaseLockScreen`, `requestUnlock`,
   `scheduleOne`, `openBatterySettings`) come from `modules/orza-alarms` and are no-ops elsewhere. `npm run test:alarms`
   after planner changes.
+- **Steps**: counted automatically — members never type them (`@/lib/steps`). `useStepsAutoSync()` (mounted in
+  `(app)/_layout`) reads + saves on launch / foreground; `useTodaySteps()` drives Today's `StepsCard` (live every
+  minute while visible). Sources per day, highest wins: Android's hardware step counter through `modules/orza-steps`
+  (native raw-sample ring buffer, allow-while-idle alarms ~hourly + midnight ± 5 min, boot / update / shutdown) turned
+  into days by the pure `counter.ts`; iOS CMPedometer (expo-sensors); Health Connect / Apple Health only while
+  connected on the Health screen (`healthBridge.stepsBetween`). Saves go through `POST /track/steps` and only ever
+  raise a day's count (`policy.ts`); the alarm background task also runs `syncStepsInBackground()`; sign-out calls
+  `clearStepsOnSignOut()`. `npm run test:steps` after changing the day math or the policy.
 - **Route types**: after adding/removing a route file run `npm run routes` (regenerates `.expo/types/router.d.ts` without a
   dev server); `npm run typecheck` does that and then `tsc --noEmit`.
 - Never edit `android/` or `ios/` — configure native behaviour in `app.json` / config plugins.

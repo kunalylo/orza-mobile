@@ -12,6 +12,7 @@ import { ConnectCard } from '@/features/health/ConnectCard';
 import { addDays, compact, formatDay, formatInt, formatKg, formatSleep, sourceLabel, timeAgo, todayIn } from '@/features/health/format';
 import { PrivacyNote, SourcesCard } from '@/features/health/SourcesCard';
 import { StatTiles, StatTilesSkeleton } from '@/features/health/StatTiles';
+import { StepsAutoCard } from '@/features/health/StepsAutoCard';
 import type { ChartPoint, HealthMetric, HealthRange, MergedHealthDay } from '@/features/health/types';
 import { errorMessage } from '@/lib/api';
 import { useSignedInUser } from '@/lib/auth';
@@ -110,6 +111,7 @@ export default function HealthSync() {
 
       <View style={styles.stack}>
         <ConnectCard health={health} />
+        <StepsAutoCard platform={health.platform} connected={health.connected} />
 
         {query.isPending ? (
           <LoadingBody />

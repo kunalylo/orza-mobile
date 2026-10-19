@@ -64,6 +64,12 @@ export class HealthNotAuthorizedError extends Error {
 
 export type HealthPlatform = 'ios' | 'android' | 'none';
 
+/** A time range for `stepsBetween` (epoch ms, end exclusive). */
+export interface StepRange {
+  start: number;
+  end: number;
+}
+
 /**
  * - `available`: ready to connect / read.
  * - `needs_install`: Health Connect isn't installed (Android 9–13) — send the user to the Play Store.
@@ -95,6 +101,12 @@ export interface HealthBridge {
   requestAccess(): Promise<HealthAccessResult>;
   /** Daily aggregates for the last `days` local days (today included), oldest first; days without data are omitted. */
   readDays(days: number): Promise<HealthDayInput[]>;
+  /**
+   * Step totals for each `[start, end)` range (epoch ms) — the store's own deduplicated total (phone + watch counted
+   * once). `null` for a range that can't be read (no permission, store unavailable or locked); 0 when nothing was
+   * recorded. Used by automatic step counting (`lib/steps`) for Today; never throws.
+   */
+  stepsBetween(ranges: readonly StepRange[]): Promise<(number | null)[]>;
   /** Where the user manages ÖRZA's access (Health Connect settings / the app's Settings page on iPhone). */
   openManage(): Promise<void>;
   /** Play Store page for Health Connect (Android). */

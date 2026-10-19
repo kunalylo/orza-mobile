@@ -152,6 +152,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       writeSecure(KEYS.user, null),
       // This account's alarms: cancel them and forget their cached data and photos (loaded on demand; never throws).
       import('./alarms/cleanup').then((m) => m.clearAlarmsOnSignOut()).catch(() => undefined),
+      // Automatic steps: stop the Android sampler and forget its raw samples.
+      import('./steps/sync').then((m) => m.clearStepsOnSignOut()).catch(() => undefined),
     ]);
   }, [queryClient]);
 

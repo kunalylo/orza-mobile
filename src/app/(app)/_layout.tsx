@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { AlarmPermissionPrompt } from '@/features/alarms/AlarmPermissionPrompt';
 import { useAlarmSync } from '@/lib/alarms/useAlarmSync';
 import { useHealthAutoSync } from '@/lib/health/sync';
+import { useStepsAutoSync } from '@/lib/steps/useSteps';
 import { colors } from '@/theme';
 
 export const unstable_settings = { initialRouteName: '(tabs)' };
@@ -12,6 +13,9 @@ export default function AppLayout() {
   // Apple Health / Health Connect: sync on launch and on every return to the foreground (throttled inside;
   // skips admins and members who haven't connected).
   useHealthAutoSync();
+  // Steps count themselves: read this phone's count (or Apple Health / Health Connect) and save it on launch and on
+  // every return to the foreground; Today reads it live. The background task saves it too.
+  useStepsAutoSync();
   // Medicine alarms + reminders on this phone: plan, schedule and keep them current (offline, app killed, locked).
   useAlarmSync();
 

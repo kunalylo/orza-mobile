@@ -32,6 +32,7 @@
     "expo-notifications": "~57.0.23",
     "expo-router": "~57.0.27",
     "expo-secure-store": "~57.0.4",
+    "expo-sensors": "~57.0.3",
     "expo-sharing": "~57.0.23",
     "expo-speech-recognition": "^57.1.1",
     "expo-splash-screen": "~57.0.10",
@@ -68,7 +69,8 @@
     "icons": "node scripts/generate-icons.mjs",
     "typecheck": "node scripts/gen-routes.cjs && tsc --noEmit",
     "routes": "node scripts/gen-routes.cjs",
-    "test:alarms": "npx --yes tsx --test scripts/tests/alarm-plan.test.ts"
+    "test:alarms": "npx --yes tsx --test scripts/tests/alarm-plan.test.ts",
+    "test:steps": "npx --yes tsx --test scripts/tests/steps-counter.test.ts"
   },
   "private": true
 }

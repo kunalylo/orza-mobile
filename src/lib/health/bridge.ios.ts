@@ -29,6 +29,7 @@ function healthKit(): Promise<HealthKit> {
 }
 
 const SLEEP = 'HKCategoryTypeIdentifierSleepAnalysis' as const;
+const STEPS = 'HKQuantityTypeIdentifierStepCount' as const;
 
 const READ_TYPES = [
   'HKQuantityTypeIdentifierStepCount',
@@ -149,6 +150,35 @@ export const healthBridge: HealthBridge = {
     // One unreadable type shouldn't sink the rest; only fail when nothing could be read at all.
     if (failed.length === results.length) throw (failed[0] as PromiseRejectedResult).reason;
     return collector.rows();
+  },
+
+  async stepsBetween(ranges) {
+    const none = ranges.map(() => null);
+    if (!ranges.length) return none;
+    try {
+      const hk = await healthKit();
+      // Never query a type whose permission sheet wasn't answered (HealthKit throws / crashes on those).
+      const status = await hk.getRequestStatusForAuthorization({ toRead: [STEPS] });
+      if (status === hk.AuthorizationRequestStatus.shouldRequest) return none;
+      return await Promise.all(
+        ranges.map(async (r) => {
+          if (!(r.end > r.start)) return 0;
+          try {
+            // A statistics sum: iPhone + Apple Watch steps counted once, like the Health app.
+            const res = await hk.queryStatisticsForQuantity(STEPS, ['cumulativeSum'], {
+              filter: { date: { startDate: new Date(r.start), endDate: new Date(r.end) } },
+              unit: 'count',
+            });
+            const n = res.sumQuantity?.quantity;
+            return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.round(n) : 0;
+          } catch {
+            return null; // e.g. the Health store is locked (phone locked) during a background run
+          }
+        })
+      );
+    } catch {
+      return none;
+    }
   },
 
   async openManage() {

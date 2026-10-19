@@ -1,6 +1,7 @@
 /**
- * Steps + weight quick log: two compact tiles side by side; tapping one opens a Sheet with a keyboard-safe numeric field.
- * Wording and validation follow the web's StepsCard / WeightCard.
+ * Weight tile + the steps / weight entry sheets (keyboard-safe numeric field). Steps count themselves on Today
+ * (`StepsCard`); `StepsSheet` is the typing fallback when no automatic source exists. Wording and validation follow
+ * the web's StepsCard / WeightCard.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type TextInput } from 'react-native';
@@ -55,23 +56,7 @@ function useFocusWhenShown(visible: boolean) {
   return ref;
 }
 
-/* ───────────────────────────── Steps ───────────────────────────── */
-
-export function StepsTile({ steps, target, onPress }: { steps: number; target: number; onPress: () => void }) {
-  const pct = target > 0 ? Math.round((steps / target) * 100) : 0;
-  return (
-    <Tile onPress={onPress} label={`Steps: ${formatNumber(steps)} of ${formatNumber(target)}`} hint="Opens a form to log your steps">
-      <TrackerHead icon="mci:shoe-print" tone="energy" label="Steps" />
-      <Text variant="stat" tone="ink" style={styles.big} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-        {formatNumber(steps)}
-      </Text>
-      <Text variant="caption" tone="muted" numberOfLines={1}>
-        of {formatNumber(target)} · {pct}%
-      </Text>
-      <ProgressBar value={target > 0 ? steps / target : 0} palette="energy" height={6} style={styles.bar} />
-    </Tile>
-  );
-}
+/* ───────────────────────────── Steps (typing fallback) ───────────────────────────── */
 
 export function StepsSheet({
   visible,

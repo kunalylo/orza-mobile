@@ -1,0 +1,38 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Step counting with the phone's own hardware step counter (Sensor.TYPE_STEP_COUNTER). Android 10+ asks the member
+       for "Physical activity" at run time (the app requests it from JS with PermissionsAndroid). -->
+  <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+  <!-- Phones without a step counter can still install ÖRZA (Today then falls back to Health Connect / typing). -->
+  <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
+
+  <application>
+    <!-- The sampler's own alarms (about hourly + just before and after midnight), through our PendingIntents only. -->
+    <receiver
+      android:name="expo.modules.orzasteps.StepAlarmReceiver"
+      android:enabled="true"
+      android:exported="false" />
+
+    <!-- Re-arms the sampler and takes a baseline sample after a reboot / app update / clock or time-zone change, and
+         takes a last sample when the phone shuts down (the counter restarts from 0 at boot). Exported so system / OEM
+         broadcasts always arrive; nothing is read from the intent except its action. ACTION_SHUTDOWN only reaches
+         manifest receivers below Android 9; the day math copes with a missing shutdown sample. -->
+    <receiver
+      android:name="expo.modules.orzasteps.StepBootReceiver"
+      android:enabled="true"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+        <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+        <action android:name="android.intent.action.TIME_SET" />
+        <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+        <action android:name="android.intent.action.ACTION_SHUTDOWN" />
+        <action android:name="android.intent.action.QUICKBOOT_POWEROFF" />
+        <action android:name="com.htc.intent.action.QUICKBOOT_POWEROFF" />
+      </intent-filter>
+    </receiver>
+  </application>
+</manifest>
