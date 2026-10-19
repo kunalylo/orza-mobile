@@ -11,13 +11,16 @@ export function createNoopAdapter(name: PlatformAdapter['name'] = 'none'): Platf
     name,
     maxScheduled: 0,
     schedule: async () => ({ scheduled: 0 }),
+    snoozeNow: async () => undefined,
     cancelAll: async () => undefined,
     dismiss: async () => undefined,
+    refreshShowing: async () => undefined,
     status: async () => ({ ...NO_STATUS }),
     requestNotifications: async () => ({ ...NO_STATUS }),
     openSettings: async () => undefined,
     takeNativeActions: async () => [],
     onAction: () => () => undefined,
+    setActionFilter: () => undefined,
   };
 }
 

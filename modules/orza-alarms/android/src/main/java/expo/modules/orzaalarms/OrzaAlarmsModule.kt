@@ -59,9 +59,24 @@ class OrzaAlarmsModule : Module() {
       AlarmScheduler.cancelAll(context)
     }
 
-    /** Removes the alarm `key` if it is showing / ringing; never cancels a pending one. */
+    /**
+     * Removes the alarm `key` if it is showing / ringing, or due but not delivered yet; never cancels a future one.
+     */
     AsyncFunction("dismiss") { key: String ->
       AlarmFiring.dismiss(context, key)
+    }
+
+    /**
+     * Alarms showing whose doses were partly handled elsewhere (`NativeAlarmItem[]` as JSON, each rebuilt with only its
+     * open doses): re-shown silently with just those. Resolves with how many were re-shown.
+     */
+    AsyncFunction("refreshShowing") { itemsJson: String ->
+      val ctx = context
+      var count = 0
+      for (item in AlarmItem.listFromJsonString(itemsJson)) {
+        if (AlarmFiring.refresh(ctx, item)) count++
+      }
+      count
     }
 
     /** Stops every ringing alarm but keeps it in the shade with its buttons. Resolves with how many were silenced. */
@@ -85,6 +100,8 @@ class OrzaAlarmsModule : Module() {
       return@AsyncFunction mapOf<String, Any?>(
         "notificationsEnabled" to NotificationManagerCompat.from(ctx).areNotificationsEnabled(),
         "alarmChannelEnabled" to AlarmNotifier.channelEnabled(ctx, AlarmNotifier.CHANNEL_ALARMS),
+        "alarmChannelSilenced" to AlarmNotifier.channelSilenced(ctx, AlarmNotifier.CHANNEL_ALARMS),
+        "alarmChannelPopup" to AlarmNotifier.channelPopsUp(ctx, AlarmNotifier.CHANNEL_ALARMS),
         "remindersChannelEnabled" to AlarmNotifier.channelEnabled(ctx, AlarmNotifier.CHANNEL_REMINDERS),
         "exact" to exact,
         "fullScreen" to fullScreen,
@@ -136,12 +153,19 @@ class OrzaAlarmsModule : Module() {
       return@AsyncFunction startSettings(appNotificationSettingsIntent(pkg)) || startSettings(appDetailsIntent(pkg))
     }
 
-    /** The alarm channel's settings when only that channel is off, else the app's notification settings. */
+    /**
+     * The "Medicine alarms" channel's settings when only that channel is off, silenced or kept from popping up; else the
+     * app's notification settings.
+     */
     AsyncFunction("openNotificationSettings") {
       val ctx = context
       val pkg = ctx.packageName
       val appEnabled = NotificationManagerCompat.from(ctx).areNotificationsEnabled()
-      if (appEnabled && !AlarmNotifier.channelEnabled(ctx, AlarmNotifier.CHANNEL_ALARMS)) {
+      val channelId = AlarmNotifier.CHANNEL_ALARMS
+      val channelNeedsFix = !AlarmNotifier.channelEnabled(ctx, channelId) ||
+        AlarmNotifier.channelSilenced(ctx, channelId) ||
+        !AlarmNotifier.channelPopsUp(ctx, channelId)
+      if (appEnabled && channelNeedsFix) {
         val channel = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
           .putExtra(Settings.EXTRA_APP_PACKAGE, pkg)
           .putExtra(Settings.EXTRA_CHANNEL_ID, AlarmNotifier.CHANNEL_ALARMS)

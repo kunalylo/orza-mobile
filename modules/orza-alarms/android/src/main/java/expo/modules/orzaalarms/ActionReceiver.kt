@@ -26,6 +26,8 @@ class ActionReceiver : BroadcastReceiver() {
     val now = System.currentTimeMillis()
     AlarmScheduler.cancelSilencer(context, key)
     val shown = AlarmStore.takeShown(context, key)
+    // Again, now that it's no longer "showing": a silent re-post (silencer / refresh) may have raced the first cancel.
+    AlarmNotifier.cancel(context, key)
     val item = shown?.item ?: AlarmItem.fromJsonString(itemJson)
     if (item == null) {
       Log.w(AlarmConst.TAG, "Action $action on $key without its alarm data — ignored")
@@ -46,7 +48,11 @@ class ActionReceiver : BroadcastReceiver() {
         at = now + AlarmConst.SNOOZE_MINUTES * 60_000L,
         nativeActionId = recorded?.id
       )
-      AlarmScheduler.scheduleOne(context, again)
+      try {
+        AlarmScheduler.scheduleOne(context, again)
+      } catch (e: Exception) {
+        Log.e(AlarmConst.TAG, "Couldn't set the snooze re-ring for $key", e)
+      }
     }
 
     if (recorded != null) OrzaAlarmsModule.notifyActionRecorded(recorded)

@@ -7,6 +7,8 @@
  * alarm engine's data on this phone (`./offline`) with the downloaded photos, and Take / Snooze / Skip are queued on the
  * phone (`recordAlarmAction`) and sent as soon as ÖRZA is reachable again. A press whose POST fails for lack of a
  * connection is queued the same way, so it is never lost.
+ * Snooze sets the re-ring on the phone at once (`alarmSnoozePressed`), before the POST — the screen closes itself and
+ * the phone may lock (and the app be suspended) long before the next alarm sync would get there.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
@@ -15,6 +17,7 @@ import { isStaleDoseError, medsApi, medsKeys } from '@/features/meds/api';
 import { emitDoseEvent } from '@/features/meds/events';
 import { clockIn, doseKey, SNOOZE_MINUTES, withAction } from '@/features/meds/shared';
 import type { DoseAction, DoseItem, DueResponse } from '@/features/meds/types';
+import { alarmDoseSaved, alarmSnoozePressed } from '@/lib/alarms/bridge';
 import { recordAlarmAction } from '@/lib/alarms/sync';
 import { doseAlarmKey } from '@/lib/alarms/types';
 import { api, ApiError, errorMessage } from '@/lib/api';
@@ -165,11 +168,15 @@ export function useAlarmActions(tz: string, offline = false) {
   const act = async (d: DoseItem, action: DoseAction, opts: { quiet?: boolean } = {}): Promise<boolean> => {
     const key = doseKey(d);
     if (inflight.current.has(key)) return false;
+    const pressedAt = Date.now();
+    // The re-ring goes on the phone now — online or not, whatever happens to the request.
+    if (action === 'snooze') alarmSnoozePressed([{ medId: d.medication_id, scheduledFor: d.scheduled_for }], pressedAt + SNOOZE_MINUTES * 60_000);
     if (offline) return queued(d, action, opts.quiet);
     inflight.current.add(key);
     setPending((p) => ({ ...p, [key]: action }));
     try {
       const log = await medsApi.dose(d, action);
+      alarmDoseSaved(log, pressedAt);
       const updated = withAction(d, action, log);
       setHandled((h) => ({ ...h, [key]: updated }));
       refreshScreens(d, action);

@@ -11,6 +11,8 @@ export const KEYS = {
   token: 'orza.session',
   user: 'orza.user',
   device: 'orza.device',
+  /** What this phone last declared to the server (`alarms_local`, push token) — re-sent from the first registration. */
+  deviceDeclared: 'orza.device.declared',
   /** A session signed out while offline: still live on the server until the app ends it (next launch or sign-in). */
   unrevoked: 'orza.session.unrevoked',
 } as const;

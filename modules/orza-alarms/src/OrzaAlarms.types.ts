@@ -40,6 +40,13 @@ export interface NativeAlarmStatus {
   notificationsEnabled: boolean;
   /** The "Medicine alarms" channel isn't turned off. */
   alarmChannelEnabled: boolean;
+  /**
+   * The "Medicine alarms" channel is on but can't make a sound ("Silent", or its sound set to None): alarms only appear
+   * in the shade. Missing on builds made before it was added.
+   */
+  alarmChannelSilenced?: boolean;
+  /** The "Medicine alarms" channel may pop up on screen (needed for the full-screen alarm). Missing on older builds. */
+  alarmChannelPopup?: boolean;
   remindersChannelEnabled: boolean;
   /** Android 12+: "Alarms & reminders" allowed; null below 12 (always exact). */
   exact: boolean | null;

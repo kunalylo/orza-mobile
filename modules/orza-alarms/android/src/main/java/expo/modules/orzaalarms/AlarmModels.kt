@@ -35,11 +35,17 @@ internal object AlarmConst {
   /** Ring at most this long, then the alarm stays silently in the shade. */
   const val RING_LIMIT_MS = 10 * 60_000L
 
-  /** An alarm that fires later than this (deep Doze / inexact fallback) is dropped instead of ringing. */
+  /**
+   * An alarm that fires later than this (deep Doze / inexact fallback) no longer rings — it is shown silently as
+   * missed. Also how long a due alarm that hasn't been delivered yet is kept when the plan is replaced.
+   */
   const val MAX_LATE_MS = 3 * 60 * 60_000L
 
   /** After a reboot, ring alarms missed while the phone was off up to this long ago. */
   const val MISSED_GRACE_MS = 30 * 60_000L
+
+  /** Dose alarms missed by more than that (phone off, held back) but at most this long ago show silently as missed. */
+  const val MISSED_SHOW_MS = 12 * 60 * 60_000L
 
   fun isDoseAction(action: String?): Boolean = action == TAKE || action == SKIP || action == SNOOZE
 }

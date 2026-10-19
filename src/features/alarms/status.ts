@@ -79,8 +79,12 @@ export function usePhoneAlarmStatus(): PhoneAlarmStatus {
 
   const status = read.status ?? engine.status;
   const supported = alarmAdapter.maxScheduled > 0;
-  const ready = supported && status?.notifications === 'granted' && status.exact !== false;
-  const needsAttention = supported && !!status && (status.notifications !== 'granted' || status.exact === false || status.fullScreen === false);
+  // Silenced (Android channel on Silent / no sound; iOS Notification Center only): alarms are set but nobody hears them.
+  const ready = supported && status?.notifications === 'granted' && status.exact !== false && !status.silenced;
+  const needsAttention =
+    supported &&
+    !!status &&
+    (status.notifications !== 'granted' || status.exact === false || status.fullScreen === false || !!status.silenced || status.popup === false);
 
   const allowNotifications = useCallback(async () => {
     const current = await alarmAdapter.status().catch(() => null);

@@ -8,6 +8,11 @@
  *   medicine changed — `isStaleDoseError` — or the action is invalid), and after 72 h.
  * - A snooze that couldn't be sent before its 10 minutes were up is dropped: the phone already re-rang it, and sending
  *   it late would make the server start a fresh snooze (and the phone ring again later).
+ * - A snooze / skip is checked against ÖRZA first (`GET /api/meds/doses?at=`): it is dropped when the dose was taken or
+ *   skipped meanwhile (the server would overwrite that — a taken dose turning "snoozed" rings again and invites a second
+ *   dose), or when ÖRZA's log is clearly newer than the press (`pendingWins`).
+ * - An action done in the app for the same dose (`supersedeQueuedDose`) replaces older queued entries.
+ * - Every log ÖRZA confirms is kept for the planner (`./recent`) until a fetch of its day includes it.
  * After anything was sent: React Query's medicine data is invalidated (when the app is running) and a dose event is
  * emitted, so screens and the alarm plan refresh.
  */
@@ -15,10 +20,12 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import { medsApi, medsKeys } from '@/features/meds/api';
 import { emitDoseEvent } from '@/features/meds/events';
-import { ApiError } from '@/lib/api';
+import type { DoseItem, DueResponse } from '@/features/meds/types';
+import { api, ApiError } from '@/lib/api';
 
+import { DEFAULT_SNOOZE_MINUTES, pendingWins, serverDoseState } from './plan';
+import { noteSavedDoseLog } from './recent';
 import { deleteJsonFile, readJsonFile, writeJsonFile } from './store';
-import { DEFAULT_SNOOZE_MINUTES } from './plan';
 import { isoOf, type PendingDoseAction } from './types';
 
 const QUEUE_FILE = 'orza-alarm-queue.json';
@@ -77,6 +84,18 @@ export function enqueueDoseActions(userId: string, actions: PendingDoseAction[])
   save({ ...q, actions: actionsSorted });
 }
 
+/**
+ * The member acted on this dose in the app (alarm / Today screen) and ÖRZA confirmed it: queued actions for it pressed
+ * before `pressedAt` are out of date — sending them later would overwrite the newer one.
+ */
+export function supersedeQueuedDose(userId: string, medId: string, scheduledFor: string, pressedAt: number): void {
+  if (!userId || !medId) return;
+  const q = load(userId);
+  const id = doseId({ medId, scheduledFor });
+  const kept = q.actions.filter((a) => doseId(a) !== id || a.createdAt > pressedAt);
+  if (kept.length !== q.actions.length) save({ ...q, actions: kept });
+}
+
 /** Forget every queued action (sign-out). */
 export function clearDoseQueue(): void {
   queue = null;
@@ -114,6 +133,22 @@ async function doFlush({ userId, queryClient }: { userId: string; queryClient?: 
   const sentEvents: { medId: string; at: string }[] = [];
   const done = new Set<PendingDoseAction>();
 
+  // ÖRZA's doses at an instant, fetched once per instant; null = couldn't be checked (sent anyway — the server decides).
+  const atInstant = new Map<string, DoseItem[] | null>();
+  const serverDoses = async (scheduledFor: string): Promise<DoseItem[] | null> => {
+    const cached = atInstant.get(scheduledFor);
+    if (cached !== undefined) return cached;
+    let doses: DoseItem[] | null;
+    try {
+      doses = (await api.get<DueResponse>(`/meds/doses?at=${encodeURIComponent(scheduledFor)}`, { timeoutMs: 15_000 })).doses ?? [];
+    } catch (e) {
+      if (keepForLater(e)) throw e;
+      doses = null;
+    }
+    atInstant.set(scheduledFor, doses);
+    return doses;
+  };
+
   for (const a of q.actions) {
     const now = Date.now();
     const snoozeOver = a.action === 'snooze' && now - a.createdAt > (a.snoozeMinutes ?? DEFAULT_SNOOZE_MINUTES) * 60_000;
@@ -123,7 +158,20 @@ async function doFlush({ userId, queryClient }: { userId: string; queryClient?: 
       continue;
     }
     try {
-      await medsApi.dose({ medication_id: a.medId, scheduled_for: a.scheduledFor }, a.action, a.snoozeMinutes ?? DEFAULT_SNOOZE_MINUTES);
+      if (a.action !== 'take') {
+        const t = Date.parse(a.scheduledFor);
+        const log = (await serverDoses(a.scheduledFor))?.find((d) => d.medication_id === a.medId && Date.parse(d.scheduled_for) === t);
+        const server = log ? serverDoseState(log) : null;
+        if (server && !pendingWins(a, server)) {
+          // Taken / skipped meanwhile, or done again later elsewhere: sending it would undo that.
+          done.add(a);
+          result.dropped++;
+          sentEvents.push({ medId: a.medId, at: a.scheduledFor });
+          continue;
+        }
+      }
+      const log = await medsApi.dose({ medication_id: a.medId, scheduled_for: a.scheduledFor }, a.action, a.snoozeMinutes ?? DEFAULT_SNOOZE_MINUTES);
+      noteSavedDoseLog(userId, log);
       done.add(a);
       result.sent++;
       sentEvents.push({ medId: a.medId, at: a.scheduledFor });

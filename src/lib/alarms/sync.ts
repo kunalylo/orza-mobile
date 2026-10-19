@@ -2,15 +2,18 @@
  * Alarm sync — keeps the alarms on this phone in step with the member's medicines, dose logs, reminders and settings.
  *
  *   flush queued actions → status → data (fresh, else the last good copy) → plan → dismiss handled → photos →
- *   adapter.schedule (skipped when the plan is unchanged) → declare `alarms_local` to the server
+ *   re-show partly handled alarms → adapter.schedule (skipped when the plan is unchanged) → declare `alarms_local`
  *
  * - Works headless (background task, no React): the session token and member snapshot then come from the Keychain.
  * - Offline: plans from the cached data (`orza-alarms.json`), so a launch without network still schedules; with no
  *   cache at all, whatever is already scheduled stays.
  * - Single-flight (a call during a run queues one follow-up run) + `requestAlarmSync` debounce.
  * - `alarms_local: true` (the server then stops medicine Web Push to this member's browsers) only once alarms really are
- *   scheduled and can show: notifications granted, exact alarms not denied (Android), a real adapter, ≥ 1 alarm.
- *   Everything else declares false. Sign-out cleanup lives in `./cleanup`.
+ *   scheduled and can ring: notifications granted and not silenced, exact alarms not denied (Android), a real adapter,
+ *   ≥ 1 alarm. Everything else declares false. A permission that can't be READ changes nothing (alarms and the last
+ *   declaration stay). Sign-out cleanup lives in `./cleanup`.
+ * - Dose presses: a snooze / skip never applies to a dose already taken / skipped (`openDosesFor`); a snooze done in the
+ *   app rings again at once (`ringAgainAfterSnooze`); logs ÖRZA confirmed are kept for the planner (`./recent`).
  */
 import type { QueryClient } from '@tanstack/react-query';
 import { AppState } from 'react-native';
@@ -24,13 +27,24 @@ import { registerDevice } from '@/lib/device';
 import { KEYS, readSecure, readSecureJson } from '@/lib/secure';
 import type { PublicUser } from '@/lib/types';
 
-import { alarmAdapter, type AdapterStatus, type AlarmActionEvent, type NativeAlarmAction } from './adapter';
-import { attachAlarmPhotos } from './photos';
-import { MAX_HORIZON_DAYS, PHOTOS_PER_MEDICINE, planAlarms, planHash, type AlarmPlan } from './plan';
-import { enqueueDoseActions, flushDoseQueue, pendingDoseActions } from './queue';
-import { addDays, safeTimeZone, utcToZoned, validQuietHours } from './schedule';
+import { alarmAdapter, type AdapterStatus, type AlarmActionEvent, type DoseRef, type NativeAlarmAction } from './adapter';
+import { setAlarmDoseHandlers } from './bridge';
+import { attachAlarmPhotos, cachedAlarmPhotoUri } from './photos';
+import {
+  doseStateKey,
+  latestDoseStates,
+  MAX_HORIZON_DAYS,
+  PHOTOS_PER_MEDICINE,
+  planAlarms,
+  planHash,
+  snoozeAlarmItem,
+  type AlarmPlan,
+} from './plan';
+import { enqueueDoseActions, flushDoseQueue, pendingDoseActions, supersedeQueuedDose } from './queue';
+import { cachedDoseLogs, mergeRecentDoseLogs, noteSavedDoseLog, type SavedDoseLog } from './recent';
+import { addDays, isQuietAt, safeTimeZone, utcToZoned, validQuietHours } from './schedule';
 import { loadAlarmCache, saveAlarmCache, type AlarmCache, type AlarmSettings } from './store';
-import type { AlarmPlanItem, PendingDoseAction, PlanDoseState, PlanMedication, PlanReminder, QuietDose } from './types';
+import { isoOf, type AlarmPlanItem, type DoseActionKind, type PendingDoseAction, type PlanDoseState, type PlanMedication, type PlanReminder, type QuietDose } from './types';
 
 /* ───────────────────────────── Tunables ───────────────────────────── */
 
@@ -240,7 +254,7 @@ export async function checkAlarmsOnForeground(): Promise<void> {
   if (!userId) return;
   const native = await alarmAdapter.takeNativeActions().catch((): NativeAlarmAction[] => []);
   if (native.length) {
-    enqueueDoseActions(userId, native.map(fromNative));
+    enqueueDoseActions(userId, openNativeActions(userId, native).map(fromNative));
     requestAlarmSync('action', { delayMs: 300 });
     return;
   }
@@ -264,12 +278,83 @@ export function recordAlarmAction(event: AlarmActionEvent): boolean {
   const userId = foreground?.user.id;
   if (!userId || event.action === 'open' || !event.doses.length) return false;
   const action = event.action;
+  // A snooze / skip on an alarm still showing never applies to a dose already taken / skipped ("Snooze all" after one
+  // of the medicines was taken in the app): the server would overwrite that, ring it again and lower the stock twice.
+  const doses = openDosesFor(userId, action, event.doses);
   enqueueDoseActions(
     userId,
-    event.doses.map((d) => ({ medId: d.medId, scheduledFor: d.scheduledFor, action, snoozeMinutes: event.snoozeMinutes, createdAt: event.at }))
+    doses.map((d) => ({ medId: d.medId, scheduledFor: d.scheduledFor, action, snoozeMinutes: event.snoozeMinutes, createdAt: event.at }))
   );
   requestAlarmSync('action', { delayMs: 300 });
   return true;
+}
+
+/** The member's timezone as the engine knows it (cache, else the profile). */
+function engineTz(cache: AlarmCache, user: PublicUser | null | undefined): string {
+  return cache.settings?.tz ?? safeTimeZone(user?.profile?.timezone);
+}
+
+/**
+ * The doses an action pressed on an alarm may still apply to: all for "take" (taking a taken dose changes nothing);
+ * for snooze / skip only those not already taken / skipped as far as this phone knows (cached day logs, logs ÖRZA just
+ * confirmed, actions still queued). The queue re-checks with ÖRZA before sending.
+ */
+function openDosesFor(userId: string, action: DoseActionKind, doses: DoseRef[]): DoseRef[] {
+  if (action === 'take' || !doses.length) return doses;
+  try {
+    const cache = loadAlarmCache(userId);
+    const tz = engineTz(cache, foreground?.user);
+    const states = latestDoseStates(
+      cachedDoseLogs(cache, (iso) => utcToZoned(new Date(iso), tz).date),
+      pendingDoseActions(userId)
+    );
+    return doses.filter((d) => !states.get(doseStateKey(d.medId, d.scheduledFor))?.finished);
+  } catch {
+    return doses;
+  }
+}
+
+/** Native actions (one per dose) whose dose the action may still apply to. */
+function openNativeActions(userId: string, actions: NativeAlarmAction[]): NativeAlarmAction[] {
+  return actions.filter((a) => openDosesFor(userId, a.action, [a]).length > 0);
+}
+
+/**
+ * A dose snoozed in the app (alarm screen, Today): its re-ring goes on the phone now, built from the phone's data with
+ * the cached photos — not after the next sync's network round-trips (iOS suspends the app seconds after the screen
+ * locks). Same key as the planner's, so the next plan replaces it. Skipped inside quiet hours (web parity).
+ */
+function ringAgainAfterSnooze(doses: DoseRef[], until: number): void {
+  const user = foreground?.user;
+  if (!user || !doses.length || !Number.isFinite(until) || until <= Date.now() || alarmAdapter.maxScheduled <= 0) return;
+  if (state.status && state.status.notifications !== 'granted') return;
+  const cache = loadAlarmCache(user.id);
+  const meds = cache.meds?.list;
+  if (!meds?.length) return;
+  const tz = engineTz(cache, user);
+  const quiet = cache.settings ? cache.settings.quietHours : validQuietHours(user.integrations?.quiet_hours ?? null);
+  if (quiet && isQuietAt(quiet, new Date(until), tz)) return;
+  const byTime = new Map<string, string[]>();
+  for (const d of doses) {
+    const iso = isoOf(d.scheduledFor);
+    byTime.set(iso, [...(byTime.get(iso) ?? []), d.medId]);
+  }
+  for (const [scheduledFor, medIds] of byTime) {
+    const item = snoozeAlarmItem({ meds, scheduledFor, medIds, at: until, tz });
+    if (!item) continue;
+    const local = (id: string) => cachedAlarmPhotoUri(id);
+    item.photos = item.photoRefs.map((r) => local(r.id)).filter((u): u is string => !!u);
+    for (const d of item.doses ?? []) d.photos = d.photoRefs.map((r) => local(r.id)).filter((u): u is string => !!u);
+    void alarmAdapter.snoozeNow(item).catch(() => undefined);
+  }
+}
+
+/** ÖRZA confirmed a dose action done in the app: keep its log for the planner, drop older queued presses for it. */
+function doseActionSaved(log: SavedDoseLog, pressedAt: number): void {
+  const userId = foreground?.user.id;
+  if (!userId || !log?.medication_id) return;
+  noteSavedDoseLog(userId, log);
+  supersedeQueuedDose(userId, log.medication_id, log.scheduled_for, Number.isFinite(pressedAt) ? pressedAt : Date.now());
 }
 
 /** Ask for notification permission, then re-plan (the alarms can only be scheduled once it's granted). */
@@ -353,12 +438,14 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
     // 1. Actions pressed while JS wasn't running, then everything queued goes to the server.
     const native = await alarmAdapter.takeNativeActions().catch((): NativeAlarmAction[] => []);
     if (stale()) return result({ ok: false, skipped: 'stale', scheduled: 0 });
-    if (native.length) enqueueDoseActions(userId, native.map(fromNative));
+    if (native.length) enqueueDoseActions(userId, openNativeActions(userId, native).map(fromNative));
     await flushDoseQueue({ userId, queryClient });
 
-    // 2. Can this phone ring alarms at all?
-    const status = await alarmAdapter.status().catch(() => NO_STATUS);
+    // 2. Can this phone ring alarms at all? A status that can't be read right now changes nothing: the alarms and the
+    //    last declaration stay (taking it for "not allowed" would cancel every alarm).
+    const status = await alarmAdapter.status().catch(() => null);
     if (stale()) return result({ ok: false, skipped: 'stale', scheduled: 0 });
+    if (!status) return result({ ok: false, scheduled: state.scheduled, error: "Couldn't read this phone's notification settings." });
     const statusKey = JSON.stringify(status);
     setState({ status, supported: alarmAdapter.maxScheduled > 0 });
     if (alarmAdapter.maxScheduled <= 0) {
@@ -412,8 +499,14 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
     }
 
     // 7. Photos (never blocks: missing ones are simply left out this time).
-    await attachAlarmPhotos(plan.items, { keepIds: photoIdsToKeep(data.meds), budgetMs: opts.reason === 'background' ? 20_000 : 25_000 });
+    await attachAlarmPhotos([...plan.items, ...plan.partialAlarms], {
+      keepIds: photoIdsToKeep(data.meds),
+      budgetMs: opts.reason === 'background' ? 20_000 : 25_000,
+    });
     if (stale()) return result({ ok: false, skipped: 'stale', scheduled: 0 });
+
+    // 7b. Alarms still showing whose doses were partly handled: their buttons drop the handled doses (Android).
+    if (plan.partialAlarms.length) await alarmAdapter.refreshShowing(plan.partialAlarms).catch(() => undefined);
 
     // 8. Schedule — unless the very same plan is already on the phone.
     const hash = planHash(plan.items);
@@ -447,8 +540,9 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
       lastSyncAt: now,
     });
 
-    // 9. Tell the server whether this phone rings the medicine alarms (it then skips their Web Push).
-    await declare(status.exact !== false && scheduled > 0, opts.reason, stale);
+    // 9. Tell the server whether this phone rings the medicine alarms (it then skips their Web Push). Silenced alarms
+    //    (shade / Notification Center only) don't count: nobody would notice them.
+    await declare(status.exact !== false && !status.silenced && scheduled > 0, opts.reason, stale);
     return result({ ok: true, scheduled, offline: data.offline, ...(unchanged ? { skipped: 'unchanged' as const } : {}) });
   } catch (e) {
     return result({ ok: false, scheduled: state.scheduled, error: errorMessage(e, "Couldn't update the alarms.") });
@@ -603,6 +697,8 @@ async function loadData(session: Session, cache: AlarmCache, stale: () => boolea
   };
   await Promise.all(Array.from({ length: Math.min(DAY_FETCH_CONCURRENCY, toFetch.length) }, worker));
   if (stale()) return { error: 'stale' };
+  // Logs ÖRZA confirmed after a day was fetched (or while its fetch failed) win over that day's older copy.
+  mergeRecentDoseLogs(cache, (iso) => utcToZoned(new Date(iso), settings.tz).date);
   for (const d of Object.keys(cache.days)) if (!dates.includes(d)) delete cache.days[d];
   for (const d of [...dirty.dates]) if (!dates.includes(d)) dirty.dates.delete(d); // outside the window: nothing to fetch
 
@@ -625,3 +721,13 @@ const refillsOf = (plan: AlarmPlan) => plan.items.filter((i) => i.kind === 'refi
 function photoIdsToKeep(meds: PlanMedication[]): string[] {
   return meds.filter((m) => m.active !== false).flatMap((m) => (m.photo_ids ?? []).slice(0, PHOTOS_PER_MEDICINE));
 }
+
+/* ───────────────────────────── Hooks for the screens / adapters ───────────────────────────── */
+
+// Dose presses from the medicine screens (`./bridge`) and the doses an alarm's buttons may still act on (iOS filters
+// before it schedules a Snooze's re-ring). Registered when the engine loads — the app entry loads it at start.
+setAlarmDoseHandlers({ snoozed: ringAgainAfterSnooze, saved: doseActionSaved });
+alarmAdapter.setActionFilter((action, doses) => {
+  const userId = foreground?.user.id;
+  return userId ? openDosesFor(userId, action, doses) : doses;
+});

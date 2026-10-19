@@ -130,6 +130,7 @@ function FullCard({ browserCount = 0 }: { browserCount?: number }) {
   else if (!status) tag = <Skeleton width={64} height={22} radius={radii.pill} />;
   else if (s.ready && !s.needsAttention) tag = <Tag label="On" tone="success" dot />;
   else if (s.ready) tag = <Tag label="On · check" tone="warning" dot />;
+  else if (status.notifications === 'granted' && status.silenced) tag = <Tag label="Silent" tone="warning" dot />;
   else tag = <Tag label="Off" tone="warning" dot />;
 
   return (
@@ -200,6 +201,30 @@ function FullCard({ browserCount = 0 }: { browserCount?: number }) {
               }
             />
           )}
+
+          {/* Allowed, but silenced: Android "Medicine alarms" set to Silent / no sound; iOS Notification Center only */}
+          {status.notifications === 'granted' && status.silenced ? (
+            <CheckRow
+              state="warn"
+              title="Alarms are silenced"
+              body={
+                isAndroid
+                  ? 'The "Medicine alarms" notifications are set to Silent (or no sound), so doses only appear in the list. Turn their sound back on.'
+                  : 'ÖRZA notifications go to Notification Center only — sounds, banners and the lock screen are off. Turn them on so doses ring.'
+              }
+              action={<Button label="Fix" icon="volume-2" variant="secondary" size="sm" onPress={() => void s.openSettings('notifications')} />}
+            />
+          ) : null}
+
+          {/* Android: the alarm channel may not pop up (also stops the full-screen alarm) */}
+          {status.notifications === 'granted' && status.popup === false ? (
+            <CheckRow
+              state="warn"
+              title="Alarms don't pop up"
+              body={'Turn on "Pop on screen" for "Medicine alarms" so a dose fills the screen with its photo.'}
+              action={<Button label="Fix" icon="maximize" variant="secondary" size="sm" onPress={() => void s.openSettings('notifications')} />}
+            />
+          ) : null}
 
           {/* Android: exact alarm times */}
           {status.exact === true ? <CheckRow state="ok" title="Exact alarm times" /> : null}
@@ -326,6 +351,10 @@ function CompactCard({ hideWhenIdle, style }: { hideWhenIdle?: boolean; style?: 
           }}
         />
       );
+    } else if (status.silenced) {
+      title = 'Alarms are silenced on this phone';
+      body = Platform.OS === 'ios' ? 'Turn on sounds, banners or the lock screen for ÖRZA.' : 'Turn the sound back on for "Medicine alarms".';
+      action = <Button label="Fix" variant="secondary" size="sm" onPress={() => void s.openSettings('notifications')} />;
     } else {
       title = 'Alarms may ring late';
       body = 'Allow exact alarm times for ÖRZA.';
@@ -343,7 +372,7 @@ function CompactCard({ hideWhenIdle, style }: { hideWhenIdle?: boolean; style?: 
     body = engine.lastSyncAt ? 'No medicine alarms in the next 7 days.' : 'Setting your alarms…';
   }
 
-  const extra = s.ready && status.fullScreen === false ? ' · Full-screen alarms are off' : '';
+  const extra = s.ready && (status.fullScreen === false || status.popup === false) ? ' · Full-screen alarms are off' : '';
   return (
     <GlassCard padding={spacing.md} style={style}>
       <View style={styles.compactRow}>

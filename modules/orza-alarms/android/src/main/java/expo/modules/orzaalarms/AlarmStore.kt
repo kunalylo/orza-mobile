@@ -45,16 +45,34 @@ internal object AlarmStore {
     out
   }
 
-  fun writePending(context: Context, items: Map<String, AlarmItem>) = locked {
+  /** False when pending.json couldn't be written (storage full / unavailable) — the old file is kept. */
+  fun writePending(context: Context, items: Map<String, AlarmItem>): Boolean = locked {
     val o = JSONObject()
     for ((key, item) in items) o.put(key, item.toJson())
     writeText(context, PENDING, o.toString())
   }
 
-  fun putPending(context: Context, item: AlarmItem) = locked {
+  /** False when it couldn't be saved. */
+  fun putPending(context: Context, item: AlarmItem): Boolean = locked {
     val all = readPending(context)
     all[item.key] = item
     writePending(context, all)
+  }
+
+  /**
+   * Removes and returns the pending alarm `key` when it was due at or before `now` — an alarm that hasn't been
+   * delivered yet (firing removes it). Null when there is none or it is still in the future.
+   */
+  fun takePendingIfDue(context: Context, key: String, now: Long): AlarmItem? = locked {
+    val all = readPending(context)
+    val item = all[key]
+    if (item == null || item.at > now) {
+      null
+    } else {
+      all.remove(key)
+      writePending(context, all)
+      item
+    }
   }
 
   /** Removes and returns the pending alarm `key` if it is the one scheduled for `at` (± 1 s); null otherwise. */
@@ -195,16 +213,25 @@ internal object AlarmStore {
     }
   }
 
-  private fun writeText(context: Context, name: String, text: String) {
+  /** True when the file was written; false (logged, the previous content kept) otherwise. */
+  private fun writeText(context: Context, name: String, text: String): Boolean {
     val f = file(context, name)
     var out: FileOutputStream? = null
-    try {
+    return try {
       out = f.startWrite()
       out.write(text.toByteArray(Charsets.UTF_8))
       f.finishWrite(out)
+      true
     } catch (e: Exception) {
       Log.e(AlarmConst.TAG, "Couldn't write $name", e)
-      if (out != null) f.failWrite(out)
+      if (out != null) {
+        try {
+          f.failWrite(out)
+        } catch (e2: Exception) {
+          // Nothing more to undo.
+        }
+      }
+      false
     }
   }
 }

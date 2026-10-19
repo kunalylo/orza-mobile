@@ -167,10 +167,22 @@ class AlarmActivityListener : ReactActivityLifecycleListener {
 
   override fun onNewIntent(intent: Intent?): Boolean {
     val activity = AlarmLockScreen.currentActivity()
-    if (activity != null) handle(activity, intent)
+    if (activity != null && intent != null) {
+      // An alarm's deep link becomes the activity's intent. When the process was dead, Android re-creates the activity
+      // from Recents with its OLD launcher intent and hands the alarm over here, while JS is still loading — React
+      // Native then drops the `url` event ("context is not ready") and the app's initial URL (`getIntent()`) would be
+      // the launcher's: the app would open its home over the lock screen instead of the alarm. A running app still
+      // gets React Native's `url` event as usual.
+      if (isAlarmDeepLink(intent)) activity.setIntent(intent)
+      handle(activity, intent)
+    }
     // false: React Native still handles the intent (the deep link to the alarm screen).
     return false
   }
+
+  /** Our notification / full-screen intents: ACTION_VIEW on `orza://…` carrying the alarm key. */
+  private fun isAlarmDeepLink(intent: Intent): Boolean =
+    intent.action == Intent.ACTION_VIEW && intent.data != null && intent.hasExtra(AlarmConst.EXTRA_KEY)
 
   private fun handle(activity: Activity, intent: Intent?) {
     if (intent == null) return

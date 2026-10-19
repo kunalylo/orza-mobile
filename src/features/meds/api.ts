@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { promptAlarmPermission } from '@/features/alarms/prompt';
+import { alarmDoseSaved, alarmSnoozePressed } from '@/lib/alarms/bridge';
 import { api, ApiError, errorMessage } from '@/lib/api';
 import { useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
@@ -253,6 +254,10 @@ export function useDoseActions(date: string, tz: string) {
     if (inflight.current.has(key)) return false;
     inflight.current.add(key);
     setPending((p) => ({ ...p, [key]: action }));
+    const pressedAt = Date.now();
+    // The phone's alarm rings again after the snooze even if the app is closed before the request (or the next alarm
+    // sync) finishes.
+    if (action === 'snooze') alarmSnoozePressed([{ medId: d.medication_id, scheduledFor: d.scheduled_for }], pressedAt + SNOOZE_MINUTES * 60_000);
     const writes = doseWrites.get(date) ?? { inFlight: 0, refetch: false };
     writes.inFlight += 1;
     doseWrites.set(date, writes);
@@ -261,6 +266,8 @@ export function useDoseActions(date: string, tz: string) {
     replaceDose(key, withAction(d, action));
     try {
       const log = await medsApi.dose(d, action);
+      // The alarm engine keeps the confirmed log (a failed refetch can't lose it) and drops older queued presses.
+      alarmDoseSaved(log, pressedAt);
       const updated = withAction(d, action, log);
       replaceDose(key, updated);
       writes.refetch = true;

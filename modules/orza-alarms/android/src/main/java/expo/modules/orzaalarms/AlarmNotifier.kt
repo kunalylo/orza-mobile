@@ -96,6 +96,30 @@ internal object AlarmNotifier {
     return channel.importance != NotificationManager.IMPORTANCE_NONE
   }
 
+  private fun findChannel(context: Context, channelId: String): NotificationChannel? =
+    try {
+      context.getSystemService(NotificationManager::class.java)?.getNotificationChannel(channelId)
+    } catch (e: Exception) {
+      null
+    }
+
+  /**
+   * The channel is on but can't make a sound: set to "Silent" (importance below DEFAULT) or its sound set to "None".
+   * Alarms then only appear in the shade — they don't ring. (Turned off completely = `channelEnabled` false.)
+   */
+  fun channelSilenced(context: Context, channelId: String): Boolean {
+    val channel = findChannel(context, channelId) ?: return false
+    if (channel.importance == NotificationManager.IMPORTANCE_NONE) return false
+    return channel.importance < NotificationManager.IMPORTANCE_DEFAULT || channel.sound == null
+  }
+
+  /** The channel may pop up on screen (heads-up) — needed for the full-screen alarm too (HIGH importance). */
+  fun channelPopsUp(context: Context, channelId: String): Boolean {
+    val channel = findChannel(context, channelId) ?: return true
+    if (channel.importance == NotificationManager.IMPORTANCE_NONE) return true // reported as off instead
+    return channel.importance >= NotificationManager.IMPORTANCE_HIGH
+  }
+
   fun customSoundId(context: Context): Int =
     context.resources.getIdentifier(SOUND_NAME, "raw", context.packageName)
 
@@ -185,10 +209,11 @@ internal object AlarmNotifier {
   /* ───────────────────────────── Posting ───────────────────────────── */
 
   /**
-   * Shows `item`. `quiet` = the silent copy of a ring item (after RING_LIMIT_MS or `silenceRinging`).
+   * Shows `item`. `quiet` = the silent copy of a ring item (after RING_LIMIT_MS or `silenceRinging`); `missed` (with
+   * `quiet`) marks a dose alarm that couldn't ring in time ("Missed" next to the app name).
    * Returns false when notifications are off (nothing can show).
    */
-  fun post(context: Context, item: AlarmItem, quiet: Boolean): Boolean {
+  fun post(context: Context, item: AlarmItem, quiet: Boolean, missed: Boolean = false): Boolean {
     ensureChannels(context)
     val manager = NotificationManagerCompat.from(context)
     if (!manager.areNotificationsEnabled()) return false
@@ -213,6 +238,7 @@ internal object AlarmNotifier {
       .setAutoCancel(!item.ring)
       .setOnlyAlertOnce(quiet)
       .setTimeoutAfter(if (ringing) RINGING_TIMEOUT_MS else if (item.ring) QUIET_TIMEOUT_MS else REMINDER_TIMEOUT_MS)
+    if (missed) builder.setSubText("Missed")
 
     val photos = AlarmPhotos.load(item.photos)
     if (photos != null) {

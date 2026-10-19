@@ -270,20 +270,19 @@ export function dateTrigger(at: number): Notifications.DateTriggerInput {
 /**
  * Alarms need full authorisation: provisional / ephemeral delivery is silent (Notification Center only), so it counts
  * as "not yet" (the system prompt can still upgrade it). Authorised with every way of showing switched off counts as
- * denied. The time-sensitive switch isn't readable through expo-notifications (`fullScreen` stays undefined).
+ * denied. Authorised with no sound, no banner and no lock screen — Notification Center only — is `silenced`: alarms
+ * arrive unnoticed, so the phone must not claim to ring them. The time-sensitive switch isn't readable through
+ * expo-notifications (`fullScreen` stays undefined).
  */
 export function toAdapterStatus(p: Notifications.NotificationPermissionsStatus): AdapterStatus {
   const ios = p.ios;
   const s = ios?.status;
   const { AUTHORIZED, DENIED } = Notifications.IosAuthorizationStatus;
   if (s === AUTHORIZED || (s === undefined && p.granted)) {
-    const nothingShows =
-      !!ios &&
-      ios.allowsAlert === false &&
-      ios.allowsSound === false &&
-      ios.allowsDisplayOnLockScreen === false &&
-      ios.allowsDisplayInNotificationCenter === false;
-    return { notifications: nothingShows ? 'denied' : 'granted', canAskNotifications: false };
+    const unnoticed = !!ios && ios.allowsAlert === false && ios.allowsSound === false && ios.allowsDisplayOnLockScreen === false;
+    const nothingShows = unnoticed && ios.allowsDisplayInNotificationCenter === false;
+    if (nothingShows) return { notifications: 'denied', canAskNotifications: false };
+    return { notifications: 'granted', canAskNotifications: false, ...(unnoticed ? { silenced: true } : {}) };
   }
   if (s === DENIED || (s === undefined && p.status === Notifications.PermissionStatus.DENIED)) {
     return { notifications: 'denied', canAskNotifications: false };

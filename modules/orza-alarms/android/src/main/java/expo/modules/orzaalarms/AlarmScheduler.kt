@@ -35,10 +35,20 @@ internal object AlarmScheduler {
 
   /* ───────────────────────────── Whole set ───────────────────────────── */
 
+  /** pending.json couldn't be written: nothing was changed (the JS call rejects and the engine reports it). */
+  class StoreWriteException : IllegalStateException("Couldn't save the alarms on this phone — is its storage full?")
+
   /**
-   * Replaces the pending set with `incoming` (future items only). Kept from the old set: future test alarms and
-   * natively created snoozes whose action JS hasn't collected yet (a plan computed before that Snooze press would
-   * otherwise cancel it). Returns how many alarms are now pending.
+   * Replaces the pending set with `incoming` (future items only — the plan never carries past instants). Kept from the
+   * old set:
+   * - alarms already due that haven't been delivered yet (an inexact / Doze-delayed alarm, or one whose broadcast is
+   *   queued right now), up to MAX_LATE_MS — firing removes an item, so one still here never rang. They are set again
+   *   (they fire at once). The engine removes one whose doses were handled meanwhile with `dismiss(key)`;
+   * - future test alarms;
+   * - natively created snoozes whose action JS hasn't collected yet (a plan computed before that Snooze press would
+   *   otherwise cancel it).
+   * Throws StoreWriteException (before touching AlarmManager) when the new set can't be saved — every alarm that fires
+   * is looked up there, so alarms set without it would never ring. Returns how many alarms are now pending.
    */
   fun scheduleAll(context: Context, incoming: List<AlarmItem>): Int = AlarmStore.locked {
     // Under the store lock (AlarmManager calls are quick): a Snooze pressed meanwhile can't interleave.
@@ -47,23 +57,30 @@ internal object AlarmScheduler {
     val next = LinkedHashMap<String, AlarmItem>()
     for (item in incoming) if (item.at > now) next[item.key] = item
     for ((key, item) in old) {
-      if (next.containsKey(key) || item.at <= now) continue
+      if (next.containsKey(key)) continue
+      if (item.at <= now) {
+        if (now - item.at <= AlarmConst.MAX_LATE_MS) next[key] = item
+        continue
+      }
       val nativeSnooze = item.nativeActionId
       val keep = item.isTest || (nativeSnooze != null && AlarmStore.hasAction(context, nativeSnooze))
       if (keep) next[key] = item
     }
-    AlarmStore.writePending(context, next)
+    if (!AlarmStore.writePending(context, next)) throw StoreWriteException()
     for (key in old.keys) if (!next.containsKey(key)) cancelAlarm(context, key)
     val exact = canScheduleExact(context)
     for (item in next.values) setAlarm(context, item, exact)
     next.size
   }
 
-  /** Adds or replaces one alarm without touching the others (C4's test alarm, a native snooze). */
+  /**
+   * Adds or replaces one alarm without touching the others (C4's test alarm, a snooze re-ring). False when it is in
+   * the past; throws StoreWriteException when it can't be saved (nothing is set then).
+   */
   fun scheduleOne(context: Context, item: AlarmItem): Boolean {
     if (item.at <= System.currentTimeMillis()) return false
     AlarmStore.locked {
-      AlarmStore.putPending(context, item)
+      if (!AlarmStore.putPending(context, item)) throw StoreWriteException()
       setAlarm(context, item)
     }
     return true
@@ -88,27 +105,33 @@ internal object AlarmScheduler {
   }
 
   /**
-   * After a reboot / app update / clock change / exact-alarm grant: set every stored future alarm again. After a
-   * reboot (`ringMissed`), ring items missed by ≤ MISSED_GRACE_MS ring now; other past items are dropped.
-   * Past items within 2 min are set again on other occasions (they fire at once) — their alarm may be just due.
+   * After a reboot / app update / clock change / exact-alarm grant: set every stored future alarm again.
+   * - After a reboot (`ringMissed`; the phone's alarms were wiped): ring items missed by ≤ MISSED_GRACE_MS ring now,
+   *   older ones (≤ MISSED_SHOW_MS) show silently as missed; other past items are dropped.
+   * - Otherwise the alarms still exist: past items not delivered yet are set again (they fire at once) up to
+   *   MAX_LATE_MS, like `scheduleAll`; older dose alarms show silently as missed.
    */
   fun rescheduleStored(context: Context, ringMissed: Boolean) {
     val now = System.currentTimeMillis()
+    val ringNow = ArrayList<AlarmItem>()
     val missed = ArrayList<AlarmItem>()
     AlarmStore.locked {
       val keep = LinkedHashMap<String, AlarmItem>()
       for ((key, item) in AlarmStore.readPending(context)) {
+        val late = now - item.at
         when {
           item.at > now -> keep[key] = item
-          ringMissed -> if (item.ring && now - item.at <= AlarmConst.MISSED_GRACE_MS) missed.add(item)
-          now - item.at <= 2 * 60_000L -> keep[key] = item
+          ringMissed && item.ring && late <= AlarmConst.MISSED_GRACE_MS -> ringNow.add(item)
+          !ringMissed && late <= AlarmConst.MAX_LATE_MS -> keep[key] = item
+          item.ring && late <= AlarmConst.MISSED_SHOW_MS -> missed.add(item)
         }
       }
       AlarmStore.writePending(context, keep)
       val exact = canScheduleExact(context)
       for (item in keep.values) setAlarm(context, item, exact)
     }
-    for (item in missed) AlarmFiring.show(context, item)
+    for (item in ringNow) AlarmFiring.show(context, item)
+    for (item in missed) AlarmFiring.showMissed(context, item)
   }
 
   /* ───────────────────────────── One alarm ───────────────────────────── */

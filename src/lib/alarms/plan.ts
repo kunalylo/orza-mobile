@@ -59,8 +59,15 @@ export const REFILL_SOON_MS = 60_000;
 export const SETTLE_LOOKBACK_MS = 12 * 3_600_000;
 export const PHOTOS_PER_MEDICINE = 2;
 export const DEFAULT_SNOOZE_MINUTES = 10;
-/** When doses and reminders compete for the cap, reminders / refills keep at least this share of it. */
-export const NON_RING_SHARE = 0.25;
+/**
+ * Doses of one alarm snoozed together ring together: their ends are set by the server one request after another and
+ * can straddle a minute, so ends within this of the group's first one share one re-ring.
+ */
+export const SNOOZE_GROUP_MS = 60_000;
+/** Phone and server clocks may differ: a server log counts as newer than a press on this phone only beyond this. */
+export const CLOCK_SKEW_MS = 60_000;
+/** Added to the last dose alarm when the cap (iOS keeps 64) ends the dose alarms before the 7 days are covered. */
+export const CONTINUE_NOTE = 'Open ÖRZA to set your next alarms';
 
 /* Texts — same wording as the website (components/care/reminders/shared.ts). */
 const TIMING_TEXT: Record<string, string> = {
@@ -120,6 +127,11 @@ export interface AlarmPlan {
   horizonEnd: number;
   /** Keys of recent alarms whose doses are all handled — remove the notification if it's still showing. */
   settledKeys: string[];
+  /**
+   * Recent alarms (last 12 h) of several medicines where some — not all — were taken / skipped: each rebuilt (same key)
+   * with only the open doses, so a notification still showing can drop the handled ones from its buttons.
+   */
+  partialAlarms: AlarmPlanItem[];
 }
 
 /* ───────────────────────────── Helpers ───────────────────────────── */
@@ -154,45 +166,76 @@ function photoRefsOf(m: PlanMedication): PhotoRef[] {
   return out;
 }
 
-interface DoseState {
+export interface DoseState {
   acted: boolean;
   /** Taken or skipped. */
   finished: boolean;
   snoozeUntil?: number;
+  /** When it was done (server `acted_at`, or when a pending action was pressed). Epoch ms. */
+  actedAt?: number;
 }
 
-const stateKey = (medId: string, at: string | number) => `${medId}|${typeof at === 'number' ? at : Date.parse(at)}`;
+export type KnownDoseState = DoseState & { medId: string; scheduledFor: string };
 
-function buildStates(logs: PlanDoseState[], pending: PendingDoseAction[]): Map<string, DoseState & { medId: string; scheduledFor: string }> {
-  const map = new Map<string, DoseState & { medId: string; scheduledFor: string }>();
+/** Map key of a dose: `<medId>|<epoch ms>`. */
+export const doseStateKey = (medId: string, at: string | number) => `${medId}|${typeof at === 'number' ? at : Date.parse(at)}`;
+const stateKey = doseStateKey;
+
+/**
+ * May an action pressed on this phone (not confirmed by ÖRZA yet) replace what ÖRZA last said about the dose?
+ * - A snooze / skip never undoes a dose that is already taken or skipped (a "Snooze all" on a group alarm whose other
+ *   medicine was taken meanwhile, a snooze queued offline before the dose was taken on the Today screen).
+ * - Otherwise the newer one wins; a server log counts as newer only beyond CLOCK_SKEW_MS.
+ */
+export function pendingWins(p: Pick<PendingDoseAction, 'action' | 'createdAt'>, server: Pick<DoseState, 'finished' | 'actedAt'> | undefined): boolean {
+  if (!server) return true;
+  if (server.finished && p.action !== 'take') return false;
+  if (server.actedAt !== undefined && Number.isFinite(p.createdAt) && server.actedAt > p.createdAt + CLOCK_SKEW_MS) return false;
+  return true;
+}
+
+/** The server's dose state as the planner reads it (null: not acted on). */
+export function serverDoseState(l: Pick<PlanDoseState, 'status' | 'snooze_until' | 'acted_at'>): DoseState | null {
+  const finished = l.status === 'taken' || l.status === 'skipped';
+  const acted = finished || l.status === 'snoozed' || !!l.acted_at;
+  if (!acted) return null;
+  const until = l.snooze_until ? Date.parse(l.snooze_until) : NaN;
+  const actedAt = l.acted_at ? Date.parse(l.acted_at) : NaN;
+  return {
+    acted,
+    finished,
+    snoozeUntil: !finished && Number.isFinite(until) ? until : undefined,
+    ...(Number.isFinite(actedAt) ? { actedAt } : {}),
+  };
+}
+
+/** Every dose's latest known state: ÖRZA's logs, with this phone's unsent actions on top where they win. */
+export function latestDoseStates(logs: PlanDoseState[], pending: PendingDoseAction[]): Map<string, KnownDoseState> {
+  const map = new Map<string, KnownDoseState>();
   for (const l of logs) {
     if (!l?.medication_id || !l.scheduled_for || !Number.isFinite(Date.parse(l.scheduled_for))) continue;
-    const finished = l.status === 'taken' || l.status === 'skipped';
-    const acted = finished || l.status === 'snoozed' || !!l.acted_at;
-    if (!acted) continue;
-    const until = l.snooze_until ? Date.parse(l.snooze_until) : NaN;
-    map.set(stateKey(l.medication_id, l.scheduled_for), {
-      medId: l.medication_id,
-      scheduledFor: isoOf(l.scheduled_for),
-      acted,
-      finished,
-      snoozeUntil: !finished && Number.isFinite(until) ? until : undefined,
-    });
+    const state = serverDoseState(l);
+    if (!state) continue;
+    map.set(stateKey(l.medication_id, l.scheduled_for), { medId: l.medication_id, scheduledFor: isoOf(l.scheduled_for), ...state });
   }
-  // Pending actions are newer than anything the server returned.
   for (const p of pending) {
     if (!p?.medId || !Number.isFinite(Date.parse(p.scheduledFor))) continue;
+    const key = stateKey(p.medId, p.scheduledFor);
+    if (!pendingWins(p, map.get(key))) continue;
     const snooze = p.action === 'snooze';
-    map.set(stateKey(p.medId, p.scheduledFor), {
+    map.set(key, {
       medId: p.medId,
       scheduledFor: isoOf(p.scheduledFor),
       acted: true,
       finished: !snooze,
       snoozeUntil: snooze ? p.createdAt + Math.min(60, Math.max(5, p.snoozeMinutes ?? DEFAULT_SNOOZE_MINUTES)) * 60_000 : undefined,
+      actedAt: p.createdAt,
     });
   }
   return map;
 }
+
+const buildStates = latestDoseStates;
 
 /** Scheduled occurrences of a medicine in [from, to), minus those from before it was added. */
 function medOccurrences(m: PlanMedication, from: number, to: number, tz: string) {
@@ -268,6 +311,44 @@ function doseItem(key: string, at: number, doses: AlarmDose[], meds: Map<string,
 const alarmPath = (scheduledFor: string, medId?: string) =>
   `/alarm?at=${encodeURIComponent(scheduledFor)}${medId ? `&med=${encodeURIComponent(medId)}` : ''}`;
 
+/** The re-ring of snoozed doses of one scheduled time. */
+function snoozeItem(key: string, at: number, scheduledFor: string, doses: AlarmDose[], meds: Map<string, PlanMedication>): AlarmPlanItem {
+  const item = doseItem(key, at, doses, meds, alarmPath(scheduledFor, doses.length === 1 ? doses[0].medId : undefined));
+  if (doses.length === 1) item.body = `${item.body} · snoozed from ${time12(doses[0].localTime)}`;
+  return item;
+}
+
+const isAlarmMed = (m: PlanMedication | null | undefined): m is PlanMedication => !!m && m.active !== false && !m.as_needed && !!m.schedule;
+
+/**
+ * The re-ring of doses snoozed in the app (alarm screen, Today), exactly as the planner will plan it — same key, texts
+ * and photo refs — so the phone can set it at once, before the snooze has even reached ÖRZA; the next plan replaces
+ * it. Null when none of the medicines rings (deleted, paused, SOS).
+ */
+export function snoozeAlarmItem(input: { meds: PlanMedication[]; scheduledFor: string; medIds: string[]; at: number; tz: string }): AlarmPlanItem | null {
+  const tz = safeTimeZone(input.tz);
+  const medsById = new Map(input.meds.filter(isAlarmMed).map((m) => [m.id, m]));
+  const scheduledFor = isoOf(input.scheduledFor);
+  const t = Date.parse(scheduledFor);
+  if (!Number.isFinite(t) || !Number.isFinite(input.at)) return null;
+  const localTime = utcToZoned(new Date(t), tz).time;
+  const doses = [...new Set(input.medIds)]
+    .map((id) => medsById.get(id))
+    .filter(isAlarmMed)
+    .map((m) => toAlarmDose(m, scheduledFor, localTime, true));
+  if (!doses.length) return null;
+  return snoozeItem(
+    snoozeAlarmKey(
+      scheduledFor,
+      doses.map((d) => d.medId)
+    ),
+    input.at,
+    scheduledFor,
+    doses,
+    medsById
+  );
+}
+
 const byTime = (a: AlarmPlanItem, b: AlarmPlanItem) => a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 
 /* ───────────────────────────── Planner ───────────────────────────── */
@@ -281,7 +362,7 @@ export function planAlarms(input: PlanInput): AlarmPlan {
   const quiet = validQuietHours(input.quietHours);
   const from = now + 1; // strictly after now
 
-  const alarmMeds = input.meds.filter((m) => m && m.active !== false && !m.as_needed && m.schedule);
+  const alarmMeds = input.meds.filter(isAlarmMed);
   const medsById = new Map(alarmMeds.map((m) => [m.id, m]));
   const states = buildStates(input.doseStates ?? [], input.pending ?? []);
 
@@ -310,8 +391,11 @@ export function planAlarms(input: PlanInput): AlarmPlan {
     ring.push(doseItem(doseAlarmKey(iso), at, doses, medsById, alarmPath(iso, doses.length === 1 ? doses[0].medId : undefined)));
   }
 
-  /* 2. Snoozed doses — re-ring at the snooze end; doses of one alarm snoozed into the same minute ring together. */
-  const snoozeGroups = new Map<string, { at: number; scheduledFor: string; doses: AlarmDose[] }>();
+  /*
+   * 2. Snoozed doses — re-ring at the snooze end. Doses of one scheduled time whose snoozes end within SNOOZE_GROUP_MS
+   *    of each other ("Snooze all", sent one request after another) ring together, at the latest of those ends.
+   */
+  const snoozedByTime = new Map<string, { until: number; m: PlanMedication; localTime: string }[]>();
   for (const s of states.values()) {
     if (s.finished || s.snoozeUntil === undefined || s.snoozeUntil <= now || s.snoozeUntil >= horizonEnd) continue;
     const m = medsById.get(s.medId);
@@ -329,23 +413,31 @@ export function planAlarms(input: PlanInput): AlarmPlan {
       });
       continue;
     }
-    const groupKey = `${s.scheduledFor}|${Math.floor(s.snoozeUntil / 60_000)}`;
-    const g = snoozeGroups.get(groupKey) ?? { at: 0, scheduledFor: s.scheduledFor, doses: [] };
-    g.at = Math.max(g.at, s.snoozeUntil); // the last snooze end of the minute, so none rings early
-    g.doses.push(toAlarmDose(m, s.scheduledFor, localTime, true));
-    snoozeGroups.set(groupKey, g);
+    const list = snoozedByTime.get(s.scheduledFor) ?? [];
+    list.push({ until: s.snoozeUntil, m, localTime });
+    snoozedByTime.set(s.scheduledFor, list);
+  }
+  const snoozeGroups: { first: number; at: number; scheduledFor: string; doses: AlarmDose[] }[] = [];
+  for (const [scheduledFor, list] of snoozedByTime) {
+    let g: (typeof snoozeGroups)[number] | null = null;
+    for (const e of list.sort((a, b) => a.until - b.until || a.m.id.localeCompare(b.m.id))) {
+      if (!g || e.until - g.first > SNOOZE_GROUP_MS) {
+        g = { first: e.until, at: e.until, scheduledFor, doses: [] };
+        snoozeGroups.push(g);
+      }
+      g.at = Math.max(g.at, e.until); // the group's last snooze end, so none rings early
+      g.doses.push(toAlarmDose(e.m, scheduledFor, e.localTime, true));
+    }
   }
   const usedKeys = new Set<string>();
-  for (const g of [...snoozeGroups.values()].sort((a, b) => a.at - b.at)) {
+  for (const g of snoozeGroups.sort((a, b) => a.at - b.at)) {
     let key = snoozeAlarmKey(
       g.scheduledFor,
       g.doses.map((d) => d.medId)
     );
     if (usedKeys.has(key)) key = `${key}:${new Date(g.at).toISOString()}`;
     usedKeys.add(key);
-    const item = doseItem(key, g.at, g.doses, medsById, alarmPath(g.scheduledFor, g.doses.length === 1 ? g.doses[0].medId : undefined));
-    if (g.doses.length === 1) item.body = `${item.body} · snoozed from ${time12(g.doses[0].localTime)}`;
-    ring.push(item);
+    ring.push(snoozeItem(key, g.at, g.scheduledFor, g.doses, medsById));
   }
 
   /* 3. Reminders. */
@@ -410,15 +502,23 @@ export function planAlarms(input: PlanInput): AlarmPlan {
     }
   }
 
-  /* 5. Cap — doses first, reminders / refills keep a share; everything sorted by time. */
+  /*
+   * 5. Cap — medicine alarms may use the whole cap (iOS keeps 64 pending); reminders / refills fill what's left.
+   *    When the cap ends the dose alarms before the horizon, the last one asks the member to open ÖRZA (which plans the
+   *    next ones) — otherwise the doses after it would ring nowhere until the app runs again.
+   */
   ring.sort(byTime);
   other.sort(byTime);
-  const reserve = Math.min(other.length, Math.floor(maxItems * NON_RING_SHARE));
-  const ringKept = ring.slice(0, Math.max(0, maxItems - reserve));
+  const ringKept = ring.slice(0, maxItems);
   const otherKept = other.slice(0, Math.max(0, maxItems - ringKept.length));
   const ringCovered = ring.length > ringKept.length ? ring[ringKept.length].at : horizonEnd;
   const otherCovered = other.length > otherKept.length ? other[otherKept.length].at : horizonEnd;
+  if (ringKept.length && ring.length > ringKept.length) {
+    const last = ringKept[ringKept.length - 1];
+    ringKept[ringKept.length - 1] = { ...last, body: `${last.body} · ${CONTINUE_NOTE}` };
+  }
   const items = [...ringKept, ...otherKept].sort(byTime);
+  const recent = recentAlarms(alarmMeds, medsById, states, now, tz);
 
   return {
     items,
@@ -427,7 +527,8 @@ export function planAlarms(input: PlanInput): AlarmPlan {
     dropped: ring.length + other.length - items.length,
     coveredUntil: Math.min(ringCovered, otherCovered, horizonEnd),
     horizonEnd,
-    settledKeys: settledKeys(alarmMeds, states, now, tz),
+    settledKeys: recent.settledKeys,
+    partialAlarms: recent.partialAlarms,
   };
 }
 
@@ -451,26 +552,48 @@ function refillTime(date: string, nowForToday: number | null, quiet: QuietHours 
   return at;
 }
 
-/** Alarms of the last hours whose doses are all handled (shown notifications can go). */
-function settledKeys(alarmMeds: PlanMedication[], states: Map<string, DoseState>, now: number, tz: string): string[] {
-  const byInstant = new Map<number, { medId: string; state?: DoseState }[]>();
+/**
+ * Alarms of the last hours that may still be showing:
+ * - `settledKeys`: every dose handled — the notification can go;
+ * - `partialAlarms`: several medicines, some (not all) taken / skipped — the alarm (and a group snooze of it) rebuilt
+ *   with only the open doses, so its buttons no longer act on the handled ones.
+ */
+function recentAlarms(
+  alarmMeds: PlanMedication[],
+  medsById: Map<string, PlanMedication>,
+  states: Map<string, DoseState>,
+  now: number,
+  tz: string
+): { settledKeys: string[]; partialAlarms: AlarmPlanItem[] } {
+  const byInstant = new Map<number, { m: PlanMedication; localTime: string; state?: DoseState }[]>();
   for (const m of alarmMeds) {
     for (const o of medOccurrences(m, now - SETTLE_LOOKBACK_MS, now + 1, tz)) {
       const at = o.at.getTime();
       const list = byInstant.get(at) ?? [];
-      list.push({ medId: m.id, state: states.get(stateKey(m.id, at)) });
+      list.push({ m, localTime: o.local_time, state: states.get(stateKey(m.id, at)) });
       byInstant.set(at, list);
     }
   }
   const keys: string[] = [];
+  const partial: AlarmPlanItem[] = [];
   for (const [at, list] of [...byInstant].sort((a, b) => a[0] - b[0])) {
     const iso = new Date(at).toISOString();
     if (list.every((d) => d.state?.acted)) keys.push(doseAlarmKey(iso));
     const finished = list.filter((d) => d.state?.finished);
-    for (const d of finished) keys.push(snoozeAlarmKey(iso, [d.medId]));
-    if (list.length > 1 && finished.length === list.length) keys.push(snoozeAlarmKey(iso, list.map((d) => d.medId)));
+    for (const d of finished) keys.push(snoozeAlarmKey(iso, [d.m.id]));
+    if (list.length > 1 && finished.length === list.length) keys.push(snoozeAlarmKey(iso, list.map((d) => d.m.id)));
+    if (list.length > 1 && finished.length > 0 && finished.length < list.length) {
+      const open = list.filter((d) => !d.state?.finished);
+      const path = alarmPath(iso, open.length === 1 ? open[0].m.id : undefined);
+      partial.push(doseItem(doseAlarmKey(iso), at, open.map((d) => toAlarmDose(d.m, iso, d.localTime, false)), medsById, path));
+      // A "Snooze all" re-ring of this alarm (key `snooze:<iso>`) showing with a dose that is now handled.
+      const snoozed = open.filter((d) => d.state?.acted);
+      if (snoozed.length) {
+        partial.push(snoozeItem(`snooze:${iso}`, at, iso, snoozed.map((d) => toAlarmDose(d.m, iso, d.localTime, true)), medsById));
+      }
+    }
   }
-  return keys;
+  return { settledKeys: keys, partialAlarms: partial };
 }
 
 /* ───────────────────────────── Hash ───────────────────────────── */

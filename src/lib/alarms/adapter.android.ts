@@ -24,7 +24,7 @@ import { AppState, Linking } from 'react-native';
 import * as OrzaAlarms from '../../../modules/orza-alarms';
 import type { AlarmShownEvent, NativeAlarmItem, NativeRecordedAction } from '../../../modules/orza-alarms';
 
-import type { AdapterStatus, AlarmActionEvent, NativeAlarmAction, PlatformAdapter, ScheduleResult, SettingsKind } from './adapter';
+import type { AdapterStatus, AlarmActionEvent, AlarmActionListener, NativeAlarmAction, PlatformAdapter, ScheduleResult, SettingsKind } from './adapter';
 import { createNoopAdapter } from './noop';
 import { DEFAULT_SNOOZE_MINUTES } from './plan';
 import { snoozeAlarmKey, type AlarmPlanItem, type DoseActionKind } from './types';
@@ -117,13 +117,19 @@ function toNativeActions(recorded: NativeRecordedAction[]): NativeAlarmAction[] 
   );
 }
 
+/**
+ * Notifications (the module's own reading, plus expo-notifications for "can the prompt still be shown"), exact alarms,
+ * full-screen alarms and the "Medicine alarms" channel. Rejects when the module's status can't be read — the engine
+ * must not take a failed read for "notifications off" and cancel every alarm.
+ */
 async function readStatus(): Promise<AdapterStatus> {
   const [perm, native] = await Promise.all([
     Notifications.getPermissionsAsync().catch(() => null),
     OrzaAlarms.getStatus().catch(() => null),
   ]);
-  const appEnabled = native ? native.notificationsEnabled : !!perm?.granted;
-  const channelOn = native ? native.alarmChannelEnabled : true;
+  if (!native) throw new Error("Couldn't read the alarm permissions on this phone.");
+  const appEnabled = native.notificationsEnabled;
+  const channelOn = native.alarmChannelEnabled;
   const granted = appEnabled && channelOn;
   let notifications: AdapterStatus['notifications'];
   if (granted) notifications = 'granted';
@@ -134,31 +140,38 @@ async function readStatus(): Promise<AdapterStatus> {
     // A blocked "Medicine alarms" channel can only be turned back on in Settings.
     canAskNotifications: !granted && channelOn && !appEnabled && perm?.canAskAgain !== false,
   };
-  if (native && native.exact !== null) status.exact = native.exact;
-  if (native && native.fullScreen !== null) status.fullScreen = native.fullScreen;
+  if (native.exact !== null) status.exact = native.exact;
+  if (native.fullScreen !== null) status.fullScreen = native.fullScreen;
+  // Channel set to Silent / sound None: alarms only appear in the shade (older builds don't report it).
+  if (granted && native.alarmChannelSilenced === true) status.silenced = true;
+  if (granted && typeof native.alarmChannelPopup === 'boolean') status.popup = native.alarmChannelPopup;
   return status;
 }
 
 function createAndroidAdapter(): PlatformAdapter {
-  const listeners = new Set<(event: AlarmActionEvent) => void>();
+  const listeners = new Set<AlarmActionListener>();
   let subscriptions: { remove(): void }[] = [];
   let draining = false;
   let drainAgain = false;
 
-  const emit = (event: AlarmActionEvent) => {
+  /** True when a listener handled it (for `open`: the alarm is on screen). */
+  const emit = (event: AlarmActionEvent): boolean => {
+    let handled = false;
     for (const listener of [...listeners]) {
       try {
-        listener(event);
+        if (listener(event) === true) handled = true;
       } catch {
         // One listener's failure must not lose the event for the others.
       }
     }
+    return handled;
   };
 
   /** A ringing alarm fired while the app is in the foreground: open the alarm screen. */
   const opened = (e: AlarmShownEvent) => {
     const path = pathOfDeepLink(e.deepLink);
     if (!path || !listeners.size) return;
+    // The alarm itself is already ringing in the shade (a heads-up) whatever the listener does.
     emit({ key: e.key, action: 'open', doses: [], path, ringing: true, at: Date.now() });
   };
 
@@ -194,9 +207,17 @@ function createAndroidAdapter(): PlatformAdapter {
       return { scheduled };
     },
 
+    async snoozeNow(item: AlarmPlanItem): Promise<void> {
+      await OrzaAlarms.scheduleOne(toNativeAlarm(item));
+    },
+
     cancelAll: () => OrzaAlarms.cancelAll(),
 
     dismiss: (key: string) => OrzaAlarms.dismiss(key),
+
+    async refreshShowing(items: AlarmPlanItem[]): Promise<void> {
+      await OrzaAlarms.refreshShowing(items.map(toNativeAlarm));
+    },
 
     status: readStatus,
 
@@ -218,7 +239,7 @@ function createAndroidAdapter(): PlatformAdapter {
       return toNativeActions(await OrzaAlarms.takeNativeActions());
     },
 
-    onAction(listener: (event: AlarmActionEvent) => void): () => void {
+    onAction(listener: AlarmActionListener): () => void {
       listeners.add(listener);
       // Actions recorded while nobody listened (JS just started) are collected by the engine's own sync.
       if (!subscriptions.length) {
@@ -232,6 +253,11 @@ function createAndroidAdapter(): PlatformAdapter {
         }
       };
     },
+
+    // Android records Take / Snooze / Skip natively (the app may be dead): the engine filters handled doses when it
+    // collects them (`recordAlarmAction` / sync), and `refreshShowing` keeps a partly handled alarm's buttons to the
+    // open doses.
+    setActionFilter: () => undefined,
   };
 }
 

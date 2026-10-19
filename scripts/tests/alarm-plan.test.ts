@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { planAlarms, planHash, REFILL_SOON_MS, type PlanInput } from '../../src/lib/alarms/plan';
+import { CONTINUE_NOTE, pendingWins, planAlarms, planHash, REFILL_SOON_MS, snoozeAlarmItem, type PlanInput } from '../../src/lib/alarms/plan';
 import { inQuietWindow, occurrencesBetween, utcToZoned, zonedToUtc } from '../../src/lib/alarms/schedule';
 import { snoozeAlarmKey, type PlanMedication, type PlanReminder } from '../../src/lib/alarms/types';
 
@@ -244,6 +244,136 @@ describe('doses', () => {
     assert.ok(!p.items.some((i) => i.key === `dose:${at20}`));
   });
 
+  test('snoozes of one alarm sent one after another group even across a minute; far apart they ring apart', () => {
+    const now = ist('2026-10-15', '08:01');
+    const at8 = iso(ist('2026-10-15', '08:00'));
+    const meds = [med({ id: 'a' }), med({ id: 'b' })];
+    // Server ends 08:11:59.8 and 08:12:00.1 (sequential POSTs of a "Snooze all"): ONE re-ring, at the later end.
+    const close = planAlarms({
+      now,
+      tz: IST,
+      horizonDays: 1,
+      meds,
+      doseStates: [
+        { medication_id: 'a', scheduled_for: at8, status: 'snoozed', acted_at: iso(now), snooze_until: iso(ist('2026-10-15', '08:12') - 200) },
+        { medication_id: 'b', scheduled_for: at8, status: 'snoozed', acted_at: iso(now), snooze_until: iso(ist('2026-10-15', '08:12') + 100) },
+      ],
+    });
+    const s1 = close.items.filter((i) => i.key.startsWith('snooze:'));
+    assert.deepEqual(
+      s1.map((i) => i.key),
+      [`snooze:${at8}`]
+    );
+    assert.equal(s1[0].at, ist('2026-10-15', '08:12') + 100);
+    assert.equal(s1[0].doses?.length, 2);
+    // Snoozed 3 minutes apart: two re-rings, one per medicine.
+    const apart = planAlarms({
+      now,
+      tz: IST,
+      horizonDays: 1,
+      meds,
+      doseStates: [
+        { medication_id: 'a', scheduled_for: at8, status: 'snoozed', acted_at: iso(now), snooze_until: iso(ist('2026-10-15', '08:11')) },
+        { medication_id: 'b', scheduled_for: at8, status: 'snoozed', acted_at: iso(now), snooze_until: iso(ist('2026-10-15', '08:14')) },
+      ],
+    });
+    assert.deepEqual(
+      apart.items.filter((i) => i.key.startsWith('snooze:')).map((i) => i.key),
+      [`snooze:a:${at8}`, `snooze:b:${at8}`]
+    );
+  });
+
+  test('a pending snooze / skip never undoes a taken dose; an older press loses to a newer server log', () => {
+    const now = ist('2026-10-15', '08:21');
+    const at8 = iso(ist('2026-10-15', '08:00'));
+    const taken = { medication_id: 'a', scheduled_for: at8, status: 'taken', acted_at: iso(ist('2026-10-15', '08:05')) };
+    // "Snooze all" pressed at 08:20 on an alarm whose medicine a was taken at 08:05: a stays taken, nothing re-rings.
+    const p1 = planAlarms({
+      now,
+      tz: IST,
+      horizonDays: 1,
+      meds: [med({ id: 'a' })],
+      doseStates: [taken],
+      pending: [{ medId: 'a', scheduledFor: at8, action: 'snooze', createdAt: ist('2026-10-15', '08:20') }],
+    });
+    assert.ok(!p1.items.some((i) => i.key.startsWith('snooze:')));
+    assert.ok(p1.settledKeys.includes(`dose:${at8}`));
+    // A take queued at 08:10 vs. a snooze ÖRZA recorded at 08:20 (done later elsewhere): the snooze stands.
+    const p2 = planAlarms({
+      now,
+      tz: IST,
+      horizonDays: 1,
+      meds: [med({ id: 'a' })],
+      doseStates: [{ medication_id: 'a', scheduled_for: at8, status: 'snoozed', acted_at: iso(ist('2026-10-15', '08:20')), snooze_until: iso(ist('2026-10-15', '08:30')) }],
+      pending: [{ medId: 'a', scheduledFor: at8, action: 'take', createdAt: ist('2026-10-15', '08:10') }],
+    });
+    assert.equal(p2.items.find((i) => i.key.startsWith('snooze:'))?.at, ist('2026-10-15', '08:30'));
+    // Within the clock skew the phone's press wins.
+    assert.equal(pendingWins({ action: 'take', createdAt: 1_000_000 }, { finished: false, actedAt: 1_000_000 + 30_000 }), true);
+    assert.equal(pendingWins({ action: 'take', createdAt: 1_000_000 }, { finished: false, actedAt: 1_000_000 + 120_000 }), false);
+    assert.equal(pendingWins({ action: 'skip', createdAt: 2_000_000 }, { finished: true, actedAt: 1_000_000 }), false);
+    assert.equal(pendingWins({ action: 'take', createdAt: 2_000_000 }, { finished: true, actedAt: 1_000_000 }), true);
+  });
+
+  test('partly handled group alarms are rebuilt with only the open doses', () => {
+    const now = ist('2026-10-15', '09:00');
+    const at8 = iso(ist('2026-10-15', '08:00'));
+    const meds = [med({ id: 'a', name: 'Alpha' }), med({ id: 'b', name: 'Beta' })];
+    const p = planAlarms({
+      now,
+      tz: IST,
+      horizonDays: 1,
+      meds,
+      doseStates: [{ medication_id: 'a', scheduled_for: at8, status: 'taken', acted_at: iso(now) }],
+    });
+    assert.deepEqual(
+      p.partialAlarms.map((i) => [i.key, i.doses?.map((d) => d.medId)]),
+      [[`dose:${at8}`, ['b']]]
+    );
+    assert.equal(p.partialAlarms[0].title, '💊 Time for Beta');
+    assert.equal(p.partialAlarms[0].deepLink, `orza://alarm?at=${encodeURIComponent(at8)}&med=b`);
+    // b snoozed (a "Snooze all" re-ring may be showing with a in it too).
+    const q = planAlarms({
+      now,
+      tz: IST,
+      horizonDays: 1,
+      meds,
+      doseStates: [
+        { medication_id: 'a', scheduled_for: at8, status: 'taken', acted_at: iso(now) },
+        { medication_id: 'b', scheduled_for: at8, status: 'snoozed', acted_at: iso(now), snooze_until: iso(now + 5 * MIN) },
+      ],
+    });
+    assert.deepEqual(
+      q.partialAlarms.map((i) => [i.key, i.doses?.map((d) => d.medId)]),
+      [
+        [`dose:${at8}`, ['b']],
+        [`snooze:${at8}`, ['b']],
+      ]
+    );
+    // Nothing handled, or everything: nothing to rebuild.
+    assert.deepEqual(planAlarms({ now, tz: IST, horizonDays: 1, meds }).partialAlarms, []);
+  });
+
+  test('an in-app snooze re-ring is the very item the planner will plan', () => {
+    const now = ist('2026-10-15', '08:02');
+    const at8 = iso(ist('2026-10-15', '08:00'));
+    const until = now + 10 * MIN;
+    const meds = [med({ id: 'a', name: 'Telma', strength: '40 mg', photo_ids: ['p1'], photo_urls: ['/api/media/p1'] }), med({ id: 'b' })];
+    const quick = snoozeAlarmItem({ meds, scheduledFor: at8, medIds: ['a'], at: until, tz: IST });
+    const planned = planAlarms({
+      now,
+      tz: IST,
+      horizonDays: 1,
+      meds,
+      doseStates: [{ medication_id: 'a', scheduled_for: at8, status: 'snoozed', acted_at: iso(now), snooze_until: iso(until) }],
+    }).items.find((i) => i.key.startsWith('snooze:'));
+    assert.ok(quick && planned);
+    assert.equal(quick.key, planned.key);
+    assert.equal(planHash([quick]), planHash([planned]));
+    assert.equal(quick.photoRefs[0]?.id, 'p1');
+    assert.equal(snoozeAlarmItem({ meds, scheduledFor: at8, medIds: ['gone'], at: until, tz: IST }), null);
+  });
+
   test('settled keys: handled alarms of the last 12 h', () => {
     const now = ist('2026-10-15', '09:00');
     const at8 = iso(ist('2026-10-15', '08:00'));
@@ -387,20 +517,30 @@ describe('cap and horizon', () => {
     assert.equal(plan({ meds: [fourTimes], horizonDays: 30 }).items.length, 28); // max 7 days
   });
 
-  test('cap keeps doses first, reminders a share, and reports coverage', () => {
+  test('cap: medicine alarms may use all of it; when they are cut the last one says to open ÖRZA', () => {
     const p = plan({ meds: [fourTimes], reminders: [reminder({ id: 'w' })], maxItems: 12 });
     assert.equal(p.items.length, 12);
     const doses = p.items.filter((i) => i.kind === 'dose');
-    const reminders = p.items.filter((i) => i.kind === 'reminder');
-    assert.equal(reminders.length, 3); // 25 % of 12
-    assert.equal(doses.length, 9);
+    assert.equal(doses.length, 12);
+    assert.equal(p.items.filter((i) => i.kind === 'reminder').length, 0);
     assert.equal(p.dropped, 28 + 7 - 12);
-    // The 10th dose (day 3, 12:00) is the first one left out.
-    assert.equal(p.coveredUntil, ist('2026-10-17', '12:00'));
+    assert.ok(doses[11].body.endsWith(`· ${CONTINUE_NOTE}`));
+    assert.ok(doses.slice(0, 11).every((d) => !d.body.includes(CONTINUE_NOTE)));
+    // The first reminder (today 11:00) is already left out.
+    assert.equal(p.coveredUntil, ist('2026-10-15', '11:00'));
     assert.deepEqual(
       p.items.map((i) => i.at),
       [...p.items.map((i) => i.at)].sort((a, b) => a - b)
     );
+  });
+
+  test('cap: reminders get the room the doses leave', () => {
+    const p = plan({ meds: [fourTimes], reminders: [reminder({ id: 'w' })], maxItems: 32 });
+    assert.equal(p.items.filter((i) => i.kind === 'dose').length, 28);
+    assert.equal(p.items.filter((i) => i.kind === 'reminder').length, 4);
+    assert.ok(p.items.every((i) => !i.body.includes(CONTINUE_NOTE)));
+    // The 5th reminder (day 5, 11:00) is the first one left out.
+    assert.equal(p.coveredUntil, ist('2026-10-19', '11:00'));
   });
 
   test('without competition the cap goes to whichever kind exists', () => {

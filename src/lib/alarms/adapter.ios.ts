@@ -28,7 +28,7 @@ import {
   type OrzaNotificationData,
 } from '@/lib/notifications';
 
-import type { AdapterStatus, AlarmActionEvent, PlatformAdapter, ScheduleResult } from './adapter';
+import type { ActionDoseFilter, AdapterStatus, AlarmActionEvent, AlarmActionListener, DoseRef, PlatformAdapter, ScheduleResult } from './adapter';
 import {
   IOS_MAX_PENDING,
   MIN_LEAD_MS,
@@ -54,11 +54,13 @@ export type { AdapterStatus, AlarmActionEvent, NativeAlarmAction, PlatformAdapte
 
 /** A Snooze scheduled here that the next plan doesn't carry yet (a run that started before it was queued) is kept. */
 const NATIVE_SNOOZE_GRACE_MS = 90_000;
+/** A pending alarm of ours this close to its time is about to fire — a re-plan never cancels it. */
+const IMMINENT_MS = 5_000;
 /** A tap held back (no member signed in yet) older than this no longer navigates. */
 const OPEN_MAX_AGE_MS = 2 * 60_000;
 const NO_STATUS: AdapterStatus = { notifications: 'undetermined', canAskNotifications: false };
 
-type DoseRef = { medId: string; scheduledFor: string };
+const doseRefId = (d: DoseRef) => `${d.medId}|${Date.parse(d.scheduledFor)}`;
 
 // Foreground behaviour + the response subscription from the first import on (the member layout imports the engine
 // at launch, so the tap / action that launched the app is seen); the action buttons are registered on every launch.
@@ -121,16 +123,24 @@ async function scheduleItems(items: AlarmPlanItem[]): Promise<ScheduleResult> {
   const keys = new Set<string>();
   for (const item of [...items].sort((a, b) => a.at - b.at)) {
     if (wanted.length >= IOS_MAX_PENDING) break;
-    if (!item?.key || keys.has(item.key) || !Number.isFinite(item.at) || item.at - now < MIN_LEAD_MS) continue;
+    if (!item?.key || keys.has(item.key) || !Number.isFinite(item.at)) continue;
     keys.add(item.key);
+    // Due within MIN_LEAD_MS: too close to schedule again — the pending one (if any) is left to fire.
+    if (item.at - now < MIN_LEAD_MS) continue;
     wanted.push(item);
   }
+  // Snoozed doses the plan rings: a snooze this adapter scheduled for them is superseded (no double ring).
+  const plannedSnoozes = new Set<string>();
+  for (const item of wanted) for (const d of item.doses ?? []) if (d.snoozed) plannedSnoozes.add(doseRefId(d));
 
   const pending = await pendingOurs();
-  for (const id of pending.keys()) {
+  for (const [id, data] of pending) {
     if (keys.has(id)) continue;
+    // About to fire (the plan was computed a moment before its time): never cancel it at the last second.
+    if (typeof data?.at === 'number' && data.at - now < IMMINENT_MS) continue;
     const madeAt = nativeSnoozes.get(id);
-    if (madeAt !== undefined && now - madeAt < NATIVE_SNOOZE_GRACE_MS) continue;
+    const covered = !!data?.doses.length && data.doses.every((d) => plannedSnoozes.has(doseRefId(d)));
+    if (madeAt !== undefined && now - madeAt < NATIVE_SNOOZE_GRACE_MS && !covered) continue;
     nativeSnoozes.delete(id);
     await Notifications.cancelScheduledNotificationAsync(id).catch(() => undefined);
   }
@@ -169,18 +179,21 @@ async function cancelEverything(): Promise<void> {
 
 /* ───────────────────────────── Actions ───────────────────────────── */
 
-const actionListeners = new Set<(event: AlarmActionEvent) => void>();
+const actionListeners = new Set<AlarmActionListener>();
 let stopResponses: (() => void) | null = null;
 let stopPresenter: (() => void) | null = null;
 
-function emit(event: AlarmActionEvent): void {
+/** True when a listener handled it (for `open`: the alarm is on screen). */
+function emit(event: AlarmActionEvent): boolean {
+  let handled = false;
   for (const listener of [...actionListeners]) {
     try {
-      listener(event);
+      if (listener(event) === true) handled = true;
     } catch {
       // the other listeners still get it
     }
   }
+  return handled;
 }
 
 function actionOf(identifier: string): DoseActionKind | null {
@@ -190,8 +203,12 @@ function actionOf(identifier: string): DoseActionKind | null {
   return null;
 }
 
-/** Re-ring snoozed doses at `from + 10 min` under the key the next plan uses (one alarm per scheduled time). */
-function scheduleSnooze(data: OrzaNotificationData, content: Notifications.NotificationContent, from: number): Promise<void> {
+/**
+ * Re-ring snoozed doses at `from + 10 min` under the key the next plan uses (one alarm per scheduled time). `partial`:
+ * some doses of the alarm were left out (already handled) — its texts would name them, so neutral ones are used until
+ * the next plan replaces the re-ring.
+ */
+function scheduleSnooze(data: OrzaNotificationData, content: Notifications.NotificationContent, from: number, partial = false): Promise<void> {
   return serial(async () => {
     const at = from + DEFAULT_SNOOZE_MINUTES * 60_000;
     if (at - Date.now() < MIN_LEAD_MS) return; // pressed long ago (held back): the engine drops such a snooze too
@@ -199,12 +216,20 @@ function scheduleSnooze(data: OrzaNotificationData, content: Notifications.Notif
     const byTime = new Map<string, DoseRef[]>();
     for (const d of data.doses) byTime.set(d.scheduledFor, [...(byTime.get(d.scheduledFor) ?? []), d]);
     const body = content.body ?? '';
-    const source = (doses: DoseRef[]): ContentSource => ({
-      title: content.title || '💊 Time for your medicine',
-      body: /snoozed/i.test(body) ? body : body ? `${body} · snoozed` : 'Snoozed dose',
-      ring: true,
-      doses,
-    });
+    const source = (doses: DoseRef[]): ContentSource =>
+      partial
+        ? {
+            title: doses.length === 1 ? '💊 Time for your medicine' : `💊 Time for ${doses.length} medicines`,
+            body: 'Snoozed dose',
+            ring: true,
+            doses,
+          }
+        : {
+            title: content.title || '💊 Time for your medicine',
+            body: /snoozed/i.test(body) ? body : body ? `${body} · snoozed` : 'Snoozed dose',
+            ring: true,
+            doses,
+          };
     for (const [scheduledFor, doses] of byTime) {
       const key = snoozeAlarmKey(
         scheduledFor,
@@ -232,7 +257,8 @@ async function confirm(action: DoseActionKind, count: number): Promise<void> {
   try {
     const { toast } = await import('@/ui/Toast');
     const many = count > 1;
-    if (action === 'take') toast.success(many ? `Marked ${count} medicines as taken` : 'Marked as taken');
+    if (count < 1) toast.info('Already handled — nothing to change');
+    else if (action === 'take') toast.success(many ? `Marked ${count} medicines as taken` : 'Marked as taken');
     else if (action === 'skip') toast.info(many ? `Skipped ${count} medicines` : 'Dose skipped');
     else toast.info(`Snoozed — ringing again in ${DEFAULT_SNOOZE_MINUTES} minutes`);
   } catch {
@@ -255,23 +281,42 @@ function handleResponse(response: Notifications.NotificationResponse, receivedAt
   const action = actionOf(response.actionIdentifier);
   if (!action || !data?.doses.length) return;
   void Notifications.dismissNotificationAsync(request.identifier).catch(() => undefined);
-  if (action === 'snooze') void scheduleSnooze(data, content, receivedAt).catch(() => undefined);
-  emit({
-    key: data.key,
-    action,
-    doses: data.doses,
-    ...(action === 'snooze' ? { snoozeMinutes: DEFAULT_SNOOZE_MINUTES } : {}),
-    at: receivedAt,
-  });
-  void confirm(action, data.doses.length);
+  // Doses already taken / skipped (one medicine of the group taken in the app, …) are never snoozed or skipped again.
+  const doses = openDoses(action, data.doses);
+  if (doses.length) {
+    if (action === 'snooze') {
+      void scheduleSnooze({ ...data, doses }, content, receivedAt, doses.length < data.doses.length).catch(() => undefined);
+    }
+    emit({
+      key: data.key,
+      action,
+      doses,
+      ...(action === 'snooze' ? { snoozeMinutes: DEFAULT_SNOOZE_MINUTES } : {}),
+      at: receivedAt,
+    });
+  }
+  void confirm(action, doses.length);
 }
 
-/** A ringing alarm fired while the app is open: the engine's listener opens the alarm screen. */
+let actionFilter: ActionDoseFilter | null = null;
+
+function openDoses(action: DoseActionKind, doses: DoseRef[]): DoseRef[] {
+  if (!actionFilter) return doses;
+  try {
+    return actionFilter(action, doses);
+  } catch {
+    return doses;
+  }
+}
+
+/**
+ * A ringing alarm fired while the app is open: the engine's listener opens the alarm screen. True (no banner, the
+ * sound still plays) only when the listener says the alarm is on screen now; otherwise the banner shows.
+ */
 function presentInApp(data: OrzaNotificationData): boolean {
   // Dose alarms — and the "Test alarm" (no doses, `test:` key), which opens its demo alarm screen.
   if (!actionListeners.size || (!data.doses.length && !data.key.startsWith('test:'))) return false;
-  emit({ key: data.key, action: 'open', doses: data.doses, path: data.path, ringing: true, at: Date.now() });
-  return true;
+  return emit({ key: data.key, action: 'open', doses: data.doses, path: data.path, ringing: true, at: Date.now() });
 }
 
 /* ───────────────────────────── Adapter ───────────────────────────── */
@@ -282,19 +327,29 @@ export const alarmAdapter: PlatformAdapter = {
 
   schedule: (items) => serial(() => scheduleItems(items)),
 
+  // A dose snoozed in the app: its re-ring is set now (kept through a re-plan that doesn't carry it yet).
+  snoozeNow: (item) =>
+    serial(async () => {
+      if (!item?.key || !Number.isFinite(item.at) || item.at - Date.now() < MIN_LEAD_MS) return;
+      await ensureAlarmCategories();
+      const sound = alarmSound();
+      const sig = itemSignature(item, sound);
+      if (await addNotification(item.key, item.at, item, notificationData(item, sig), attachablePhoto(item), sound)) {
+        nativeSnoozes.set(item.key, Date.now());
+      }
+    }),
+
   cancelAll: () => serial(cancelEverything),
 
   dismiss: async (key) => {
     await Notifications.dismissNotificationAsync(key).catch(() => undefined);
   },
 
-  status: async () => {
-    try {
-      return toAdapterStatus(await Notifications.getPermissionsAsync());
-    } catch {
-      return { ...NO_STATUS };
-    }
-  },
+  // A delivered notification can't be changed on iOS; its actions are filtered instead (`setActionFilter`).
+  refreshShowing: async () => undefined,
+
+  // Rejects when the permission can't be read: the engine must not take that for "not allowed".
+  status: async () => toAdapterStatus(await Notifications.getPermissionsAsync()),
 
   requestNotifications: async () => {
     try {
@@ -315,6 +370,10 @@ export const alarmAdapter: PlatformAdapter = {
 
   // Every action opens the app, so JS always sees it through onAction.
   takeNativeActions: async () => [],
+
+  setActionFilter: (filter) => {
+    actionFilter = filter;
+  },
 
   onAction: (listener) => {
     actionListeners.add(listener);

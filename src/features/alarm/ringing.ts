@@ -12,11 +12,12 @@
  *   the app goes to the background).
  * Everything here is a no-op where it doesn't apply (iOS has no ringing to stop or lock-screen mode; web).
  */
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
 import { alarmAdapter } from '@/lib/alarms/adapter';
-import { alarmScreenOpened } from '@/lib/alarms/presence';
+import { alarmScreenOpened, type AlarmScreenPresence } from '@/lib/alarms/presence';
 import { doseAlarmKey, snoozeAlarmKey } from '@/lib/alarms/types';
 import { goBackOrHome } from '@/ui';
 
@@ -55,14 +56,25 @@ export function useAlarmRinging(opts: { at: string | null; test: string | null; 
   const overLockScreen = useRef(false);
   const dismissed = useRef(new Set<string>());
   const start = useRef(opts);
+  const presence = useRef<AlarmScreenPresence | null>(null);
 
   // Presence (one screen per alarm) + lock-screen release when the last alarm screen closes.
   useEffect(() => {
-    const close = alarmScreenOpened(start.current.at, start.current.test);
+    const p = alarmScreenOpened(start.current.at, start.current.test);
+    presence.current = p;
     return () => {
-      if (close()) void releaseLockScreen().catch(() => false);
+      presence.current = null;
+      if (p.close()) void releaseLockScreen().catch(() => false);
     };
   }, []);
+
+  // In front or covered by another screen ("Add a photo"): a covered alarm screen doesn't count as showing its alarm.
+  useFocusEffect(
+    useCallback(() => {
+      presence.current?.setFocused(true);
+      return () => presence.current?.setFocused(false);
+    }, [])
+  );
 
   // Android: a full-screen launch shows the app over the lock screen — that alarm is still ringing.
   useEffect(() => {

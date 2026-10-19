@@ -75,6 +75,11 @@ export interface AlarmCache {
   settings?: { at: number } & AlarmSettings;
   /** Acted dose states per local day (`/api/meds/today`), with when they were fetched. */
   days: Record<string, { at: number; doses: PlanDoseState[] }>;
+  /**
+   * Dose logs ÖRZA confirmed to this phone (`<medId>|<epoch ms>` → the log and when it was saved), merged over older
+   * day logs until a fetch of their day made after that includes them (`./recent`).
+   */
+  recent?: Record<string, { notedAt: number; log: PlanDoseState & { local_date?: string } }>;
   /** What the last successful schedule call put on the phone. */
   scheduled?: { at: number; hash: string; count: number; coveredUntil: number; refills: { key: string; at: number }[] };
   /** Refill alerts that already went out (key → time), kept 3 days. */

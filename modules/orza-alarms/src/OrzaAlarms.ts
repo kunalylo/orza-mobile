@@ -26,6 +26,7 @@ declare class OrzaAlarmsNativeModule extends NativeModule<OrzaAlarmsEvents> {
   scheduleOne(itemJson: string): Promise<boolean>;
   cancelAll(): Promise<void>;
   dismiss(key: string): Promise<void>;
+  refreshShowing?(itemsJson: string): Promise<number>;
   silenceRinging(): Promise<number>;
   getStatus(): Promise<NativeAlarmStatus>;
   getScheduled(): Promise<string>;
@@ -46,13 +47,16 @@ export function isOrzaAlarmsAvailable(): boolean {
   return native != null;
 }
 
-/** Replaces every pending alarm with `items` (future ones only). Resolves with how many are pending. */
+/**
+ * Replaces every pending alarm with `items` (future ones only; due alarms not delivered yet are kept). Resolves with how
+ * many are pending; rejects — changing nothing — when the phone couldn't save them.
+ */
 export async function scheduleAll(items: NativeAlarmItem[]): Promise<number> {
   if (!native) return 0;
   return native.scheduleAll(JSON.stringify(items));
 }
 
-/** Adds / replaces one alarm without touching the others (e.g. a `test:` alarm). */
+/** Adds / replaces one alarm without touching the others (a `test:` alarm, a snooze re-ring). Rejects when not saved. */
 export async function scheduleOne(item: NativeAlarmItem): Promise<boolean> {
   if (!native) return false;
   return native.scheduleOne(JSON.stringify(item));
@@ -63,9 +67,21 @@ export async function cancelAll(): Promise<void> {
   if (native) await native.cancelAll();
 }
 
-/** Removes alarm `key` if it is showing / ringing (handled elsewhere). Never cancels a pending alarm. */
+/**
+ * Removes alarm `key` if it is showing / ringing (handled elsewhere) — or due but not delivered yet. Never cancels a
+ * future alarm.
+ */
 export async function dismiss(key: string): Promise<void> {
   if (native) await native.dismiss(key);
+}
+
+/**
+ * Alarms still showing whose doses were partly handled elsewhere, each rebuilt with only its open doses: re-shown
+ * silently with just those (a ringing one is left alone). Resolves with how many were re-shown.
+ */
+export async function refreshShowing(items: NativeAlarmItem[]): Promise<number> {
+  if (!native || typeof native.refreshShowing !== 'function' || !items.length) return 0;
+  return native.refreshShowing(JSON.stringify(items));
 }
 
 /** Stops every ringing alarm; they stay in the shade with their buttons. Resolves with how many were silenced. */

@@ -76,16 +76,24 @@ export function useAlarmSync(): void {
       noteAlarmDataChanged();
       requestAlarmSync(change === 'permission-changed' ? 'permission' : 'data-changed', { force: change === 'permission-changed' });
     });
+    // Returns true for `open` when the alarm is on screen afterwards (iOS then leaves out the banner of an alarm ringing
+    // in the foreground); false when nothing could be opened (the banner shows instead).
     const offAction = alarmAdapter.onAction((event) => {
       if (event.action === 'open') {
-        // One screen per alarm: a re-ring / second tap of an alarm already on screen opens nothing new.
-        if (!event.path || isAlarmOnScreen(event.path)) return;
+        if (!event.path) return false;
+        // One screen per alarm: a re-ring / second tap of an alarm already in front opens nothing new.
+        if (isAlarmOnScreen(event.path)) return true;
         // Raised by the ringing alarm itself (app in the foreground): the screen leaves it ringing until the first press.
         const path = event.ringing && /^\/alarm(\?|$)/.test(event.path) ? `${event.path}${event.path.includes('?') ? '&' : '?'}ringing=1` : event.path;
-        router.push(path as Href);
-        return;
+        try {
+          router.push(path as Href);
+          return true;
+        } catch {
+          return false;
+        }
       }
       recordAlarmAction(event);
+      return true;
     });
     const sub = AppState.addEventListener('change', (s) => {
       if (s !== 'active') return;

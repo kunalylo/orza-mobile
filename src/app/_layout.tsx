@@ -15,6 +15,7 @@ import { Platform, StyleSheet, Text as RNText, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { useLockScreenGuard } from '@/lib/alarms/lockScreenGuard';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { API_CONFIG_ERROR } from '@/lib/config';
 import { useBrandFonts } from '@/lib/fonts';
@@ -90,6 +91,8 @@ function RootNavigator() {
   useEffect(() => {
     if (ready) SplashScreen.hide();
   }, [ready]);
+  // Android: never leave the app over the lock screen without an alarm screen on it.
+  useLockScreenGuard(ready);
 
   if (!ready) return null;
   if (status === 'unreachable') {

@@ -10,12 +10,15 @@
  *   `alarms_local: true` the server stops sending Web Push for medicine doses, so claiming it before the app can
  *   actually ring would make people miss doses. Phase C calls `registerDevice({ alarmsLocal: true, pushToken })`
  *   once alarms really ring; later foreground re-registrations keep both.
+ * - The declaration is kept in SecureStore (cleared on sign-out) and loaded before the FIRST registration of a launch:
+ *   otherwise every cold start — an alarm launching the app, an iOS background run — would first tell the server
+ *   `alarms_local: false` until the engine re-declares, and the member's browsers could ring the same dose too.
  */
 import * as Localization from 'expo-localization';
 
 import { ApiError, api, deviceLabel } from './api';
 import { APP_VERSION, PLATFORM } from './config';
-import { KEYS, readSecure, writeSecure } from './secure';
+import { KEYS, readSecure, readSecureJson, writeSecure, writeSecureJson } from './secure';
 import type { AppDeviceView } from './types';
 
 const FALLBACK_TZ = 'Asia/Kolkata';
@@ -68,6 +71,41 @@ let lastSentAt = 0;
 let generation = 0;
 let inflight: Promise<AppDeviceView | null> | null = null;
 
+/* ── The last declaration, kept across launches (per account) ── */
+
+type StoredDeclaration = Partial<Declaration> & { userId?: string | null };
+
+/** Loads the last declaration once per launch (reset on sign-out: the next account starts undeclared). */
+let loaded: Promise<void> | null = null;
+/** Writes in order (each reads the signed-in member first). */
+let persisting: Promise<void> = Promise.resolve();
+
+const signedInUserId = () => readSecureJson<{ id?: string }>(KEYS.user).then((u) => u?.id ?? null);
+
+function loadDeclaration(): Promise<void> {
+  if (!loaded) {
+    loaded = Promise.all([readSecureJson<StoredDeclaration>(KEYS.deviceDeclared), signedInUserId()])
+      .then(([stored, userId]) => {
+        // Only this member's, and only when nothing was declared meanwhile in this launch (that one is newer).
+        if (!stored || typeof stored.alarmsLocal !== 'boolean' || !userId || stored.userId !== userId || declared !== UNDECLARED) return;
+        declared = { pushToken: typeof stored.pushToken === 'string' && stored.pushToken ? stored.pushToken : null, alarmsLocal: stored.alarmsLocal };
+      })
+      .catch(() => undefined);
+  }
+  return loaded;
+}
+
+function persistDeclaration(next: Declaration): void {
+  const gen = generation;
+  persisting = persisting
+    .then(async () => {
+      const userId = await signedInUserId();
+      if (gen !== generation) return; // signed out meanwhile
+      await writeSecureJson(KEYS.deviceDeclared, { ...next, userId } satisfies StoredDeclaration);
+    })
+    .catch(() => undefined);
+}
+
 async function send(gen: number): Promise<AppDeviceView | null> {
   const sent = declared;
   try {
@@ -90,9 +128,17 @@ async function send(gen: number): Promise<AppDeviceView | null> {
   }
 }
 
-/** Upserts this phone for the current app session. Never throws (returns null on failure or when throttled). */
+/**
+ * Upserts this phone for the current app session. Never throws (returns null on failure or when throttled). The first
+ * call of a launch waits for the last declaration to load (calls keep their order).
+ */
 export function registerDevice(opts: RegisterOptions & { force?: boolean } = {}): Promise<AppDeviceView | null> {
   if (PLATFORM === 'web') return Promise.resolve(null);
+  const gen = generation;
+  return loadDeclaration().then(() => (gen === generation ? registerNow(opts) : null));
+}
+
+function registerNow(opts: RegisterOptions & { force?: boolean }): Promise<AppDeviceView | null> {
   const next: Declaration = {
     pushToken: opts.pushToken === undefined ? declared.pushToken : opts.pushToken || null,
     alarmsLocal: opts.alarmsLocal ?? declared.alarmsLocal,
@@ -101,6 +147,7 @@ export function registerDevice(opts: RegisterOptions & { force?: boolean } = {})
   if (changed) {
     declared = next;
     dirty = true;
+    persistDeclaration(next);
   }
   if (inflight && !changed) return inflight;
   if (!opts.force && !dirty && Date.now() - lastSentAt < MIN_INTERVAL_MS) return Promise.resolve(null);
@@ -132,6 +179,8 @@ export async function unregisterDevice(): Promise<boolean> {
   }
   declared = UNDECLARED;
   dirty = false;
+  loaded = Promise.resolve();
+  await writeSecure(KEYS.deviceDeclared, null);
   await writeSecure(KEYS.device, null);
   return true;
 }
@@ -143,5 +192,7 @@ export function resetDeviceRegistration() {
   declared = UNDECLARED;
   dirty = false;
   lastSentAt = 0;
+  loaded = Promise.resolve(); // the next account starts undeclared
   void writeSecure(KEYS.device, null);
+  void writeSecure(KEYS.deviceDeclared, null);
 }
