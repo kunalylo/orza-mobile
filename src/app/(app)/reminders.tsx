@@ -1,14 +1,15 @@
 /**
- * Reminders & alarms — up-next hero, notification permission on this phone, one-tap presets, the reminder list
- * (switch on/off, tap to edit in a sheet), medicine alarms shortcut, WhatsApp (only when configured), quiet hours
- * and how delivery works. Pull to refresh.
+ * Reminders & alarms — up-next hero, "Alarms on this phone" (permissions with one-tap fixes, next alarm, doses inside
+ * quiet hours, Test alarm), one-tap presets, the reminder list (switch on/off, tap to edit in a sheet), medicine alarms
+ * shortcut, WhatsApp (only when configured), quiet hours and how delivery works. Pull to refresh.
  */
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
-import { DashedNote, ErrorPanel } from '@/features/meds/StatusViews';
+import { AlarmStatusCard } from '@/features/alarms/AlarmStatusCard';
+import { ErrorPanel } from '@/features/meds/StatusViews';
 import { useAddPreset, useIntegrations, useReminders, useResumeReminders, useToggleReminder } from '@/features/reminders/api';
 import { NotificationsCard } from '@/features/reminders/NotificationsCard';
 import { useNotificationPermission } from '@/features/reminders/notifications';
@@ -19,6 +20,7 @@ import { ReminderSheet } from '@/features/reminders/ReminderSheet';
 import { describeNext, KIND_ICON, MAX_REMINDERS, presetAdded, REMINDER_PRESETS, type ReminderPreset } from '@/features/reminders/shared';
 import type { ReminderView } from '@/features/reminders/types';
 import { WhatsAppCard } from '@/features/reminders/WhatsAppCard';
+import { alarmAdapter } from '@/lib/alarms/adapter';
 import { errorMessage } from '@/lib/api';
 import { useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
@@ -26,6 +28,8 @@ import { colors, radii, spacing } from '@/theme';
 import { Button, EmptyState, GlassCard, Icon, IconButton, Orb, PressableScale, Screen, ScreenHeader, Skeleton, Tag, Text, toast } from '@/ui';
 
 const enter = (i: number) => FadeInDown.delay(40 + i * 50).springify().damping(18);
+/** This build rings alarms on the phone (the native module / iOS notifications) — not Expo Go or the web preview. */
+const alarmsOnPhone = alarmAdapter.maxScheduled > 0;
 
 export default function Reminders() {
   const user = useSignedInUser();
@@ -189,7 +193,11 @@ export default function Reminders() {
       </Animated.View>
 
       <Animated.View entering={enter(2)} style={styles.section}>
-        <NotificationsCard status={notif.status} asking={notif.asking} onEnable={() => void notif.request()} browserCount={integrations?.push.subscriptions ?? 0} />
+        {alarmsOnPhone ? (
+          <AlarmStatusCard browserCount={integrations?.push.subscriptions ?? 0} />
+        ) : (
+          <NotificationsCard status={notif.status} asking={notif.asking} onEnable={() => void notif.request()} browserCount={integrations?.push.subscriptions ?? 0} />
+        )}
       </Animated.View>
 
       {/* Your reminders */}
@@ -332,17 +340,27 @@ export default function Reminders() {
             tone="cyan"
             eyebrow="How it works"
             title="When reminders arrive"
-            body="ÖRZA checks for due alarms every minute, so a notification can arrive up to a minute after its time."
+            body={
+              alarmsOnPhone
+                ? 'Alarms and reminders are set on this phone itself, so they ring on time — even offline, locked or with ÖRZA closed. They update whenever your medicines, reminders or quiet hours change.'
+                : 'ÖRZA checks for due alarms every minute, so a web notification can arrive up to a minute after its time.'
+            }
           />
           <View style={styles.howList}>
-            <HowRow tag="App" tone="energy" text="Notifications on each device where you turned them on, plus the full-screen alarm when ÖRZA is open." />
+            <HowRow
+              tag="Phone"
+              tone="energy"
+              text={
+                alarmsOnPhone
+                  ? 'Medicine doses ring as an alarm with the photo of each medicine and Take / Snooze 10 min / Skip; meal, water and weigh-in reminders arrive as notifications.'
+                  : 'Notifications on each device where you turned them on, plus the full-screen alarm when ÖRZA is open.'
+              }
+            />
             {whatsappAvailable ? <HowRow tag="WhatsApp" tone="info" text="Messages from ÖRZA's WhatsApp number, with the medicine photo." /> : null}
             <HowRow tag="Calendar" tone="violet" text="Events with alerts in your phone's calendar — add ÖRZA from the Calendar screen." onPress={() => router.push('/calendar')} />
           </View>
         </GlassCard>
       </Animated.View>
-
-      <DashedNote body="Alarms that ring on this phone even without a connection are coming in a later update." style={styles.section} />
 
       <ReminderSheet
         visible={sheet.open}

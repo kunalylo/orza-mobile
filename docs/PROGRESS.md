@@ -70,9 +70,78 @@ IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
   rx, meds PhotoGrid), `useLogWeight` (today, goals).
 
 ## Phase C — Native alarms & notifications
-- [ ] C1 Local scheduling engine (rolling window; iOS 64-pending limit; reschedule on app open, med change, timezone change; dedupe with server push)
-- [ ] C2 Android native module: exact alarms + full-screen alarm activity with the medicine photo, sound/vibration, Take/Snooze/Skip actions, boot re-schedule
-- [ ] C3 iOS: time-sensitive local notifications with medicine photo attachment + actions; notification permission flow
+- [x] C1 Local scheduling engine (rolling window; iOS 64-pending limit; reschedule on app open, med change, timezone change; dedupe with server push)
+  — `src/lib/alarms/**`: pure planner mirroring web `dispatch.ts` + `schedule.ts` port (doses grouped per minute, snooze
+  re-rings, quiet hours silence doses / snoozes / reminders → `quietDoses` warning, refill alerts 08:00–21:00 once a day,
+  7-day window, cap with 25 % kept for reminders), photo cache (first 2 photos per medicine, JPEG ≤ 1080 px, Bearer
+  download), offline action queue → `POST /api/meds/doses`, sync orchestrator (single-flight, cached last good data,
+  `registerDevice({alarmsLocal})` only when alarms really ring), hourly background task (`index.ts` entry), sign-out
+  cleanup. `npm run test:alarms` 28/28. Notes: `docs/notes/C1-engine.md`.
+- [x] C2 Android native module: exact alarms + full-screen alarm activity with the medicine photo, sound/vibration, Take/Snooze/Skip actions, boot re-schedule
+  — local Expo module `modules/orza-alarms` (Kotlin, **never compiled here — the first EAS / local Gradle dev build is the
+  compile check**): `setAlarmClock` / exact / inexact fallback, insistent "orza_alarms" channel with the ÖRZA tone, BigPicture
+  of the photos, full screen over the lock screen, Take / Snooze 10 min / Skip working with the app killed, boot / update /
+  time-change re-schedule, battery-exemption status. Adapter `src/lib/alarms/adapter.android.ts`. Notes: `C2-android.md`.
+- [x] C3 iOS: time-sensitive local notifications with medicine photo attachment + actions; notification permission flow
+  — `adapter.ios.ts` + `notifications-ios.ts` (≤ 60 pending, diffed scheduling, photo COPY attachment, categories with
+  Take / Snooze / Skip — all open the app, local snooze re-ring), `lib/notifications.ts` (foreground handler, one response
+  stream incl. cold start), app.json time-sensitive entitlement + bundled alarm sound. Notes: `C3-ios.md`.
+- [x] C4 Integration + UI — custom entry `index.ts`; root `installNotificationHandling()`; reminder / quiet-hours /
+  preference / permission changes re-plan the alarms; one Android "Reminders" channel (`orza_reminders`); alarm screen ↔
+  phone alarm (tap → dismissed on open; raised by the ringing alarm → rings until the first press, `silenceRinging`;
+  unlock before leaving; lock screen released when the last alarm screen closes; one screen per alarm); offline alarm
+  screen from the phone's data with queued presses; "Alarms on this phone" card (full on Reminders, compact on Medicines:
+  permissions + fixes, next alarm with names, quiet-hour doses, battery tip, Test alarm in 10 s with a medicine photo or
+  the sample strip); first-run permission sheet after the first alarm medicine / an applied prescription; 27 s alarm
+  tone; dev builds refuse a missing API URL; Android `networkInspector: false`. Notes: `C4-integrate.md`.
+
+### Phase C device test plan (D1 Android emulator + EAS dev build, D2 iPhone via TestFlight)
+Before anything: the bundle must carry the LOCAL origin (`.env.local` → `http://10.0.2.2:3100`); a dev build without a URL
+must show "API URL not configured" (never the live site). First Android dev build = the Kotlin compile check (expect small
+fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists `orza-alarms` in the build tree.
+- **Permissions** (Android 13+ / 14+ / iOS): add the first medicine with times → the "Let your medicine alarms ring" sheet →
+  system prompt; deny → card shows "Off" + Open Settings; grant → card "On", Next alarm with names. Android: "Alarms &
+  reminders" off → "Alarms may ring late" + Allow (Settings page) → back in the app the card updates and alarms re-plan;
+  full-screen intents off (Android 14) → warning + Allow; battery not Unrestricted → tip + Battery settings. Applying a
+  prescription without permission shows the sheet too; "Not now" → not asked again for 24 h.
+- **Test alarm**: tap → rings in 10 s with the first medicine's photo (sample strip without photos). App open → alarm screen
+  opens itself (`?test=…&ringing=1`) and keeps ringing until a press; phone locked → Android full screen over the lock
+  screen, iOS time-sensitive banner with the photo + 27 s tone; Take / Snooze / Skip record nothing; Android test alarm
+  survives a re-plan.
+- **Real doses**: a dose 2 min ahead → rings with photos (two medicines at the same minute → one alarm, both photos,
+  "Take all"). Cases: app open (screen opens, rings until first press), app in background, app swiped away / killed,
+  phone locked (Android full screen; iOS lock-screen banner), airplane mode (still rings; alarm screen shows "No
+  connection — saved on your phone", presses queued and sent when back online — check the web shows them), Doze
+  (`adb shell dumpsys deviceidle force-idle`), reboot (Android: alarms restored; a dose missed ≤ 30 min while off rings
+  after unlock), timezone change, clock change.
+- **Actions from the notification/alarm**: Take / Skip / Snooze in the shade with the app killed (Android records natively,
+  shows in the app after opening; iOS opens the app then records); Snooze re-rings 10 min later under the same alarm (no
+  duplicate); a press while offline syncs later; Take on the web → the phone's pending alarm disappears after the next sync.
+- **Alarm screen**: opened by a tap → its notification disappears; raised over the lock screen → sound continues until the
+  first press, stops on Take / Snooze / Skip / Close; "Go to medicines" / "Add a photo" ask for PIN / fingerprint first;
+  Close over the lock screen returns to the lock screen (the app isn't reachable without unlocking); a second alarm while
+  one is open stacks, closing both releases the lock screen.
+- **Quiet hours**: set quiet hours covering a dose → the Reminders card and the Medicines compact card warn ("N doses …
+  won't ring"), QuietHoursCard shows the count; the dose doesn't ring; a refill alert waits until quiet hours end.
+- **Reminders**: meal / water / weigh-in / custom reminders with push on ring as normal notifications on "orza_reminders"
+  (one "Reminders" channel in Android settings); "Gentle reminders" off in Settings → they stop; tap opens the right screen.
+- **Server dedupe**: with alarms ringing on the phone `POST /api/devices` declares `alarms_local: true` (web medicine Web
+  Push paused — card note); revoke notification permission → declares false (Web Push resumes); sign out → every alarm
+  cancelled, photos / cache / queue / test record deleted, no alarm rings for the next account.
+- **Background refresh**: leave the app closed for a few hours with a medicine change made on the web → the phone's alarms
+  follow after the OS runs the hourly task (timing is up to the OS; force-quit on iOS stops it).
+- **iOS specifics (D2)**: ≤ 60 pending (busy schedule → `coveredUntil` < 7 days, extended on the next open); Time
+  Sensitive switch on → rings through Focus; silent switch → vibrates + shows only (Critical Alerts would be needed — CEO
+  decision); snooze re-ring keeps its photo after an app update; cold-start tap opens the right alarm.
+
+### Phase C backend requests (web repo — optional, not blocking)
+1. `POST /api/meds/doses`: accept an optional client `acted_at` (clamped to [scheduled_for − 36 h, now]) and, for snooze, a
+   client `snooze_until` (clamped to now … now + 60 min), so presses made offline on an alarm record when they happened
+   (today the phone drops a snooze that couldn't be sent within its 10 minutes).
+2. `GET /api/meds/doses?from=&to=` returning only acted dose logs for a range (the engine calls `/api/meds/today` per local
+   day — up to 9 calls on a cold cache, usually 1–3).
+3. A push sender (FCM / APNs) would let the server wake the phone after a web-side change; until then the phone re-plans on
+   open, on change events and in the hourly background task (`push_token` stays null).
 
 ## Phase D — Test & fix (Android emulator "Medium_Phone" + EAS dev build; iOS via TestFlight)
 - [ ] D1 EAS development build (Android) → install on emulator → E2E every flow → fix → repeat
@@ -252,3 +321,19 @@ IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
      `.env.local`, Metro launched with `--clear`, the bundle is grepped for the local origin before any interaction, and dev builds must
      never silently fall back to production (config guard — C4 task).
   Local sign-up against the test server then worked.
+- 2026-10-19: **Phase C complete (C1–C4), unverified on devices.** C4 integration (resumed after a usage-limit stop; WIP
+  `4932dc0`): custom entry, notification handling at the root, alarm data events from reminders / quiet hours / Gentle
+  reminders / permission requests, Android reminders channel = the module's `orza_reminders`, presence-aware alarm opening
+  (`lib/alarms/presence.ts`, `ringing=1` when the alarm itself raised the screen), alarm screen ↔ native (dismiss on a tap,
+  ring until the first press when raised by the alarm, `silenceRinging`, `requestUnlock`, `releaseLockScreen`), offline
+  alarm screen (`features/alarm/offline.ts`, waits ≤ 4.5 s for the server, presses queued), Test alarm (`lib/alarms/test.ts`,
+  `/alarm?test=<at>` demo), "Alarms on this phone" card (`features/alarms`, full on Reminders, compact on Medicines,
+  QuietHoursCard dose count), first-run permission sheet (`promptAlarmPermission` from medicine create / prescription
+  apply), dev-build API URL guard (`lib/config.ts` `API_CONFIG_ERROR` → blocking screen, `.invalid` origin; release builds
+  unchanged), `expo-build-properties` `android.networkInspector: false`, README conventions + emulator `.env.local`.
+  Checks: `npm run typecheck` ✓, `npx expo lint` ✓, `npm run test:alarms` 28/28 ✓, `npx expo config --type introspect` ✓
+  (Android `EX_DEV_CLIENT_NETWORK_INSPECTOR=false`, iOS time-sensitive + aps-environment, alarm permissions), `npx expo
+  export` android ✓ (6.7 MB HBC) / ios ✓ (6.6 MB HBC) outside the repo, dev export confirms the URL guard is inlined.
+  `npx expo-doctor` 20/21: three patch updates published since Phase B (`@expo/ui` 57.0.25, `expo` 57.0.30, `expo-router`
+  57.0.28) — run `npx expo install @expo/ui expo expo-router` before the next dev build.
+  Next: D1 — Android dev build (Kotlin compile check) → emulator against the LOCAL web server → device test plan above.

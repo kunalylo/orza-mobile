@@ -5,7 +5,8 @@
  * foreground (at most every 15 min unless something changed, at once after a permission or phone-timezone change),
  * dose and medicine events (`features/meds/events`), alarm data events (`emitAlarmDataChanged` — reminders, quiet hours),
  * and Take / Snooze / Skip pressed on an alarm. Registers the hourly background refresh. A tap on an alarm opens its
- * screen (`/alarm?at=…&med=…`).
+ * screen (`/alarm?at=…&med=…`) unless that alarm is already on screen; an alarm ringing while ÖRZA is open opens it
+ * with `ringing=1` (the screen then leaves the sound on until the first press).
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { router, type Href } from 'expo-router';
@@ -19,6 +20,7 @@ import { deviceTimeZone } from '@/lib/device';
 import { alarmAdapter } from './adapter';
 import { registerAlarmBackgroundTask } from './background';
 import { onAlarmDataChanged } from './events';
+import { isAlarmOnScreen } from './presence';
 import {
   bindAlarmForeground,
   checkAlarmsOnForeground,
@@ -76,7 +78,11 @@ export function useAlarmSync(): void {
     });
     const offAction = alarmAdapter.onAction((event) => {
       if (event.action === 'open') {
-        if (event.path) router.push(event.path as Href);
+        // One screen per alarm: a re-ring / second tap of an alarm already on screen opens nothing new.
+        if (!event.path || isAlarmOnScreen(event.path)) return;
+        // Raised by the ringing alarm itself (app in the foreground): the screen leaves it ringing until the first press.
+        const path = event.ringing && /^\/alarm(\?|$)/.test(event.path) ? `${event.path}${event.path.includes('?') ? '&' : '?'}ringing=1` : event.path;
+        router.push(path as Href);
         return;
       }
       recordAlarmAction(event);

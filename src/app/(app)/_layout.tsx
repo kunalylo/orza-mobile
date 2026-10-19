@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 
+import { AlarmPermissionPrompt } from '@/features/alarms/AlarmPermissionPrompt';
 import { useAlarmSync } from '@/lib/alarms/useAlarmSync';
 import { useHealthAutoSync } from '@/lib/health/sync';
 import { colors } from '@/theme';
@@ -14,6 +15,16 @@ export default function AppLayout() {
   // Medicine alarms + reminders on this phone: plan, schedule and keep them current (offline, app killed, locked).
   useAlarmSync();
 
+  return (
+    <>
+      <MemberStack />
+      {/* "Let your medicine alarms ring" — after the first alarm medicine / a prescription, when a permission is missing. */}
+      <AlarmPermissionPrompt />
+    </>
+  );
+}
+
+function MemberStack() {
   return (
     <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: colors.canvas } }}>
       <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />

@@ -4,6 +4,7 @@
  */
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
+import { promptAlarmPermission } from '@/features/alarms/prompt';
 import { medsKeys, putMedication, useMedications } from '@/features/meds/api';
 import { emitDoseEvent } from '@/features/meds/events';
 import type { MedicationClient } from '@/features/meds/types';
@@ -128,6 +129,8 @@ export function useApplyPrescription() {
       putPrescription(qc, res.prescription);
       qc.setQueryData(rxKeys.created(res.prescription.id), res.medications);
       for (const med of res.medications) putMedication(qc, med);
+      // The new medicines have alarms: make sure this phone may ring them (asks only when a permission is missing).
+      if (res.medications.some((m) => m.active !== false && !m.as_needed)) promptAlarmPermission('prescription');
       qc.invalidateQueries({ queryKey: medsKeys.list() }, { cancelRefetch: false });
       qc.invalidateQueries({ queryKey: medsKeys.todayAll() }, { cancelRefetch: false });
       qc.invalidateQueries({ queryKey: medsKeys.adherenceAll() }, { cancelRefetch: false });

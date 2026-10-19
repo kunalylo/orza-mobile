@@ -8,7 +8,7 @@ import { alarmAdapter } from './adapter';
 import { unregisterAlarmBackgroundTask } from './background';
 import { clearAlarmPhotos } from './photos';
 import { clearDoseQueue } from './queue';
-import { deleteAlarmCache } from './store';
+import { deleteAlarmCache, deleteJsonFile, TEST_ALARM_FILE } from './store';
 import { resetAlarmEngine } from './sync';
 
 function within<T>(p: Promise<T>, ms: number): Promise<T | undefined> {
@@ -32,6 +32,7 @@ export async function clearAlarmsOnSignOut(): Promise<void> {
   await within(alarmAdapter.cancelAll(), 4_000);
   clearDoseQueue();
   deleteAlarmCache();
+  deleteJsonFile(TEST_ALARM_FILE);
   clearAlarmPhotos();
   await within(unregisterAlarmBackgroundTask(), 3_000);
 }

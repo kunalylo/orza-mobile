@@ -54,6 +54,9 @@ export function deleteJsonFile(name: string): void {
   }
 }
 
+/** What the last "Test alarm" showed (lib/alarms/test.ts) — deleted on sign-out with the rest. */
+export const TEST_ALARM_FILE = 'orza-alarm-test.json';
+
 /* ───────────────────────────── Alarm data cache ───────────────────────────── */
 
 const CACHE_FILE = 'orza-alarms.json';

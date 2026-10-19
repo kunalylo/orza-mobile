@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
+import { promptAlarmPermission } from '@/features/alarms/prompt';
 import { api, ApiError, errorMessage } from '@/lib/api';
 import { useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
@@ -170,7 +171,12 @@ export function useSaveMedication() {
   return useMutation({
     mutationFn: (v: { id?: string; create?: MedicationCreateInput; patch?: MedicationPatchInput }) =>
       v.id ? medsApi.update(v.id, v.patch ?? {}) : medsApi.create(v.create!),
-    onSuccess: (med) => {
+    onSuccess: (med, v) => {
+      // The member's first alarm medicine: make sure this phone may ring it (asks only when a permission is missing).
+      if (!v.id && med.active !== false && !med.as_needed) {
+        const before = qc.getQueryData<MedicationClient[]>(medsKeys.list());
+        if (!before?.some((m) => m.id !== med.id && m.active !== false && !m.as_needed)) promptAlarmPermission('first-medicine');
+      }
       putMedication(qc, med);
       refreshDoses(qc);
       emitOwn({ type: 'meds-changed', medId: med.id });

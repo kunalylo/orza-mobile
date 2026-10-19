@@ -58,6 +58,7 @@ export function AlarmDoseCard({
   primary,
   pending,
   onAct,
+  onAddPhoto,
 }: {
   dose: DoseItem;
   tz: string;
@@ -65,6 +66,11 @@ export function AlarmDoseCard({
   primary: boolean;
   pending?: DoseAction;
   onAct: (action: DoseAction) => void;
+  /**
+   * "Add a photo" when the medicine has none. Default: open the medicine form. The alarm screen passes its own (it
+   * asks for the phone's unlock first when showing over the lock screen); null hides it (the test alarm).
+   */
+  onAddPhoto?: (() => void) | null;
 }) {
   const busy = !!pending;
   const timing = TIMING_INSTRUCTION[dose.timing];
@@ -79,7 +85,9 @@ export function AlarmDoseCard({
         urls={dose.photo_urls}
         title={dose.name}
         aspect={primary ? 4 / 3 : 16 / 10}
-        onAddPhoto={() => router.push({ pathname: '/med/edit', params: { id: dose.medication_id } })}
+        onAddPhoto={
+          onAddPhoto === null ? undefined : (onAddPhoto ?? (() => router.push({ pathname: '/med/edit', params: { id: dose.medication_id } })))
+        }
       />
 
       <View style={styles.info}>

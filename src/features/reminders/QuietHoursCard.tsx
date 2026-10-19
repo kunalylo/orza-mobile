@@ -5,6 +5,7 @@ import Animated, { FadeIn, FadeOut, useReducedMotion } from 'react-native-reanim
 
 import { TimePickerSheet } from '@/features/meds/PickerSheets';
 import { formatTime12 } from '@/features/meds/shared';
+import { useAlarmSyncState } from '@/lib/alarms/useAlarmSync';
 import { errorMessage } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
 import { colors, radii, spacing } from '@/theme';
@@ -20,6 +21,8 @@ const DEFAULT_QUIET = { start: '22:30', end: '07:00' };
 export function QuietHoursCard({ integrations }: { integrations: IntegrationsView }) {
   const reduceMotion = useReducedMotion();
   const mutation = useQuietHours();
+  // Doses this phone won't ring because of quiet hours (web parity: they don't notify) — counted by the alarm engine.
+  const quietDoses = useAlarmSyncState().quietDoses.length;
   const saved = integrations.quiet_hours;
   const [enabled, setEnabled] = useState(!!saved);
   const [start, setStart] = useState(saved?.start || DEFAULT_QUIET.start);
@@ -95,6 +98,12 @@ export function QuietHoursCard({ integrations }: { integrations: IntegrationsVie
             Medicine doses that fall inside quiet hours won&apos;t notify you — keep your dose times outside this window. Refill alerts wait until
             quiet hours end.
           </Text>
+          {saved && !dirty && quietDoses > 0 ? (
+            <Text variant="caption" tone="warning" style={styles.hint} accessibilityRole="alert">
+              {quietDoses === 1 ? '1 medicine dose' : `${quietDoses} medicine doses`} in the next 7 days fall
+              {quietDoses === 1 ? 's' : ''} inside these hours and won&apos;t ring on this phone.
+            </Text>
+          ) : null}
         </Animated.View>
       ) : null}
 

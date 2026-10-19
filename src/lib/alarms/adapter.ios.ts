@@ -270,7 +270,7 @@ function handleResponse(response: Notifications.NotificationResponse, receivedAt
 function presentInApp(data: OrzaNotificationData): boolean {
   // Dose alarms — and the "Test alarm" (no doses, `test:` key), which opens its demo alarm screen.
   if (!actionListeners.size || (!data.doses.length && !data.key.startsWith('test:'))) return false;
-  emit({ key: data.key, action: 'open', doses: data.doses, path: data.path, at: Date.now() });
+  emit({ key: data.key, action: 'open', doses: data.doses, path: data.path, ringing: true, at: Date.now() });
   return true;
 }
 

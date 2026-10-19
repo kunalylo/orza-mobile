@@ -1,5 +1,6 @@
 /**
- * Medicines tab — scan-a-prescription hero, today's dose timeline (Take / Snooze / Skip), 7-day adherence,
+ * Medicines tab — scan-a-prescription hero, "Alarms on this phone" (compact: next alarm / what to fix / quiet-hour doses),
+ * today's dose timeline (Take / Snooze / Skip), 7-day adherence,
  * person filter (caregiver mode) and the medicine list. Pull to refresh; refreshes itself every minute and on dose events.
  */
 import { router } from 'expo-router';
@@ -7,6 +8,7 @@ import { useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { AlarmStatusCard } from '@/features/alarms/AlarmStatusCard';
 import { AdherenceSkeleton, AdherenceStrip } from '@/features/meds/AdherenceStrip';
 import { useAdherence, useDoseActions, useLocalToday, useMedications, useMedsEventRefresh, useMedsTimezone, useTodayDoses } from '@/features/meds/api';
 import { MedicineCard, MedicineCardSkeleton } from '@/features/meds/MedicineCard';
@@ -96,6 +98,11 @@ export default function Medicines() {
 
       <Animated.View entering={FadeInDown.delay(40).springify().damping(18)}>
         <ScanHero />
+      </Animated.View>
+
+      {/* Alarms on this phone: the next alarm, or what stops them ringing; doses inside quiet hours. */}
+      <Animated.View entering={FadeInDown.delay(70).springify().damping(18)}>
+        <AlarmStatusCard variant="compact" hideWhenIdle={noMeds} style={styles.section} />
       </Animated.View>
 
       {people.length > 0 ? (

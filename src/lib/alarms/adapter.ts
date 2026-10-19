@@ -60,6 +60,11 @@ export interface AlarmActionEvent {
   snoozeMinutes?: number;
   /** In-app route to open (`open`), e.g. `/alarm?at=…&med=…`. */
   path?: string;
+  /**
+   * `open` raised by the alarm itself while ÖRZA is in the foreground (not a tap): the alarm is still ringing, so the
+   * alarm screen leaves it ringing until the member's first press instead of dismissing it on open.
+   */
+  ringing?: boolean;
   /** Epoch ms when it was pressed. */
   at: number;
 }

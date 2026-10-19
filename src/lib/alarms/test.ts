@@ -5,7 +5,8 @@
  *   lock screen, the photo, Take / Snooze / Skip (they record nothing for a test).
  * - iOS: a time-sensitive notification with the alarm sound and the photo attached (a copy — iOS moves attachments).
  * The photo is the first medicine's alarm photo (downloaded if needed) or a bundled sample strip. Tapping / the full
- * screen opens `/alarm?test=1`, a demo of the alarm screen that records nothing.
+ * screen opens `/alarm?test=<at>` (the alarm's key is `test:<at>`), a demo of the alarm screen that records nothing.
+ * What the test showed is kept in a small file, so the demo screen still finds it when the alarm starts the app.
  */
 import { Directory, File, Paths } from 'expo-file-system';
 import { Image } from 'expo-image';
@@ -22,12 +23,15 @@ import { alarmAdapter } from './adapter';
 import { alarmSound, buildContent, copyForAttachment, dateTrigger, discardCopy } from './notifications-ios';
 import { ensureAlarmPhoto } from './photos';
 import { PHOTOS_PER_MEDICINE } from './plan';
+import { readJsonFile, TEST_ALARM_FILE, writeJsonFile } from './store';
 import { requestAlarmPermission } from './sync';
-import type { PlanMedication } from './types';
+import { deepLinkFor, type PlanMedication } from './types';
 
 export const TEST_ALARM_DELAY_MS = 10_000;
-export const TEST_ALARM_PATH = '/alarm?test=1';
-const TEST_DEEP_LINK = 'orza://alarm?test=1';
+/** In-app route of the test alarm due at `at` (epoch ms). */
+export const testAlarmPath = (at: number) => `/alarm?test=${at}`;
+/** Key of the test alarm due at `at` (`test` param of its route). */
+export const testAlarmKey = (test: string | number) => `test:${test}`;
 const TITLE = '💊 Test alarm — this is how ÖRZA rings';
 
 /** The bundled sample photo (module id for `<Image source>`). */
@@ -37,9 +41,43 @@ export type TestAlarmResult =
   | { ok: true; at: number; photo: 'medicine' | 'sample' | 'none'; medicine?: string }
   | { ok: false; reason: 'unsupported' | 'permission' | 'failed' };
 
+interface TestRecord {
+  at: number;
+  photoUri: string | null;
+  medicine?: string;
+}
+
 /** What the last test showed (the demo alarm screen shows the same photo). */
-let lastTest: { photoUri: string | null; medicine?: string } | null = null;
-export const lastTestAlarm = () => lastTest;
+let lastTest: TestRecord | null = null;
+
+const fileExists = (uri: string | null): boolean => {
+  if (!uri) return false;
+  try {
+    return new File(uri).exists;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * The photo and medicine name the test alarm `test` showed — from memory, else the file (the alarm may have started
+ * the app). The bundled sample's JPEG when the record is gone. Never throws.
+ */
+export function testAlarmDetails(test: string | null | undefined): { photoUri: string | null; medicine?: string } {
+  const stored = lastTest ?? readJsonFile<TestRecord>(TEST_ALARM_FILE);
+  const record = stored && (!test || String(stored.at) === test) ? stored : null;
+  if (record && fileExists(record.photoUri)) return { photoUri: record.photoUri, ...(record.medicine ? { medicine: record.medicine } : {}) };
+  const sample = sampleFile();
+  return { photoUri: sample && fileExists(sample.uri) ? sample.uri : null, ...(record?.medicine ? { medicine: record.medicine } : {}) };
+}
+
+function sampleFile(): File | null {
+  try {
+    return new File(Paths.cache, 'orza-alarm-test', 'sample-v1.jpg');
+  } catch {
+    return null;
+  }
+}
 
 /** The first active, alarm-ringing medicine with a photo. */
 function photoMedicine(meds: readonly PlanMedication[]): PlanMedication | null {
@@ -51,7 +89,7 @@ async function samplePhotoFile(): Promise<string | null> {
   try {
     const dir = new Directory(Paths.cache, 'orza-alarm-test');
     if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
-    const dest = new File(dir, 'sample-v1.jpg');
+    const dest = sampleFile() ?? new File(dir, 'sample-v1.jpg');
     if (dest.exists) return dest.uri;
     const ref = await Image.loadAsync(SAMPLE_ALARM_PHOTO);
     const ctx = ImageManipulator.manipulate(ref);
@@ -84,15 +122,16 @@ async function pickPhoto(meds: readonly PlanMedication[]): Promise<{ uri: string
 }
 
 async function scheduleIos(key: string, at: number, body: string, photo: string | null): Promise<boolean> {
+  const path = testAlarmPath(at);
   const data: OrzaNotificationData = {
     orza: 1,
     key,
     kind: 'dose',
     ring: true,
     at,
-    path: TEST_ALARM_PATH,
-    url: TEST_ALARM_PATH,
-    deepLink: TEST_DEEP_LINK,
+    path,
+    url: path,
+    deepLink: deepLinkFor(path),
     doses: [],
   };
   const source = { title: TITLE, body, ring: true, doses: [] };
@@ -125,7 +164,7 @@ export async function scheduleTestAlarm(meds: readonly PlanMedication[]): Promis
 
     const photo = await pickPhoto(meds);
     const at = Date.now() + TEST_ALARM_DELAY_MS;
-    const key = `test:${at}`;
+    const key = testAlarmKey(at);
     const body = photo.kind === 'medicine' ? `Real alarms show each medicine's photo — like ${photo.medicine}.` : 'Real alarms show the photo of each medicine to take.';
     let ok: boolean;
     if (Platform.OS === 'android') {
@@ -136,7 +175,7 @@ export async function scheduleTestAlarm(meds: readonly PlanMedication[]): Promis
         title: TITLE,
         body,
         ring: true,
-        deepLink: TEST_DEEP_LINK,
+        deepLink: deepLinkFor(testAlarmPath(at)),
         photos: photo.uri ? [photo.uri] : [],
         doses: [],
         details: `${body}\nTake / Snooze / Skip record nothing on a test.`,
@@ -145,7 +184,8 @@ export async function scheduleTestAlarm(meds: readonly PlanMedication[]): Promis
       ok = await scheduleIos(key, at, body, photo.uri);
     }
     if (!ok) return { ok: false, reason: 'failed' };
-    lastTest = { photoUri: photo.uri, ...(photo.medicine ? { medicine: photo.medicine } : {}) };
+    lastTest = { at, photoUri: photo.uri, ...(photo.medicine ? { medicine: photo.medicine } : {}) };
+    writeJsonFile(TEST_ALARM_FILE, lastTest);
     return { ok: true, at, photo: photo.kind, ...(photo.medicine ? { medicine: photo.medicine } : {}) };
   } catch {
     return { ok: false, reason: 'failed' };

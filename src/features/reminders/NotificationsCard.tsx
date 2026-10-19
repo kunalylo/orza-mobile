@@ -1,4 +1,8 @@
-/** "Notifications on this phone" — permission status with a one-tap enable (or Settings when blocked). */
+/**
+ * "Notifications on this phone" — permission status with a one-tap enable (or Settings when blocked). Shown on builds
+ * that can't set alarms on the phone (Expo Go, the web preview); the real app shows "Alarms on this phone"
+ * (`features/alarms/AlarmStatusCard`) instead.
+ */
 import { StyleSheet, View } from 'react-native';
 
 import { haptics } from '@/lib/haptics';
@@ -46,8 +50,8 @@ export function NotificationsCard({
         </View>
       ) : status === 'granted' ? (
         <Text variant="small" tone="muted" style={styles.body}>
-          ÖRZA can show notifications on this phone. Your reminders and medicine alarms currently arrive from ÖRZA&apos;s server, so they
-          can come up to a minute after their time.
+          ÖRZA can show notifications here, but this version of the app can&apos;t set alarms on the phone. Install the ÖRZA app so
+          medicine alarms ring on this phone — offline and locked — with the photo of each medicine.
         </Text>
       ) : status === 'unsupported' ? (
         <Text variant="small" tone="muted" style={styles.body}>
@@ -58,7 +62,7 @@ export function NotificationsCard({
           <Text variant="small" tone="muted" style={styles.body}>
             {status === 'blocked'
               ? 'Notifications are turned off for ÖRZA. Turn them on in Settings so reminders and medicine alarms can reach this phone.'
-              : 'Allow notifications so reminders and medicine alarms can reach this phone. Reminders currently arrive from ÖRZA’s server.'}
+              : 'Allow notifications so reminders and medicine alarms can reach this phone.'}
           </Text>
           <Button
             label={status === 'blocked' ? 'Open Settings' : 'Turn on notifications'}
