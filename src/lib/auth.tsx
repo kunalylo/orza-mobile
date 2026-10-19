@@ -62,6 +62,9 @@ function snapshotOf(user: PublicUser): PublicUser {
   return { ...user, memory: [], integrations: undefined };
 }
 
+/** The offline screen's "Try again" shows its spinner at least this long (offline, the request fails at once). */
+const RETRY_MIN_MS = 700;
+
 /** True when a request never got a real answer from ÖRZA (offline, timeout, server down) — worth retrying later. */
 function unreachable(e: unknown): boolean {
   return !(e instanceof ApiError) || e.isNetwork || e.status >= 500;
@@ -179,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Boot: token + snapshot from the Keychain, then confirm with the server.
   useEffect(() => {
     let cancelled = false;
+    const started = Date.now();
     (async () => {
       const [token, snapshot] = await Promise.all([readSecure(KEYS.token), readSecureJson<PublicUser>(KEYS.user)]);
       if (cancelled) return;
@@ -206,8 +210,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         if (cancelled) return;
         if (e instanceof ApiError && e.status === 401) return; // handler already signed out
+        if (bootKey > 0) {
+          // A retry that failed again. Offline it fails at once: keep the busy button up long enough to be seen, and
+          // buzz — the unchanged screen alone says nothing.
+          await new Promise((r) => setTimeout(r, Math.max(0, RETRY_MIN_MS - (Date.now() - started))));
+          if (cancelled) return;
+          haptics.error();
+        }
         setStatus('unreachable');
-        if (bootKey > 0) haptics.error(); // a retry that failed again: the unchanged screen alone says nothing
       }
     })().finally(() => {
       if (!cancelled) setRetrying(false);

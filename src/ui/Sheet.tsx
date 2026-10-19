@@ -13,7 +13,7 @@
  * its own list (FlatList) and `full` to use the full height even with little content (search results).
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type KeyboardEvent } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +23,7 @@ import { colors, gutter, isIOS, motion, radii, shadows, spacing } from '@/theme'
 
 import { IconButton } from './IconButton';
 import { Text } from './Text';
+import { useKeyboardHeight } from './useKeyboardHeight';
 
 export interface SheetProps {
   visible: boolean;
@@ -194,25 +195,6 @@ function SheetModal({
       </GestureHandlerRootView>
     </Modal>
   );
-}
-
-/**
- * Keyboard height inside the modal. The modal draws edge to edge (status + navigation bars translucent),
- * so the window is not resized for the keyboard on either platform — the sheet pads itself instead.
- */
-function useKeyboardHeight(): number {
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    const onShow = (e: KeyboardEvent) => setHeight(e.endCoordinates.height);
-    const onHide = () => setHeight(0);
-    const show = Keyboard.addListener(isIOS ? 'keyboardWillShow' : 'keyboardDidShow', onShow);
-    const hide = Keyboard.addListener(isIOS ? 'keyboardWillHide' : 'keyboardDidHide', onHide);
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return height;
 }
 
 const styles = StyleSheet.create({

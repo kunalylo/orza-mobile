@@ -15,6 +15,8 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { colors, gutter, layout } from '@/theme';
 
+import { useKeyboardHeight } from './useKeyboardHeight';
+
 export type BackdropVariant = 'canvas' | 'orb' | 'hero' | 'none';
 
 export interface ScreenProps {
@@ -114,6 +116,8 @@ export function Screen({
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const tabSpace = useTabBarSpace();
+  // Only screens that avoid the keyboard and have a footer care (the footer drops its safe-area pad while it is up).
+  const keyboardUp = useKeyboardHeight(Boolean(keyboard && footer)) > 0;
   const top = edges.includes('top') ? insets.top : 0;
   const bottomInset = edges.includes('bottom') ? insets.bottom : 0;
   const bottom = tabBar ? tabSpace : footer ? 0 : bottomInset + 16;
@@ -139,7 +143,8 @@ export function Screen({
     <>
       {header}
       {body}
-      {footer ? <View style={{ paddingBottom: tabBar ? 0 : bottomInset }}>{footer}</View> : null}
+      {/* The keyboard covers the home indicator / navigation bar: no safe-area gap between it and the footer. */}
+      {footer ? <View style={{ paddingBottom: tabBar || keyboardUp ? 0 : bottomInset }}>{footer}</View> : null}
     </>
   );
 
@@ -147,7 +152,10 @@ export function Screen({
     <View testID={testID} style={[styles.root, { paddingTop: top, backgroundColor: backdrop === 'hero' ? colors.hero : colors.canvas }, style]}>
       <Backdrop variant={backdrop} />
       {keyboard ? (
-        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        // `padding` on Android too: the app draws edge to edge (`edgeToEdgeEnabled`, mandatory from Android 15), so the
+        // window is no longer resized for the keyboard (`adjustResize` has no effect) — without it the keyboard covers
+        // a bottom composer / footer and the fields near the bottom.
+        <KeyboardAvoidingView style={styles.flex} behavior="padding">
           {inner}
         </KeyboardAvoidingView>
       ) : (

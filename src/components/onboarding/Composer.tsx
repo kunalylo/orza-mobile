@@ -3,7 +3,7 @@
  * option cards, a searchable list (region), multi-select (allergies), a number with units, free text, or the
  * plan confirmation. Answer formats match the website exactly (the server parses them).
  */
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { haptics } from '@/lib/haptics';
@@ -62,6 +62,7 @@ function Field({
   suffix,
   returnKeyType = 'send',
   multiline,
+  inputRef,
 }: {
   value: string;
   onChangeText: (t: string) => void;
@@ -72,14 +73,17 @@ function Field({
   keyboardType?: 'default' | 'decimal-pad' | 'number-pad';
   maxLength?: number;
   suffix?: string;
-  returnKeyType?: 'send' | 'search' | 'done';
+  /** `next` keeps the keyboard up (focus moves on in `onSubmit`). */
+  returnKeyType?: 'send' | 'search' | 'done' | 'next';
   /** Longer free text: wraps (and so does a long placeholder) instead of scrolling sideways; Return still sends. */
   multiline?: boolean;
+  inputRef?: Ref<TextInput>;
 }) {
   const [focused, setFocused] = useState(false);
   return (
     <View style={[styles.field, multiline && styles.fieldMultiline, focused && styles.fieldFocused]}>
       <TextInput
+        ref={inputRef}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -333,6 +337,7 @@ function NumberAnswer({ prompt, busy, onAnswer }: PickerProps) {
   const [value, setValue] = useState('');
   const [feet, setFeet] = useState('');
   const [inches, setInches] = useState('');
+  const inchesRef = useRef<TextInput>(null);
 
   const imperialHeight = unit === 'ft';
   const suffix = unit || prompt.unit_hint;
@@ -393,8 +398,32 @@ function NumberAnswer({ prompt, busy, onAnswer }: PickerProps) {
       <View style={styles.inline}>
         {imperialHeight ? (
           <>
-            <Field value={feet} onChangeText={setFeet} suffix="ft" label="Height — feet" placeholder="5" keyboardType="number-pad" maxLength={1} onSubmit={(t) => submit({ feet: t })} />
-            <Field value={inches} onChangeText={setInches} suffix="in" label="Height — inches" placeholder="6" keyboardType="decimal-pad" maxLength={4} onSubmit={(t) => submit({ inches: t })} />
+            {/* Feet is one digit: typing it (or the keyboard's Next key) moves on to inches instead of sending 5'0". */}
+            <Field
+              value={feet}
+              onChangeText={(t) => {
+                setFeet(t);
+                if (/^\d$/.test(t.trim())) inchesRef.current?.focus();
+              }}
+              suffix="ft"
+              label="Height — feet"
+              placeholder="5"
+              keyboardType="number-pad"
+              maxLength={1}
+              returnKeyType="next"
+              onSubmit={() => inchesRef.current?.focus()}
+            />
+            <Field
+              inputRef={inchesRef}
+              value={inches}
+              onChangeText={setInches}
+              suffix="in"
+              label="Height — inches"
+              placeholder="6"
+              keyboardType="decimal-pad"
+              maxLength={4}
+              onSubmit={(t) => submit({ inches: t })}
+            />
           </>
         ) : (
           <Field

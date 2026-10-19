@@ -13,10 +13,12 @@ import { firstName, useAuth } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
 import { onboardingApi, type Answer, type ChatLine, type OnboardingProgress, type OnboardingStepResult, type StepPrompt } from '@/lib/onboarding';
 import { colors, gutter, spacing } from '@/theme';
-import { EmptyState, IconButton, Orb, ProgressBar, Screen, Skeleton, Text, toast, Button } from '@/ui';
+import { EmptyState, IconButton, Orb, ProgressBar, Screen, Skeleton, Text, toast, Button, useKeyboardHeight } from '@/ui';
 
 const TYPING_MS = 650;
 const DONE_REDIRECT_MS = 2200;
+/** "Try again" shows its spinner at least this long: offline, the request fails at once and the screen would not change. */
+const RETRY_MIN_MS = 700;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** A failed answer / restart: say why — except for an ended session (401), which signs out and the sign-in screen explains. */
@@ -40,8 +42,10 @@ function promptItem(prompt: StepPrompt, instant = false): ChatItem {
 export default function Onboarding() {
   const { user, setUser, refresh, signOut } = useAuth();
   const { height } = useWindowDimensions();
+  const keyboardHeight = useKeyboardHeight();
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const [items, setItems] = useState<ChatItem[]>([]);
   const [prompt, setPrompt] = useState<StepPrompt | null>(null);
   const [progress, setProgress] = useState<OnboardingProgress>({ index: 0, total: 14, value: 0 });
@@ -55,9 +59,13 @@ export default function Onboarding() {
   const scrollRef = useRef<ScrollView>(null);
   const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /** Fetch the saved conversation; returns a canceller (state is only touched in the promise callbacks). */
-  const load = useCallback(() => {
+  /**
+   * Fetch the saved conversation; returns a canceller (state is only touched in the promise callbacks).
+   * `retry`: from the error screen's "Try again" — it stays on screen with a busy button, and a failure buzzes.
+   */
+  const load = useCallback((opts: { retry?: boolean } = {}) => {
     let cancelled = false;
+    const started = Date.now();
     onboardingApi.state().then(
       (data) => {
         if (cancelled) return;
@@ -71,12 +79,16 @@ export default function Onboarding() {
         setAnswered(Object.keys(data.answers || {}).length);
         setStatus('ready');
       },
-      (e: unknown) => {
+      async (e: unknown) => {
+        if (opts.retry) await wait(RETRY_MIN_MS - (Date.now() - started));
         if (cancelled) return;
         setLoadError(errorMessage(e));
         setStatus('error');
+        if (opts.retry) haptics.error();
       }
-    );
+    ).finally(() => {
+      if (!cancelled) setRetrying(false);
+    });
     return () => {
       cancelled = true;
     };
@@ -237,9 +249,11 @@ export default function Onboarding() {
           label="Try again"
           icon="refresh-cw"
           style={styles.retry}
+          loading={retrying}
           onPress={() => {
-            setStatus('loading');
-            load();
+            if (retrying) return;
+            setRetrying(true);
+            load({ retry: true });
           }}
         />
       </Screen>
@@ -257,7 +271,8 @@ export default function Onboarding() {
         prompt && status === 'ready' && !done ? (
           <Animated.View key={`${prompt.step}-${round}`} entering={FadeInDown.springify().damping(20)} style={styles.composer}>
             <ScrollView
-              style={{ maxHeight: Math.round(height * 0.44) }}
+              // Under half of the space left above the keyboard: the question being answered stays readable.
+              style={{ maxHeight: Math.round((height - keyboardHeight) * 0.44) }}
               contentContainerStyle={styles.composerContent}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
@@ -278,7 +293,9 @@ export default function Onboarding() {
         showsVerticalScrollIndicator={false}
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
         // The answer area below grows and shrinks (unit toggle, "Show all", keyboard): keep the latest question in view.
-        onLayout={() => scrollRef.current?.scrollToEnd({ animated: false })}
+        // Next frame: during this layout pass the native view still has its old height, so an immediate scroll would
+        // land on the old end (keyboard opening: the question slid out of view above the composer).
+        onLayout={() => requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: false }))}
       >
         <Animated.View entering={FadeIn.duration(400)} style={styles.intro}>
           <Text variant="eyebrow" tone="subtle" align="center">

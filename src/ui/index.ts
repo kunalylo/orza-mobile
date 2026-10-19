@@ -18,3 +18,4 @@ export { Skeleton, SkeletonText, type SkeletonProps } from './Skeleton';
 export { Text, type TextProps, type TextTone } from './Text';
 export { TextField, type TextFieldProps } from './TextField';
 export { ToastHost, toast, type ToastKind } from './Toast';
+export { useKeyboardHeight } from './useKeyboardHeight';
