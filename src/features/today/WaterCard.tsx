@@ -49,14 +49,16 @@ function Glass({ filled, index, nextValue, onPress }: { filled: boolean; index: 
 }
 
 export function WaterCard({ date, glasses, target }: { date: string; glasses: number; target: number }) {
-  const { value, commit } = useWaterWriter(date, glasses);
+  const { value, current, commit } = useWaterWriter(date, glasses);
   const slots = Math.min(Math.max(target, value), MAX_SLOTS);
   const extra = value - slots;
   const done = target > 0 && value >= target;
 
+  // `current()`, not `value`: fast taps can land before the card re-renders.
   const set = (n: number) => {
-    if (n === value) return;
-    if (target > 0 && n >= target && value < target) haptics.success();
+    const from = current();
+    if (n === from) return;
+    if (target > 0 && n >= target && from < target) haptics.success();
     else haptics.select();
     commit(n);
   };
@@ -92,8 +94,8 @@ export function WaterCard({ date, glasses, target }: { date: string; glasses: nu
         <Text variant="caption" tone={done ? 'success' : 'subtle'} weight={done ? 'semibold' : undefined} style={styles.flex}>
           {done ? 'Hydration goal reached' : `${Math.max(0, target - value)} to go · 250 ml each`}
         </Text>
-        <IconButton icon="minus" size={38} iconSize={16} accessibilityLabel="Remove a glass" disabled={value <= 0} onPress={() => set(value - 1)} haptic="none" />
-        <IconButton icon="plus" variant="solid" size={38} iconSize={16} accessibilityLabel="Add a glass" disabled={value >= MAX_GLASSES} onPress={() => set(value + 1)} haptic="none" />
+        <IconButton icon="minus" size={38} iconSize={16} accessibilityLabel="Remove a glass" disabled={value <= 0} onPress={() => set(current() - 1)} haptic="none" />
+        <IconButton icon="plus" variant="solid" size={38} iconSize={16} accessibilityLabel="Add a glass" disabled={value >= MAX_GLASSES} onPress={() => set(current() + 1)} haptic="none" />
       </View>
     </GlassCard>
   );

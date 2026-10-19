@@ -14,6 +14,7 @@ export { ScreenHeader, goBackOrHome, type ScreenHeaderProps } from './ScreenHead
 export { SectionHeader, type SectionHeaderProps } from './SectionHeader';
 export { Segmented, type SegmentedOption, type SegmentedProps } from './Segmented';
 export { Sheet, type SheetProps } from './Sheet';
+export { useSheetOwnsKeyboard } from './sheetKeyboard';
 export { Skeleton, SkeletonText, type SkeletonProps } from './Skeleton';
 export { Text, type TextProps, type TextTone } from './Text';
 export { TextField, type TextFieldProps } from './TextField';

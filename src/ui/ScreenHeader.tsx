@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Keyboard, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { gutter, spacing } from '@/theme';
 
@@ -22,7 +22,12 @@ export interface ScreenHeaderProps {
   style?: StyleProp<ViewStyle>;
 }
 
+/**
+ * Leave the screen. The keyboard goes first: on Android, popping a screen while its keyboard is up left the screen below
+ * blank (and without its tab bar) until the keyboard had finished hiding.
+ */
 export function goBackOrHome() {
+  Keyboard.dismiss();
   if (router.canGoBack()) router.back();
   else router.replace('/');
 }

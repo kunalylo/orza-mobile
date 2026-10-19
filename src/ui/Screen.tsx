@@ -15,6 +15,7 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { colors, gutter, layout } from '@/theme';
 
+import { useSheetOwnsKeyboard } from './sheetKeyboard';
 import { useKeyboardHeight } from './useKeyboardHeight';
 
 export type BackdropVariant = 'canvas' | 'orb' | 'hero' | 'none';
@@ -116,8 +117,10 @@ export function Screen({
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const tabSpace = useTabBarSpace();
+  // A sheet's keyboard is not this screen's to avoid (the sheet covers it, and Android reports it gone late).
+  const sheetKeyboard = useSheetOwnsKeyboard();
   // Only screens that avoid the keyboard and have a footer care (the footer drops its safe-area pad while it is up).
-  const keyboardUp = useKeyboardHeight(Boolean(keyboard && footer)) > 0;
+  const keyboardUp = useKeyboardHeight(Boolean(keyboard && footer)) > 0 && !sheetKeyboard;
   const top = edges.includes('top') ? insets.top : 0;
   const bottomInset = edges.includes('bottom') ? insets.bottom : 0;
   const bottom = tabBar ? tabSpace : footer ? 0 : bottomInset + 16;
@@ -155,7 +158,7 @@ export function Screen({
         // `padding` on Android too: the app draws edge to edge (`edgeToEdgeEnabled`, mandatory from Android 15), so the
         // window is no longer resized for the keyboard (`adjustResize` has no effect) — without it the keyboard covers
         // a bottom composer / footer and the fields near the bottom.
-        <KeyboardAvoidingView style={styles.flex} behavior="padding">
+        <KeyboardAvoidingView style={styles.flex} behavior="padding" enabled={!sheetKeyboard}>
           {inner}
         </KeyboardAvoidingView>
       ) : (

@@ -74,7 +74,14 @@ export function useWaterWriter(date: string, glasses: number) {
   const queued = useRef<number | null>(null);
   const confirmed = useRef<TrackingDay | null>(null);
   const failure = useRef<unknown>(null);
+  /**
+   * The last tapped value, set synchronously: two taps inside one render (a busy JS thread) both read the same rendered
+   * `value`, so "+ +" wrote 7, 7 instead of 7, 8 — fast taps were lost. null when nothing is pending.
+   */
+  const latest = useRef<number | null>(null);
   const value = pending ?? glasses;
+  /** What the next tap should build on (event handlers only). */
+  const current = () => latest.current ?? value;
 
   const send = (n: number) => {
     api
@@ -99,6 +106,7 @@ export function useWaterWriter(date: string, glasses: number) {
         busy.current = false;
         activeWrites = Math.max(0, activeWrites - 1);
         if (confirmed.current) mergeTracking(qc, date, confirmed.current);
+        latest.current = null;
         setPending(null);
         if (failure.current) {
           toast.error(errorMessage(failure.current));
@@ -111,7 +119,8 @@ export function useWaterWriter(date: string, glasses: number) {
 
   const commit = (next: number) => {
     const n = clamp(Math.round(next), 0, MAX_GLASSES);
-    if (n === value) return;
+    if (n === current()) return;
+    latest.current = n;
     setPending(n);
     // Don't let an older dashboard fetch land on top of the optimistic value.
     void qc.cancelQueries({ queryKey: todayKeys.day(date) });
@@ -126,7 +135,7 @@ export function useWaterWriter(date: string, glasses: number) {
     send(n);
   };
 
-  return { value, commit, saving: pending != null };
+  return { value, current, commit, saving: pending != null };
 }
 
 /* ───────────────────────────── Steps & weight ───────────────────────────── */

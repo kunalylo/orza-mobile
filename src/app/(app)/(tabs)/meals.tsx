@@ -41,6 +41,13 @@ export default function Meals() {
 
   const scrollRef = useRef<ScrollView>(null);
   const composerRef = useRef<MealComposerHandle>(null);
+  /** Set when a meal was just logged: the "Logged to …" card (with Undo) is scrolled into view once it has a layout. */
+  const revealResult = useRef(false);
+
+  const onLogged = (res: TextLogResponse) => {
+    revealResult.current = true;
+    setResult(res);
+  };
 
   const isToday = date === today;
   const dayLabel = formatDayLabel(date, today);
@@ -187,13 +194,21 @@ export default function Meals() {
             mealType={composerType}
             onMealTypeChange={setComposerType}
             aiStatus={aiStatus}
-            onLogged={setResult}
+            onLogged={onLogged}
             onOpenFoodList={() => openPicker()}
           />
         </Animated.View>
 
         {shownResult ? (
-          <View style={styles.section}>
+          <View
+            key={shownResult.meal.id}
+            style={styles.section}
+            onLayout={(e) => {
+              if (!revealResult.current) return;
+              revealResult.current = false;
+              scrollRef.current?.scrollTo({ y: Math.max(0, e.nativeEvent.layout.y - spacing.lg), animated: true });
+            }}
+          >
             <LoggedResult
               key={shownResult.meal.id}
               result={shownResult}

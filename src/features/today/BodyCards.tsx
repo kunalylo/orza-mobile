@@ -2,8 +2,8 @@
  * Steps + weight quick log: two compact tiles side by side; tapping one opens a Sheet with a keyboard-safe numeric field.
  * Wording and validation follow the web's StepsCard / WeightCard.
  */
-import { useState, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { StyleSheet, View, type TextInput } from 'react-native';
 
 import { ApiError, errorMessage } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
@@ -41,6 +41,20 @@ function fieldMessage(e: unknown, field: string): string | null {
   return null;
 }
 
+/**
+ * Raise the keyboard once the sheet has sprung up. With `autoFocus` the field was focused before the sheet's Modal
+ * window had focus on Android: it looked focused, but no keyboard came up until it was tapped again.
+ */
+function useFocusWhenShown(visible: boolean) {
+  const ref = useRef<TextInput>(null);
+  useEffect(() => {
+    if (!visible) return undefined;
+    const t = setTimeout(() => ref.current?.focus(), 380);
+    return () => clearTimeout(t);
+  }, [visible]);
+  return ref;
+}
+
 /* ───────────────────────────── Steps ───────────────────────────── */
 
 export function StepsTile({ steps, target, onPress }: { steps: number; target: number; onPress: () => void }) {
@@ -76,6 +90,7 @@ export function StepsSheet({
 }) {
   const isToday = date === today;
   const log = useLogSteps(date);
+  const fieldRef = useFocusWhenShown(visible);
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [wasVisible, setWasVisible] = useState(visible);
@@ -155,7 +170,7 @@ export function StepsSheet({
         maxLength={7}
         error={error}
         hint="Enter the total from your phone or watch."
-        autoFocus
+        ref={fieldRef}
         suffix="steps"
         containerStyle={styles.field}
       />
@@ -267,6 +282,7 @@ export function WeightSheet({
 }) {
   const isToday = date === today;
   const log = useLogWeight(date);
+  const fieldRef = useFocusWhenShown(visible);
   const unit = info.imperial ? 'lb' : 'kg';
   const current = currentWeight(info);
   const [input, setInput] = useState('');
@@ -342,7 +358,7 @@ export function WeightSheet({
         maxLength={6}
         error={error}
         hint="Weigh in at the same time of day for a steadier trend."
-        autoFocus
+        ref={fieldRef}
         suffix={unit}
         containerStyle={styles.field}
       />

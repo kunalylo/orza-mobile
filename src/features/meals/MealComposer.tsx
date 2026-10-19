@@ -86,6 +86,11 @@ export function MealComposer({
   const inputRef = useRef<TextInput>(null);
   const logText = useLogMealText();
   const submitting = logText.isPending;
+  /**
+   * Synchronous guard: `isPending` only flips on the next render, and a hardware Enter key fires the editor action on
+   * key-down and key-up — two submits in one tick logged the meal twice (two AI calls, two credits).
+   */
+  const inFlight = useRef(false);
 
   // Remember the voice language (Hindi speakers shouldn't have to switch every time) — shared with Ask ÖRZA.
   useEffect(() => {
@@ -137,17 +142,21 @@ export function MealComposer({
 
   const submit = () => {
     const value = text.trim();
-    if (submitting) return;
+    if (submitting || inFlight.current) return;
     if (value.length < 2) {
       haptics.error();
       setFieldError('Tell ÖRZA what you ate — e.g. “2 roti and 1 katori dal”.');
+      // The send key keeps focus (`submitBehavior="submit"`), so the keyboard stays up to fix it.
       inputRef.current?.focus();
       return;
     }
+    // Valid: put the keyboard away so the "Understanding…" state and the logged card are visible.
+    inputRef.current?.blur();
     if (voice.listening) voice.cancel();
     setFieldError(null);
     setFormError(null);
     haptics.firm();
+    inFlight.current = true;
     logText.mutate(
       { text: value, date, meal_type: mealType === 'auto' ? undefined : mealType, source: usedVoice.current ? 'voice' : 'text' },
       {
@@ -168,6 +177,9 @@ export function MealComposer({
           // No answer: the server may still log it (the day is being refetched) — a blind retry could log it twice.
           else if (e instanceof ApiError && e.isNetwork) setFormError({ message: NO_ANSWER_MESSAGE[e.code === 'timeout' ? 'timeout' : 'network'], code: e.code });
           else setFormError({ message: errorMessage(e), code: e instanceof ApiError ? (e.status === 402 ? 'no_credits' : e.code) : 'unknown' });
+        },
+        onSettled: () => {
+          inFlight.current = false;
         },
       }
     );
@@ -232,7 +244,7 @@ export function MealComposer({
           accessibilityLabel="What did you eat?"
           error={fieldError}
           returnKeyType="send"
-          submitBehavior="blurAndSubmit"
+          submitBehavior="submit"
           onSubmitEditing={submit}
           inputStyle={styles.input}
         />

@@ -10,24 +10,30 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { colors, gradients, radii, shadows, spacing } from '@/theme';
 import { Icon, Orb, PressableScale, Text } from '@/ui';
 
-/** Cool cyan light top-left, violet bottom-right (like the web's ambient hero light). */
+/**
+ * Cool cyan light top-left, violet bottom-right (like the web's ambient hero light).
+ * The wrapper fills the card's border box: a bare `100%` Svg inside the padded card resolves against the content box and
+ * stopped 2 × padding short of the right / bottom edge (a hard-edged violet rectangle).
+ */
 function Ambient() {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
   return (
-    <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Defs>
-        <RadialGradient id={`c${id}`} cx="10%" cy="0%" rx="60%" ry="70%">
-          <Stop offset="0" stopColor="#2FD2F0" stopOpacity={0.16} />
-          <Stop offset="1" stopColor="#07090C" stopOpacity={0} />
-        </RadialGradient>
-        <RadialGradient id={`v${id}`} cx="90%" cy="100%" rx="60%" ry="70%">
-          <Stop offset="0" stopColor="#BFA8FF" stopOpacity={0.18} />
-          <Stop offset="1" stopColor="#07090C" stopOpacity={0} />
-        </RadialGradient>
-      </Defs>
-      <Rect width="100%" height="100%" fill={`url(#c${id})`} />
-      <Rect width="100%" height="100%" fill={`url(#v${id})`} />
-    </Svg>
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Svg width="100%" height="100%">
+        <Defs>
+          <RadialGradient id={`c${id}`} cx="10%" cy="0%" rx="60%" ry="70%">
+            <Stop offset="0" stopColor="#2FD2F0" stopOpacity={0.16} />
+            <Stop offset="1" stopColor="#07090C" stopOpacity={0} />
+          </RadialGradient>
+          <RadialGradient id={`v${id}`} cx="90%" cy="100%" rx="60%" ry="70%">
+            <Stop offset="0" stopColor="#BFA8FF" stopOpacity={0.18} />
+            <Stop offset="1" stopColor="#07090C" stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect width="100%" height="100%" fill={`url(#c${id})`} />
+        <Rect width="100%" height="100%" fill={`url(#v${id})`} />
+      </Svg>
+    </View>
   );
 }
 

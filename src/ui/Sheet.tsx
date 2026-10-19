@@ -13,7 +13,7 @@
  * its own list (FlatList) and `full` to use the full height even with little content (search results).
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +22,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { colors, gutter, isIOS, motion, radii, shadows, spacing } from '@/theme';
 
 import { IconButton } from './IconButton';
+import { holdSheetKeyboard } from './sheetKeyboard';
 import { Text } from './Text';
 import { useKeyboardHeight } from './useKeyboardHeight';
 
@@ -86,11 +87,17 @@ function SheetModal({
   const drag = useSharedValue(0); // finger offset while swiping down
   const [sheetHeight, setSheetHeight] = useState(windowHeight);
 
+  // The keyboard is this sheet's while it is mounted — the screen below must not make room for it (see sheetKeyboard).
+  useEffect(() => holdSheetKeyboard(), []);
+
   useEffect(() => {
     if (visible) {
       drag.set(0);
       progress.set(reduceMotion ? withTiming(1, { duration: motion.fast }) : withSpring(1, motion.springSoft));
     } else {
+      // Put the keyboard away together with the sheet. Left to Android, it only goes once the Modal window is gone and
+      // lingered ~1 s over the screen below.
+      Keyboard.dismiss();
       progress.set(
         withTiming(0, { duration: reduceMotion ? motion.fast : motion.base }, (finished) => {
           if (finished) scheduleOnRN(onHidden);

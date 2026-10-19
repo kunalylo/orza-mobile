@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { haptics } from '@/lib/haptics';
 import { colors, diagonal, gradients, layout, motion, radii, shadows } from '@/theme';
-import { Icon, PressableScale, Text, type IconName } from '@/ui';
+import { Icon, PressableScale, Text, useSheetOwnsKeyboard, type IconName } from '@/ui';
 
 const TABS: Record<string, { label: string; icon: IconName; iconActive: IconName }> = {
   index: { label: 'Today', icon: 'mci:white-balance-sunny', iconActive: 'mci:white-balance-sunny' },
@@ -114,6 +114,9 @@ function SnapButton({ focused, onPress, onLongPress }: { focused: boolean; onPre
 export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const [keyboardUp, setKeyboardUp] = useState(false);
+  // A sheet's keyboard: the sheet covers the bar anyway, and Android reports that keyboard gone late — the bar would
+  // stay missing for a moment after the sheet closed.
+  const sheetKeyboard = useSheetOwnsKeyboard();
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -125,7 +128,7 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
     };
   }, []);
 
-  if (keyboardUp) return null;
+  if (keyboardUp && !sheetKeyboard) return null;
 
   const routes = state.routes.filter((r) => TABS[r.name]);
   const bottom = Math.max(insets.bottom, layout.tabBarGap);

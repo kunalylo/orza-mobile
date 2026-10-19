@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, Keyboard, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { ApiError, errorMessage } from '@/lib/api';
@@ -67,10 +67,16 @@ export default function EditMeal() {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
       if (!dirtyRef.current || leaving.current) return;
       e.preventDefault();
-      Alert.alert("Discard changes?", "Your edits to this meal haven't been saved.", [
-        { text: 'Keep editing', style: 'cancel' },
-        { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(e.data.action) },
-      ]);
+      // Cancelable: Android back on the dialog means "Keep editing".
+      Alert.alert(
+        'Discard changes?',
+        "Your edits to this meal haven't been saved.",
+        [
+          { text: 'Keep editing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(e.data.action) },
+        ],
+        { cancelable: true }
+      );
     });
     return unsubscribe;
   }, [navigation]);
@@ -91,6 +97,8 @@ export default function EditMeal() {
       toast.error(rows.length ? 'Please check the highlighted fields.' : 'Add at least one item — or delete the meal instead.');
       return;
     }
+    // Let the keyboard go down while the change is saved: leaving with it up showed a blank screen until it had hidden.
+    Keyboard.dismiss();
     update.mutate(
       { id: meal.id, items: rows.map(fromDraft), meal_type: mealType },
       {
