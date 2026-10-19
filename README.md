@@ -80,7 +80,10 @@ src/
 - **Dose events**: `emitDoseEvent` / `onDoseEvent` from `@/features/meds/events` after any dose or medicine change.
 - **Alarms**: the phone schedules every medicine alarm and reminder itself (`@/lib/alarms`, mounted by `useAlarmSync()` in
   `(app)/_layout`). Call `emitAlarmDataChanged()` from `@/lib/alarms/events` after reminder / quiet-hours / preference /
-  notification-permission changes; dose and medicine changes already flow through `emitDoseEvent`. Screens read
+  notification-permission changes; dose and medicine changes already flow through `emitDoseEvent`. A screen that
+  records a dose press itself calls `alarmSnoozePressed(doses, until)` BEFORE the snooze request (the phone re-rings
+  even if the app is suspended) and `alarmDoseSaved(log, pressedAt)` with the `POST /meds/doses` answer (from
+  `@/lib/alarms/bridge`). Screens read
   `useAlarmSyncState()` (scheduled, `next`, `quietDoses`, `offline`) or `usePhoneAlarmStatus()` from
   `@/features/alarms/status` (permissions + fixes); `promptAlarmPermission(reason)` asks for missing permissions after a
   medicine / prescription adds alarms. Android-only native calls (`silenceRinging`, `releaseLockScreen`, `requestUnlock`,

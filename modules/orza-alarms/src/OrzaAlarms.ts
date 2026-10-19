@@ -76,8 +76,9 @@ export async function dismiss(key: string): Promise<void> {
 }
 
 /**
- * Alarms still showing whose doses were partly handled elsewhere, each rebuilt with only its open doses: re-shown
- * silently with just those (a ringing one is left alone). Resolves with how many were re-shown.
+ * Alarms still showing whose doses were partly handled elsewhere, each rebuilt with only its open doses: their
+ * Take / Snooze / Skip act on just those from now on; a silent one is re-shown with them (a ringing one keeps ringing
+ * as it is until it is silenced). Resolves with how many were updated.
  */
 export async function refreshShowing(items: NativeAlarmItem[]): Promise<number> {
   if (!native || typeof native.refreshShowing !== 'function' || !items.length) return 0;

@@ -73,7 +73,7 @@ IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
 - [x] C1 Local scheduling engine (rolling window; iOS 64-pending limit; reschedule on app open, med change, timezone change; dedupe with server push)
   — `src/lib/alarms/**`: pure planner mirroring web `dispatch.ts` + `schedule.ts` port (doses grouped per minute, snooze
   re-rings, quiet hours silence doses / snoozes / reminders → `quietDoses` warning, refill alerts 08:00–21:00 once a day,
-  7-day window, cap with 25 % kept for reminders), photo cache (first 2 photos per medicine, JPEG ≤ 1080 px, Bearer
+  7-day window, cap: medicine alarms first, reminders fill the rest), photo cache (first 2 photos per medicine, JPEG ≤ 1080 px, Bearer
   download), offline action queue → `POST /api/meds/doses`, sync orchestrator (single-flight, cached last good data,
   `registerDevice({alarmsLocal})` only when alarms really ring), hourly background task (`index.ts` entry), sign-out
   cleanup. `npm run test:alarms` 28/28. Notes: `docs/notes/C1-engine.md`.
@@ -94,6 +94,25 @@ IDs: bundle/package `in.co.ylo.orza`, Expo owner `kunal_ylo`, scheme `orza`.
   permissions + fixes, next alarm with names, quiet-hour doses, battery tip, Test alarm in 10 s with a medicine photo or
   the sample strip); first-run permission sheet after the first alarm medicine / an applied prescription; 27 s alarm
   tone; dev builds refuse a missing API URL; Android `networkInspector: false`. Notes: `C4-integrate.md`.
+- [x] C5/C6 Phase C review — 16 findings (6 Android module, 10 engine / iOS), all confirmed and fixed (none refuted;
+  direct-boot awareness, an optional part of F3, left for D1). Notes: `docs/notes/C6-fix.md`.
+  - Android: a due alarm not delivered yet (Doze / inexact delay) is never dropped by a re-plan or a time / update
+    re-schedule (kept ≤ 3 h, set again → fires at once; `dismiss` drops one whose doses were handled); alarm launch of a
+    killed app with its task in Recents keeps the alarm deep link (`setIntent`) + JS safety net releasing the lock screen
+    when no alarm screen opened within 8 s; doses missed while the phone was off (> 30 min, ≤ 12 h) or held back > 3 h show
+    as a silent "Missed" alarm with photos and Take / Snooze / Skip instead of vanishing; "Medicine alarms" channel set to
+    Silent / no sound → `silenced` (alarms stay set, `alarms_local` false, fix-it row); a pending.json write failure rejects
+    `scheduleAll` / `scheduleOne` (nothing set, engine declares false); a partly handled alarm still showing has its
+    buttons (and quiet copy) reduced to the open doses.
+  - Engine: Snooze in the app (alarm / Today screen) sets the re-ring on the phone at once (also offline) and keeps it
+    through a plan made just before; logs ÖRZA confirmed are kept (`lib/alarms/recent.ts`) so a failed refetch can't
+    lose a snooze / bring back a taken dose; snooze / skip never apply to a dose already taken / skipped (alarm buttons,
+    native actions, planner overlay, and a `GET /api/meds/doses?at=` check before a queued one is sent); older queued
+    presses are superseded by an in-app action; snoozes of one alarm sent one after another ring once (60 s grouping);
+    medicine alarms get the whole iOS cap, the last one says "Open ÖRZA to set your next alarms" when cut; an unreadable
+    permission changes nothing (no mass cancel); iOS never cancels an alarm due within 5 s, and Notification-Center-only
+    counts as silenced; the last `alarms_local` declaration persists across launches (no false → true flip on cold
+    start); the iOS banner is hidden only when the alarm screen really is in front.
 
 ### Phase C device test plan (D1 Android emulator + EAS dev build, D2 iPhone via TestFlight)
 Before anything: the bundle must carry the LOCAL origin (`.env.local` → `http://10.0.2.2:3100`); a dev build without a URL
@@ -113,7 +132,13 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   phone locked (Android full screen; iOS lock-screen banner), airplane mode (still rings; alarm screen shows "No
   connection — saved on your phone", presses queued and sent when back online — check the web shows them), Doze
   (`adb shell dumpsys deviceidle force-idle`), reboot (Android: alarms restored; a dose missed ≤ 30 min while off rings
-  after unlock), timezone change, clock change.
+  after unlock, older ones ≤ 12 h show as a silent "Missed" alarm), timezone change, clock change.
+- **Review fixes (C6)**: inexact mode (Alarms & reminders off) + Doze — open the app a few minutes after a dose time that
+  hasn't rung yet → it still rings; kill the app (task kept in Recents) → the alarm opens the alarm screen over the lock
+  screen, never the home screen; "Medicine alarms" set to Silent → card "Silent" + Fix, server gets `alarms_local: false`;
+  two medicines at 08:00 ringing → take one on Today → "Snooze 10 min" on the ringing notification re-rings only the
+  other; Snooze on the alarm screen then lock the phone at once → rings 10 min later (iOS too); offline Snooze queued,
+  then the dose taken on the web → the queued snooze is not sent.
 - **Actions from the notification/alarm**: Take / Skip / Snooze in the shade with the app killed (Android records natively,
   shows in the app after opening; iOS opens the app then records); Snooze re-rings 10 min later under the same alarm (no
   duplicate); a press while offline syncs later; Take on the web → the phone's pending alarm disappears after the next sync.
@@ -142,6 +167,10 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
    day — up to 9 calls on a cold cache, usually 1–3).
 3. A push sender (FCM / APNs) would let the server wake the phone after a web-side change; until then the phone re-plans on
    open, on change events and in the hourly background task (`push_token` stays null).
+4. `alarms_local_until` on `POST /api/devices` (the phone's `coveredUntil`): the dispatcher resumes medicine Web Push after
+   it — iOS keeps 64 notifications, so a member with many dose times can be covered for less than 7 days (C5L-4).
+5. `recordDoseAction`: refuse `snooze` / `skip` over a dose already `taken` unless explicitly overridden (the phone now
+   checks first; this protects against other clients and races).
 
 ## Phase D — Test & fix (Android emulator "Medium_Phone" + EAS dev build; iOS via TestFlight)
 - [ ] D1 EAS development build (Android) → install on emulator → E2E every flow → fix → repeat
@@ -337,3 +366,11 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   `npx expo-doctor` 20/21: three patch updates published since Phase B (`@expo/ui` 57.0.25, `expo` 57.0.30, `expo-router`
   57.0.28) — run `npx expo install @expo/ui expo expo-router` before the next dev build.
   Next: D1 — Android dev build (Kotlin compile check) → emulator against the LOCAL web server → device test plan above.
+- 2026-10-19: **Phase C review fixed (C6)** — 16 findings verified, all confirmed and fixed (summary under Phase C;
+  details + D1 device checks in `docs/notes/C6-fix.md`). Resumed after a usage-limit stop from WIP `a31d030`; the resumed
+  run re-verified every fix and added: ringing partly-handled Android alarms get their "showing" record reduced to the
+  open doses (Snooze all / Skip all can't hit a taken medicine), in-app snooze re-rings survive a plan made just before
+  the press (`withInAppSnoozes`), an empty channel sound URI counts as silenced. Checks: `npm run typecheck` ✓, `npx expo
+  lint` ✓, `npm run test:alarms` 34/34 ✓, `npx expo config --type introspect` ✓, `npx expo export` android ✓ (6.7 MB) /
+  ios ✓ (6.6 MB) outside the repo, `npx expo-doctor` 20/21 (same three patch updates as before). Kotlin still uncompiled —
+  the D1 dev build is the compile check.

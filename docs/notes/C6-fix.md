@@ -40,20 +40,46 @@ Nothing native can be compiled here — every Kotlin edit is re-read for imports
 | C5L-9 | confirmed | iOS: no sound + no banner + no lock screen (Notification Center only) → `silenced` (alarmsLocal false + warning) |
 | C5L-10 | confirmed | `onAction` listeners return "handled"; `presentInApp` hides the banner only when the engine opened / is showing that alarm; presence tracks focus — an alarm screen buried under another screen isn't "on screen" (a new one is pushed) |
 
+## Resume log
+- Checkpoint a31d030 held every fix below (typecheck / lint / 33 tests already clean). Resumed run re-verified each
+  finding against the code, then added:
+  - **C5L-2 (Android, ringing alarm)**: `AlarmFiring.refresh` now also updates the "showing" record of a RINGING alarm
+    (no re-post, the sound isn't restarted) — ActionReceiver reads that record first, so "Snooze all" / "Skip all" on
+    a still-ringing group alarm no longer act on a medicine taken in the app meanwhile (the silencer's quiet copy then
+    shows only the open doses too).
+  - **C5L-1 (Android race)**: a re-ring set by an in-app Snooze (`snoozeNow`, no native action id) could be cancelled by
+    a sync that planned BEFORE the press (scheduleAll replaces everything). `withInAppSnoozes` (plan.ts, tested) adds
+    such re-rings (kept 2 min in `sync.ts`) back to a plan that doesn't carry them yet — unless the plan has the key, a
+    snooze re-ring covers each of its doses, or a dose was taken / skipped since.
+  - **F4**: a channel sound set to an empty URI (some Settings apps' "None") counts as silenced too.
+
 ## Checklist
-- [ ] notes (this file)
-- [ ] Kotlin: F1 (scheduleAll / rescheduleStored / dismiss), F6 (writeText → Boolean, throw), F3 (missed quiet), F4 (status fields + settings), F2 (setIntent), refreshShowing (C5L-2)
-- [ ] module JS (types + OrzaAlarms.ts): new status fields, `refreshShowing`
-- [ ] adapter contract + noop: `silenced`, `snoozeNow`, `refreshShowing`, listener returns handled, status throws when unreadable
-- [ ] Android adapter: status (silenced, throw), snoozeNow, refreshShowing, open handled
-- [ ] iOS adapter: C5L-5, C5L-6, C5L-7, C5L-9, C5L-10, snoozeNow, pre-snooze dose filter (C5L-2)
-- [ ] plan.ts: C5L-3 overlay rule, C5L-7 grouping, C5L-4 cap + continuation, `snoozeAlarmItem`, `partialAlarms`
-- [ ] queue.ts: send check (GET ?at=), recent logs, `supersedeQueuedDose`
-- [ ] sync.ts: unknown status, silenced, recent merge, action filter, `ringAgainAfterSnooze`, `doseActionSaved`, refreshShowing step
-- [ ] bridge (`lib/alarms/bridge.ts`) + alarm screen / Today screen calls
-- [ ] device.ts persisted declaration (C5L-8)
-- [ ] presence focus + useAlarmSync handled (C5L-10); root-layout lock-screen safety net (F2)
-- [ ] status card: silenced row
-- [ ] tests (planner) updated + new
-- [ ] checks: typecheck, lint, test:alarms, expo-doctor, config introspect, export android + ios (outside repo)
-- [ ] PROGRESS.md review summary + commit
+- [x] notes (this file)
+- [x] Kotlin: F1 (scheduleAll / rescheduleStored / dismiss), F6 (writeText → Boolean, throw), F3 (missed quiet), F4 (status fields + settings), F2 (setIntent), refreshShowing (C5L-2, + ringing record)
+- [x] module JS (types + OrzaAlarms.ts): new status fields, `refreshShowing`
+- [x] adapter contract + noop: `silenced`, `snoozeNow`, `refreshShowing`, listener returns handled, status throws when unreadable
+- [x] Android adapter: status (silenced, throw), snoozeNow, refreshShowing, open handled
+- [x] iOS adapter: C5L-5, C5L-6, C5L-7, C5L-9, C5L-10, snoozeNow, pre-snooze dose filter (C5L-2)
+- [x] plan.ts: C5L-3 overlay rule, C5L-7 grouping, C5L-4 cap + continuation, `snoozeAlarmItem`, `partialAlarms`, `withInAppSnoozes`
+- [x] queue.ts: send check (GET ?at=), recent logs, `supersedeQueuedDose`
+- [x] sync.ts: unknown status, silenced, recent merge, action filter, `ringAgainAfterSnooze`, `doseActionSaved`, refreshShowing step, in-app snoozes kept
+- [x] bridge (`lib/alarms/bridge.ts`) + alarm screen / Today screen calls
+- [x] device.ts persisted declaration (C5L-8)
+- [x] presence focus + useAlarmSync handled (C5L-10); root-layout lock-screen safety net (F2)
+- [x] status card: silenced row
+- [x] tests (planner) updated + new
+- [x] checks: typecheck ✓, lint ✓, test:alarms 34/34 ✓, expo-doctor 20/21 (same 3 patch updates — not installed, step rule), config introspect ✓, export android ✓ 6.7 MB / ios ✓ 6.6 MB (scratchpad)
+- [x] PROGRESS.md review summary + README (dose bridge) + commit
+
+## Cross-area (backend, web repo — not done here)
+- `alarms_local_until` on `POST /api/devices` (= the phone's `coveredUntil`): the dispatcher resumes medicine Web Push
+  after it (C5L-4 — iOS keeps 64 notifications, so a member with many dose times may be covered < 7 days).
+- `recordDoseAction`: reject `snooze` / `skip` over a dose already `taken` unless explicitly overridden (C5L-2 / C5L-3
+  belt and braces; the phone already checks with `GET ?at=` before sending a queued one).
+
+## Open for D1 (device tests)
+- Kotlin never compiled here: first Android dev build. Device checks: Doze-deferred alarm + app opened at 08:03
+  (F1), alarm on a killed app with the task in Recents (F2), reboot with a dose missed by > 30 min (F3), channel set
+  to Silent (F4), Snooze on a still-ringing group alarm after taking one medicine in the app (C5L-2).
+- Direct-boot awareness (F3 option) not done: Application.onCreate of the RN app would run before the first unlock —
+  must be proven on a device first.

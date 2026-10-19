@@ -351,6 +351,27 @@ export function snoozeAlarmItem(input: { meds: PlanMedication[]; scheduledFor: s
 
 const byTime = (a: AlarmPlanItem, b: AlarmPlanItem) => a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 
+/**
+ * Re-rings this phone set for doses snoozed in the app moments ago (`snoozeAlarmItem`), added to a plan that doesn't
+ * carry them yet — one computed before the press reached ÖRZA (a run already in flight would otherwise cancel them).
+ * Left out when the plan has it (same key, or a snooze re-ring for each of its doses), when one of its doses was taken
+ * / skipped since (`states`), or when its time has passed. Sorted, within `maxItems` (the latest items give way).
+ */
+export function withInAppSnoozes(items: AlarmPlanItem[], snoozes: AlarmPlanItem[], states: Map<string, DoseState>, now: number, maxItems: number): AlarmPlanItem[] {
+  if (!snoozes.length) return items;
+  const keys = new Set(items.map((i) => i.key));
+  const snoozedInPlan = new Set<string>();
+  for (const i of items) for (const d of i.doses ?? []) if (d.snoozed) snoozedInPlan.add(stateKey(d.medId, d.scheduledFor));
+  const extra = snoozes.filter((s) => {
+    const doses = s.doses ?? [];
+    if (!doses.length || keys.has(s.key) || !(s.at > now)) return false;
+    if (doses.every((d) => snoozedInPlan.has(stateKey(d.medId, d.scheduledFor)))) return false;
+    return !doses.some((d) => states.get(stateKey(d.medId, d.scheduledFor))?.finished);
+  });
+  if (!extra.length) return items;
+  return [...items, ...extra].sort(byTime).slice(0, Math.max(0, Math.floor(maxItems)));
+}
+
 /* ───────────────────────────── Planner ───────────────────────────── */
 
 export function planAlarms(input: PlanInput): AlarmPlan {

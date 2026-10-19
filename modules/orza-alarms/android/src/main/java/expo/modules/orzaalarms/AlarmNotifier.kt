@@ -110,7 +110,10 @@ internal object AlarmNotifier {
   fun channelSilenced(context: Context, channelId: String): Boolean {
     val channel = findChannel(context, channelId) ?: return false
     if (channel.importance == NotificationManager.IMPORTANCE_NONE) return false
-    return channel.importance < NotificationManager.IMPORTANCE_DEFAULT || channel.sound == null
+    if (channel.importance < NotificationManager.IMPORTANCE_DEFAULT) return true
+    // "None" in the sound picker: null, or an empty URI on some Settings apps.
+    val sound: Uri? = channel.sound
+    return sound == null || sound == Uri.EMPTY || sound.toString().isEmpty()
   }
 
   /** The channel may pop up on screen (heads-up) — needed for the full-screen alarm too (HIGH importance). */

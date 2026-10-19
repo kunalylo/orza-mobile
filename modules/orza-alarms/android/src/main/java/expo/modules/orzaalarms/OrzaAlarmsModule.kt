@@ -68,7 +68,8 @@ class OrzaAlarmsModule : Module() {
 
     /**
      * Alarms showing whose doses were partly handled elsewhere (`NativeAlarmItem[]` as JSON, each rebuilt with only its
-     * open doses): re-shown silently with just those. Resolves with how many were re-shown.
+     * open doses): their buttons act on just those from now on; a silent one is re-shown with them (a ringing one keeps
+     * its sound). Resolves with how many were updated.
      */
     AsyncFunction("refreshShowing") { itemsJson: String ->
       val ctx = context

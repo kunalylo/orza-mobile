@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { CONTINUE_NOTE, pendingWins, planAlarms, planHash, REFILL_SOON_MS, snoozeAlarmItem, type PlanInput } from '../../src/lib/alarms/plan';
+import { CONTINUE_NOTE, latestDoseStates, pendingWins, planAlarms, planHash, REFILL_SOON_MS, snoozeAlarmItem, withInAppSnoozes, type PlanInput } from '../../src/lib/alarms/plan';
 import { inQuietWindow, occurrencesBetween, utcToZoned, zonedToUtc } from '../../src/lib/alarms/schedule';
 import { snoozeAlarmKey, type PlanMedication, type PlanReminder } from '../../src/lib/alarms/types';
 
@@ -372,6 +372,38 @@ describe('doses', () => {
     assert.equal(planHash([quick]), planHash([planned]));
     assert.equal(quick.photoRefs[0]?.id, 'p1');
     assert.equal(snoozeAlarmItem({ meds, scheduledFor: at8, medIds: ['gone'], at: until, tz: IST }), null);
+  });
+
+  test('an in-app snooze survives a plan made before the press, until the plan carries it or the dose is taken', () => {
+    const now = ist('2026-10-15', '08:02');
+    const at8 = iso(ist('2026-10-15', '08:00'));
+    const until = now + 10 * MIN;
+    const meds = [med({ id: 'a' }), med({ id: 'b' })];
+    const quick = snoozeAlarmItem({ meds, scheduledFor: at8, medIds: ['a'], at: until, tz: IST });
+    assert.ok(quick);
+    const none = new Map();
+
+    // Planned before the press: no snooze in it → the re-ring is added back, in time order.
+    const before = planAlarms({ now, tz: IST, horizonDays: 1, meds }).items;
+    const merged = withInAppSnoozes(before, [quick], none, now, 200);
+    assert.equal(merged.length, before.length + 1);
+    assert.equal(merged[0].key, quick.key);
+
+    // The plan has it (the press reached ÖRZA), or a group re-ring covering its dose → nothing added.
+    const snoozedLogs = [{ medication_id: 'a', scheduled_for: at8, status: 'snoozed', acted_at: iso(now), snooze_until: iso(until) }];
+    const after = planAlarms({ now, tz: IST, horizonDays: 1, meds, doseStates: snoozedLogs }).items;
+    assert.equal(withInAppSnoozes(after, [quick], none, now, 200), after);
+    const group = snoozeAlarmItem({ meds, scheduledFor: at8, medIds: ['a', 'b'], at: until, tz: IST });
+    assert.ok(group);
+    assert.equal(withInAppSnoozes([group], [quick], none, now, 200).length, 1);
+
+    // Taken since, or its time has passed → nothing added.
+    const taken = latestDoseStates([{ medication_id: 'a', scheduled_for: at8, status: 'taken', acted_at: iso(now + MIN) }], []);
+    assert.equal(withInAppSnoozes(before, [quick], taken, now, 200), before);
+    assert.equal(withInAppSnoozes(before, [quick], none, until, 200), before);
+
+    // The cap still holds: the latest item gives way.
+    assert.equal(withInAppSnoozes(before, [quick], none, now, before.length).length, before.length);
   });
 
   test('settled keys: handled alarms of the last 12 h', () => {

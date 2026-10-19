@@ -121,16 +121,16 @@ internal object AlarmFiring {
   }
 
   /**
-   * An alarm still showing whose doses were partly handled elsewhere (e.g. one of two medicines taken in the app): it
-   * is shown again, silently, with only the open doses — `item` is the same alarm rebuilt by JS for them — so its
-   * Take / Snooze / Skip and photos no longer include the handled one. Only when the shown alarm is silent already
-   * (a ringing one is left alone: re-posting would restart the sound / full screen) and `item`'s doses are a strict
-   * subset of the shown ones. Under the store lock, so an action pressed meanwhile can't be undone by the re-post.
-   * True when it was re-shown.
+   * An alarm still showing whose doses were partly handled elsewhere (e.g. one of two medicines taken in the app):
+   * `item` is the same alarm rebuilt by JS with only the open doses, and it replaces the "showing" record — the
+   * Take / Snooze / Skip buttons act on that record (ActionReceiver reads it first), so a "Snooze all" no longer
+   * snoozes the taken medicine, and the silencer's quiet copy shows only the open doses. A silent alarm is re-posted
+   * right away with them (texts, photos); a ringing one is not (re-posting would restart the sound / full screen) —
+   * its record alone changes. Only when `item`'s doses are a strict subset of the shown ones. Under the store lock, so
+   * an action pressed meanwhile can't be undone by the update. True when it was updated.
    */
   fun refresh(context: Context, item: AlarmItem): Boolean = AlarmStore.locked {
-    val shown = AlarmStore.getShown(context, item.key)
-    if (shown == null || !shown.quiet) return@locked false
+    val shown = AlarmStore.getShown(context, item.key) ?: return@locked false
     if (!AlarmNotifier.showingKeys(context).contains(item.key)) {
       AlarmStore.takeShown(context, item.key)
       return@locked false
@@ -139,6 +139,10 @@ internal object AlarmFiring {
     val showing = shown.item.doses.map { doseId(it) }.toSet()
     if (open.isEmpty() || open.size >= showing.size || !showing.containsAll(open)) return@locked false
     val next = item.copy(at = shown.item.at, nativeActionId = null)
+    if (!shown.quiet) {
+      AlarmStore.putShown(context, next, quiet = false, shownAt = shown.shownAt)
+      return@locked true
+    }
     if (AlarmNotifier.post(context, next, quiet = true)) {
       AlarmStore.putShown(context, next, quiet = true, shownAt = shown.shownAt)
     }

@@ -38,6 +38,7 @@ import {
   planAlarms,
   planHash,
   snoozeAlarmItem,
+  withInAppSnoozes,
   type AlarmPlan,
 } from './plan';
 import { enqueueDoseActions, flushDoseQueue, pendingDoseActions, supersedeQueuedDose } from './queue';
@@ -345,8 +346,21 @@ function ringAgainAfterSnooze(doses: DoseRef[], until: number): void {
     const local = (id: string) => cachedAlarmPhotoUri(id);
     item.photos = item.photoRefs.map((r) => local(r.id)).filter((u): u is string => !!u);
     for (const d of item.doses ?? []) d.photos = d.photoRefs.map((r) => local(r.id)).filter((u): u is string => !!u);
+    inAppSnoozes.set(item.key, { item, madeAt: Date.now() });
     void alarmAdapter.snoozeNow(item).catch(() => undefined);
   }
+}
+
+/**
+ * Re-rings set by `ringAgainAfterSnooze`, kept for a while: a run that planned before the press would otherwise drop
+ * them from the phone (Android's `scheduleAll` replaces everything). `withInAppSnoozes` adds them back to such a plan.
+ */
+const inAppSnoozes = new Map<string, { item: AlarmPlanItem; madeAt: number }>();
+const IN_APP_SNOOZE_KEEP_MS = 2 * 60_000;
+
+function recentInAppSnoozes(now: number): AlarmPlanItem[] {
+  for (const [key, s] of inAppSnoozes) if (now - s.madeAt > IN_APP_SNOOZE_KEEP_MS || s.item.at <= now) inAppSnoozes.delete(key);
+  return [...inAppSnoozes.values()].map((s) => s.item);
 }
 
 /** ÖRZA confirmed a dose action done in the app: keep its log for the planner, drop older queued presses for it. */
@@ -374,6 +388,7 @@ export function resetAlarmEngine(): void {
   lastScheduled = null;
   lastStatusKey = null;
   lastTz = null;
+  inAppSnoozes.clear();
   dirty.all = false;
   dirty.lists = false;
   dirty.dates.clear();
@@ -508,14 +523,22 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
     // 7b. Alarms still showing whose doses were partly handled: their buttons drop the handled doses (Android).
     if (plan.partialAlarms.length) await alarmAdapter.refreshShowing(plan.partialAlarms).catch(() => undefined);
 
-    // 8. Schedule — unless the very same plan is already on the phone.
-    const hash = planHash(plan.items);
+    // 8. Schedule — unless the very same plan is already on the phone. A snooze pressed in the app after this plan was
+    //    made keeps its re-ring (the plan doesn't know it yet).
+    const items = withInAppSnoozes(
+      plan.items,
+      recentInAppSnoozes(Date.now()),
+      latestDoseStates(data.doseStates, pendingDoseActions(userId)),
+      Date.now(),
+      alarmAdapter.maxScheduled
+    );
+    const hash = planHash(items);
     const unchanged =
       !opts.force && !!lastScheduled && lastScheduled.hash === hash && lastScheduled.statusKey === statusKey && now - lastScheduled.at < RESCHEDULE_EVERY_MS;
     let scheduled = lastScheduled?.count ?? 0;
     if (!unchanged) {
       try {
-        scheduled = (await alarmAdapter.schedule(plan.items)).scheduled;
+        scheduled = (await alarmAdapter.schedule(items)).scheduled;
       } catch (e) {
         if (stale()) return result({ ok: false, skipped: 'stale', scheduled: 0 });
         lastScheduled = null;
@@ -534,8 +557,8 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
     saveAlarmCache(cache);
     setState({
       scheduled,
-      doseAlarms: Math.min(scheduled, plan.items.filter((i) => i.ring).length),
-      next: scheduled > 0 ? upcomingOf(plan.items) : [],
+      doseAlarms: Math.min(scheduled, items.filter((i) => i.ring).length),
+      next: scheduled > 0 ? upcomingOf(items) : [],
       coveredUntil: plan.coveredUntil,
       lastSyncAt: now,
     });
