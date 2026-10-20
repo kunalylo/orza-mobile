@@ -4,8 +4,8 @@
  * changed the sheet stops closing on its own: swipe-down is off, and Cancel, the close button, the backdrop and Android
  * back all ask "Discard changes?" first.
  */
-import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Switch, View, type TextInput } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 
 import { TimePickerSheet } from '@/features/meds/PickerSheets';
@@ -75,6 +75,7 @@ export function RowEditorSheet({
   onSave: (row: ReviewRow) => void;
 }) {
   const [draft, setDraft, opened] = useDraftOnOpen(visible, row);
+  const nameRef = useRef<TextInput>(null);
   const [timeIndex, setTimeIndex] = useState<number | null>(null); // -1 = adding
   const [showErrors, setShowErrors] = useState(false);
   const [wasVisible, setWasVisible] = useState(visible);
@@ -163,6 +164,8 @@ export function RowEditorSheet({
       dismissible={!dirty}
       onBlockedDismiss={cancel}
       eyebrow={isNew ? 'Add a medicine' : 'Check this medicine'}
+      // A new medicine starts at its name with the keyboard up (autoFocus inside a Modal looked focused but brought no keyboard).
+      initialFocus={isNew ? nameRef : undefined}
       title={draft.name.trim() || 'New medicine'}
       full
       footer={
@@ -187,7 +190,7 @@ export function RowEditorSheet({
         onChangeText={(name) => update({ name })}
         placeholder="Medicine name, e.g. Dolo"
         maxLength={80}
-        autoFocus={isNew}
+        ref={nameRef}
         autoCapitalize="words"
         returnKeyType="next"
         error={nameError}
@@ -206,7 +209,16 @@ export function RowEditorSheet({
       </View>
 
       <SectionLabel>How often</SectionLabel>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} accessibilityRole="radiogroup" accessibilityLabel="Prescription pattern">
+      {/* keyboardShouldPersistTaps: a nested ScrollView needs its own — without it, with the keyboard up (just typed the
+          strength), the first tap on 1-0-1 / TDS only put the keyboard away and the pattern stayed unchanged. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.chipRow}
+        accessibilityRole="radiogroup"
+        accessibilityLabel="Prescription pattern"
+      >
         {QUICK_PATTERNS.map((q) => (
           <Chip key={q.key} label={q.label} size="sm" role="radio" selected={pattern === q.key} onPress={() => pickPattern(q.key)} accessibilityHint={q.hint} />
         ))}

@@ -64,6 +64,7 @@ export async function pickUploadPhotos(source: PhotoSource, max: number, onPrepa
 export function PhotoGrid({
   items,
   max,
+  shownMax = max,
   busy,
   label,
   onAdd,
@@ -72,6 +73,8 @@ export function PhotoGrid({
 }: {
   items: PhotoItem[];
   max: number;
+  /** The limit to tell the member, when `max` counts a prescription stand-in that the first pill photo replaces. */
+  shownMax?: number;
   busy?: boolean;
   label: string;
   onAdd: (source: PhotoSource) => void;
@@ -135,7 +138,7 @@ export function PhotoGrid({
         </View>
       ) : null}
       <Text variant="caption" tone="subtle">
-        {full ? `That's the maximum of ${max} photos. Remove one to add another.` : `Up to ${max} photos — the strip, the box and the pill itself work best.`}
+        {full ? `That's the maximum of ${shownMax} photos. Remove one to add another.` : `Up to ${shownMax} photos — the strip, the box and the pill itself work best.`}
       </Text>
     </View>
   );

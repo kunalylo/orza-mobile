@@ -68,3 +68,47 @@ Feature code: `src/app/(app)/(tabs)/medicines.tsx`, `src/app/(app)/med/*`, `src/
    note + "Last 7 days · everyone" eyebrow (src/app/(app)/(tabs)/medicines.tsx).
 10. FIXED (polish) — Edit medicine: adding a second photo toasted "Photo added — alarms show it"; only the first photo
    (or the first real photo replacing a prescription stand-in) rings on alarms. Toast now says so only then.
+
+## Resume 2 (2026-10-20 ~21:05 IST — after the usage-limit pause; emulator had rebooted)
+
+Safety gate SAFE again. Cases 22–30 below were reconstructed from the screenshots mr85–mr128 and the local DB
+(one prescription scan = the 1st AI call; scan created 12:20:20Z, applied 12:26:22Z).
+
+| # | Case | Result | Evidence / notes |
+|---|------|--------|------------------|
+| 22 | Medicines hero → Scan a prescription → capture screen (viewfinder, Take photo / Upload, tips, "Your prescriptions" empty state) | PASS / FIXED (polish) | mr85–mr89. The "PRESCRIPTION" badge sat on the frame's corner mark (lines showed through the glass) — bug 11; moved inside the mark (Viewfinder.tsx) |
+| 23 | Upload → gallery → rx_mehta.jpg → preview with "Read prescription · 2 credits", Retake / Gallery, "95 credits left · resized on your phone" | PASS | mr90–mr91 |
+| 24 | Read prescription (AI call 1) → reading state → review | PASS / FIXED (polish) | mr92–mr93: the loading Button hid its label — a bare spinner on an orange bar for 10–30 s — bug 12; now an "ActivityIndicator + Reading your prescription…" pill (rx/index.tsx). Read: Dr. Anjali Mehta, 18 Oct, Mr. Ramesh Kulkarni, notes; Glimepiride 1 mg 1-0-1 before food 30 d → 8:00 am + 9:00 pm; Amlodipine 5 mg 0-0-1 after food 30 d → 9:00 pm; Pantoprazole 40 mg cap 1-0-0 empty stomach 14 d → 8:00 am (mr94–mr95) |
+| 25 | Review: untick Pantoprazole → "2 of 3 selected", Create alarms (2); tick again → 3 | PASS | mr96, mr102 |
+| 26 | Review: edit Amlodipine (sheet shows "As written on the prescription: 0-0-1 After food") → change the alarm time 9:00 pm → 10:00 pm in the time sheet → close with changes → "Discard changes?" → Keep editing → Save → row shows 10:00 pm | PASS | mr97–mr103 |
+| 27 | Review: "These medicines are for" field | FIXED (polish) | mr103: the placeholder "e.g. Mom — leave empty if they're yours" wrapped inside the one-line field and was clipped — bug 13; placeholder "e.g. Mom, Papa", the "leave empty" sentence moved to the hint (mr104) |
+| 28 | Create alarms (3) → loading → "Alarms are set / 3 medicines added" with each medicine, times, "until 18 Nov / 2 Nov", Add pill photo, See today's doses / Notifications / Scan another | PASS | mr105–mr109. Server: Glimepiride 08:00+21:00 end 2026-11-18; Amlodipine 22:00 end 2026-11-18; Pantoprazole capsule 08:00 empty_stomach end 2026-11-02; all photo_ids = the Rx photo, prescription_id set, prescription status applied |
+| 29 | History: Scan another → "Your prescriptions" → Dr. Anjali Mehta · 18 Oct · 3 medicines · ALARMS CREATED → detail sheet (photo, patient, notes, Delete / See medicines) | PASS | mr110–mr112 |
+| 30 | Manual entry: "Prefer typing?" → "Type your prescription" + auto-opened "Add a medicine" sheet; Dolo 650 mg TDS 3 days; Cetirizine SOS | FIXED (partly) | mr113–mr121. TDS showed the 1-1-1 chip selected (same times) — bug 14, the tapped pattern now wins (RowEditorSheet). SOS on a typed 1-0-1 row read "As written · 1-0-1" — bug 15, a pattern the editor filled is replaced by SOS. mr114 showed a SECOND "New medicine" sheet rising under the Dolo sheet's "Discard changes?" dialog — being investigated (debug logs in Sheet.tsx at the pause) |
+| 31 | Capture screen after the fix: badge inside the corner mark | PASS | mr133 (bug 11 verified) |
+| 32 | Manual entry: "New medicine" sheet opens with the name focused — keyboard up | FIXED | mr134/mr135: the name field looked focused but no keyboard came (`mInputShown=false`) — bug 16. RowEditorSheet used `autoFocus` inside the Modal; now `initialFocus` (Sheet waits for the Modal's onShow and retries). Retest: `mInputShown=true` on open (mr144) |
+| 33 | Manual entry: typed Cetirizine → SOS on → Add medicine → the whole review screen froze (no tap, no scroll; Create alarms dead) | FIXED | mr140/mr141. `dumpsys window` showed a 2nd full-screen TRANSPARENT app window (the Sheet's RN Modal) left on top after the sheet closed — bug 17 (the same freeze as mr122–mr125 before the pause). Isolated: only when the sheet unmounts while the SOS note (`Animated.View entering={FadeIn} exiting={FadeOut}`) is on screen (chip removal, SOS on→off, discard: no leak). Reanimated keeps the ancestors of a view with an exiting animation — the Modal included — alive to play it, and the Modal window never went away. Fix: Sheet wraps its Modal in `<LayoutAnimationConfig skipExiting>` (the sheet has already slid out). Retest: same steps → 1 app window, Add a medicine works again |
+| 34 | Pattern chips with the keyboard up (just typed the strength) | FIXED | the first tap on 0-0-1 / TDS only dismissed the keyboard (kbd 0, pattern unchanged — reproduced with the prop removed) — bug 19; the nested horizontal chip ScrollView now has `keyboardShouldPersistTaps="handled"` → one tap selects BD / 0-0-1 with the keyboard still up |
+| 35 | Manual: Dolo 650 mg TDS (8:00 am · 2:00 pm · 9:00 pm), After food, 3 days; Cetirizine 10 mg SOS; edit a row (rename Cet → Cetirizine, 10 mg); doctor Dr. Rao; prescription photo from the gallery (thumb + "kept with this prescription" note); for "Mom" → Create alarms (2) → loading → "2 medicines added · 1 of them will ring" | PASS | mr145–mr152. Server: Rx doctor Dr. Rao, media set, status applied, TDS/SOS frequency_text; Dolo times 08:00/14:00/21:00 after_food end 2026-10-22, for Mom; Cetirizine as_needed, times [], for Mom; both photo_ids = the Rx photo. "As written · TDS / SOS" on the rows (bugs 14/15 verified) |
+| 36 | Done → Add pill photo (Dolo) → Edit Dolo with the prescription stand-in + "Showing your prescription for now" → gallery pill box → Preparing… → "Photo added — alarms show it", stand-in replaced (server photo_ids = 1 new id) → Save changes → back on Done, Dolo shows its photo | PASS / FIXED (polish) | mr153–mr155. With the stand-in the grid said "Up to 7 photos" (the stand-in's slot), then "Up to 6" after — bug 18; now "Up to 6" throughout (`shownMax`) |
+
+### Bugs (resume 2)
+
+11. FIXED (polish) — Rx viewfinder "PRESCRIPTION" badge sat on the frame's corner mark (src/features/rx/Viewfinder.tsx).
+12. FIXED (polish) — Rx reading state was a loading Button (label hidden) = a bare spinner on an orange bar for 10–30 s;
+    now a pill with spinner + "Reading your prescription…" (src/app/(app)/rx/index.tsx).
+13. FIXED (polish) — Rx review "These medicines are for" placeholder wrapped and clipped in the one-line field; short
+    placeholder, the "leave empty" sentence in the hint (src/app/(app)/rx/review.tsx).
+14. FIXED — Row editor: tapping TDS highlighted 1-1-1 (same times); the tapped pattern now wins (RowEditorSheet).
+15. FIXED — Row editor: SOS on a typed 1-0-1 row kept frequency_text "1-0-1" → "As written · 1-0-1" on an SOS row; a
+    pattern the editor filled is replaced by "SOS", a scanned free-text frequency is kept (RowEditorSheet).
+16. FIXED — Row editor (new medicine) opened with the name field focused but no keyboard (autoFocus inside a Modal on
+    Android); now Sheet `initialFocus` (RowEditorSheet).
+17. FIXED (P0) — Any Sheet that unmounted while a child with an `exiting` layout animation was on screen left its RN
+    Modal window on top: invisible, full screen, swallowing every tap → the screen froze (Rx manual entry after adding an
+    SOS medicine: Create alarms dead; only an app restart helped). Sheet now wraps the Modal in
+    `LayoutAnimationConfig skipExiting` (src/ui/Sheet.tsx) — app-wide.
+18. FIXED (polish) — Edit medicine with a prescription stand-in said "Up to 7 photos"; PhotoGrid `shownMax` keeps the
+    member-facing limit at 6 (src/features/meds/PhotoGrid.tsx, src/app/(app)/med/edit.tsx).
+19. FIXED — Row editor pattern chips ignored the first tap while the keyboard was up (nested horizontal ScrollView
+    without keyboardShouldPersistTaps) (RowEditorSheet).

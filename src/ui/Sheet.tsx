@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type TextInput } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, { interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { interpolate, LayoutAnimationConfig, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
@@ -67,8 +67,6 @@ export function Sheet(props: SheetProps) {
   if (!mounted) return null;
   return <SheetModal {...props} onHidden={onHidden} />;
 }
-
-const dbg = (m: string) => console.log(m);
 
 function SheetModal({
   visible,
@@ -127,7 +125,6 @@ function SheetModal({
   }, [initialFocus]);
 
   useEffect(() => {
-    console.log('DBG sheet effect', title, visible);
     if (visible) {
       drag.set(0);
       progress.set(reduceMotion ? withTiming(1, { duration: motion.fast }) : withSpring(1, motion.springSoft));
@@ -137,7 +134,6 @@ function SheetModal({
       Keyboard.dismiss();
       progress.set(
         withTiming(0, { duration: reduceMotion ? motion.fast : motion.base }, (finished) => {
-          scheduleOnRN(dbg, `DBG sheet hide done ${String(finished)}`);
           if (finished) scheduleOnRN(onHidden);
         }),
       );
@@ -176,69 +172,74 @@ function SheetModal({
   const limit = Math.round((windowHeight - insets.top - spacing.sm) * Math.min(1, Math.max(0.3, maxHeight)));
   const bottomPad = keyboard > 0 ? keyboard + spacing.md : Math.max(insets.bottom, spacing.lg);
 
+  // skipExiting: the sheet has already slid out when it unmounts. Without it a child with an `exiting` animation still
+  // on screen (e.g. a FadeOut note) makes Reanimated keep its ancestors — this Modal included — alive to play it, and on
+  // Android the Modal's empty, transparent window then stayed on top and swallowed every tap (the screen froze).
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={requestClose} onShow={onShow}>
-      <GestureHandlerRootView style={styles.fill}>
-        <Animated.View style={[styles.backdrop, backdropStyle]}>
-          <Pressable
-            style={styles.fill}
-            onPress={requestClose}
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-            accessible={closable}
-            importantForAccessibility={closable ? 'auto' : 'no-hide-descendants'}
-          />
-        </Animated.View>
+    <LayoutAnimationConfig skipExiting>
+      <Modal visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={requestClose} onShow={onShow}>
+        <GestureHandlerRootView style={styles.fill}>
+          <Animated.View style={[styles.backdrop, backdropStyle]}>
+            <Pressable
+              style={styles.fill}
+              onPress={requestClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              accessible={closable}
+              importantForAccessibility={closable ? 'auto' : 'no-hide-descendants'}
+            />
+          </Animated.View>
 
-        <Animated.View
-          style={[styles.sheet, { maxHeight: limit, paddingBottom: bottomPad }, full && { height: limit }, sheetStyle]}
-          onLayout={(e) => setSheetHeight(e.nativeEvent.layout.height)}
-          accessibilityViewIsModal
-          accessibilityLabel={accessibilityLabel ?? title}
-        >
-          <GestureDetector gesture={pan}>
-            <View style={styles.top}>
-              <View style={styles.handle} />
-              {(title || eyebrow || showClose) && (
-                <View style={styles.header}>
-                  <View style={styles.headerText}>
-                    {eyebrow ? (
-                      <Text variant="eyebrow" tone="muted">
-                        {eyebrow}
-                      </Text>
-                    ) : null}
-                    {title ? (
-                      <Text variant="h3" accessibilityRole="header" numberOfLines={2}>
-                        {title}
-                      </Text>
+          <Animated.View
+            style={[styles.sheet, { maxHeight: limit, paddingBottom: bottomPad }, full && { height: limit }, sheetStyle]}
+            onLayout={(e) => setSheetHeight(e.nativeEvent.layout.height)}
+            accessibilityViewIsModal
+            accessibilityLabel={accessibilityLabel ?? title}
+          >
+            <GestureDetector gesture={pan}>
+              <View style={styles.top}>
+                <View style={styles.handle} />
+                {(title || eyebrow || showClose) && (
+                  <View style={styles.header}>
+                    <View style={styles.headerText}>
+                      {eyebrow ? (
+                        <Text variant="eyebrow" tone="muted">
+                          {eyebrow}
+                        </Text>
+                      ) : null}
+                      {title ? (
+                        <Text variant="h3" accessibilityRole="header" numberOfLines={2}>
+                          {title}
+                        </Text>
+                      ) : null}
+                    </View>
+                    {showClose ? (
+                      <IconButton icon="x" accessibilityLabel="Close" size={36} iconSize={18} onPress={requestClose} disabled={!closable} />
                     ) : null}
                   </View>
-                  {showClose ? (
-                    <IconButton icon="x" accessibilityLabel="Close" size={36} iconSize={18} onPress={requestClose} disabled={!closable} />
-                  ) : null}
-                </View>
-              )}
-            </View>
-          </GestureDetector>
+                )}
+              </View>
+            </GestureDetector>
 
-          {scroll ? (
-            <ScrollView
-              style={full ? styles.fill : undefined}
-              contentContainerStyle={styles.body}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode={isIOS ? 'interactive' : 'on-drag'}
-              showsVerticalScrollIndicator={false}
-            >
-              {children}
-            </ScrollView>
-          ) : (
-            <View style={[styles.bodyStatic, full && styles.fill]}>{children}</View>
-          )}
+            {scroll ? (
+              <ScrollView
+                style={full ? styles.fill : undefined}
+                contentContainerStyle={styles.body}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={isIOS ? 'interactive' : 'on-drag'}
+                showsVerticalScrollIndicator={false}
+              >
+                {children}
+              </ScrollView>
+            ) : (
+              <View style={[styles.bodyStatic, full && styles.fill]}>{children}</View>
+            )}
 
-          {footer ? <View style={styles.footer}>{footer}</View> : null}
-        </Animated.View>
-      </GestureHandlerRootView>
-    </Modal>
+            {footer ? <View style={styles.footer}>{footer}</View> : null}
+          </Animated.View>
+        </GestureHandlerRootView>
+      </Modal>
+    </LayoutAnimationConfig>
   );
 }
 

@@ -418,7 +418,9 @@ export default function EditMedicine() {
         ) : null}
         <PhotoGrid
           items={photoItems}
+          // The prescription stand-in takes a slot until the first pill photo replaces it — "Up to 6", not 7.
           max={shownMax + (editing && current?.uses_prescription_photo ? 1 : 0)}
+          shownMax={shownMax}
           busy={photoBusy}
           label={draft.name.trim() || 'Medicine'}
           onAdd={(s) => void addPhotos(s)}
