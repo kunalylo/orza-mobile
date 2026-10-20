@@ -25,6 +25,14 @@ Feature code: `src/app/(app)/(tabs)/snap.tsx`, `src/features/snap/**`, `src/lib/
 | 13 | Meal type segmented (Lunch preselected at 12:3x → Dinner → Lunch) | PASS | sn64/65 |
 | 14 | Android back while reviewing → "Discard this scan?" | FIXED | sn66 dialog OK, but back on the dialog did nothing (not cancelable) — bug 6; sn68/69 back now keeps reviewing |
 | 15 | Log this meal → Logged panel + server + Meals + Today | PASS | sn72–74 spinner then "Added to lunch · Madhya Pradesh Thali — 6 items, 800 kcal · P 27g · C 138g · F 16.5g · Fibre 10g"; server meal source photo, lunch, 800 kcal, 6 items, scan confirmed + meal_id; View meal log → Meals today (sn76–78) "2 meals · 1,370 kcal", PHOTO · 12:36 PM card with all 6 rows (Roti 2 roti · 80 g); Today (sn79–81) 1,370 eaten / 310 left, Lunch "Madhya Pradesh Thali 12:36 pm · Dal, Rice, Roti ×2, Curd, Salad… 800" with camera icon |
+| 16 | Camera: Take photo → system prompt "Allow ÖRZA to take pictures and record video?" → While using the app → emulator virtual camera (CaptureActivity) → shutter → ✓ → "PHOTO READY · Resized on your device" with the photo, note, Analyse, Retake / Gallery, 95 credits | PASS | sn88–90 prompt (spinner on Take photo while it is up), sn106 camera, sn110 capture review, sn111/112 photo ready (the photo drew ~5 s after the controls on this emulator) |
+| 17 | Camera: Don't allow once → "CAMERA ACCESS · ÖRZA needs your camera" + Allow access / Choose from gallery instead | PASS | sn91/92, sn105; Allow access re-opens the system prompt (sn93) |
+| 18 | Camera: Don't allow twice → "…You can turn it on in Settings." + Open Settings → system App info page for ÖRZA | PASS / FIXED | sn94–96. Allowing camera there and coming back left the stale "needs your camera / Open Settings" panel (sn99) — bug 7. "Ask every time" in Settings left the camera unusable from the app — bug 8 (sn102 → sn104 fixed) |
+| 19 | Cancel the camera (back without capturing) → idle, tips, no error / toast | PASS / FIXED | sn106 → sn109. Allow access → allowed → camera cancelled used to keep the "needs your camera" panel (bug 7) — now cleared (sn109) |
+| 20 | Analyse a non-food camera photo (AI call 2 of 2) → "Couldn't finish the scan · The photo does not show any food or drink. No credits were used." + Use another photo only (no Try again); balance stays 95 | PASS | sn113 analysing state, sn114b; server: −2 then "Refund: Snap & Know scan — nothing found" +2 (balance 95). Button icon was a camera although it opens the gallery — bug 9 (polish) |
+| 21 | Bug 7/8 retest: camera really blocked (`pm revoke` + user-fixed) → Take photo → no dialog flash, "Open Settings" panel → App info → Permissions → Camera → Allow only while using the app → back → panel gone, page back at the top with tips (toast "Camera access is on — tap Take photo." — 3 s, gone before the slow screenshot) | FIXED | sn117/118 → sn119–121 → sn124 |
+| 22 | Retake (camera) from "Photo ready" → cancel the camera → the earlier photo stays, no error | PASS | sn131 → sn132 |
+| 23 | Android stops ÖRZA while the camera is open (`am kill` with the camera in front, like a low-memory kill on a 2–3 GB phone) → take the photo → ÖRZA restarts on Today and the photo is gone | OPEN (JS recovery added, not verifiable here) | sn125. Bug 10 |
 
 ## Bugs
 
@@ -51,9 +59,39 @@ Feature code: `src/app/(app)/(tabs)/snap.tsx`, `src/features/snap/**`, `src/lib/
 6. FIXED — "Discard this scan?" (Android back while reviewing) could not be dismissed with back; now `cancelable` —
    back / outside tap = Keep reviewing.
 
+7. FIXED — Snap: the camera-permission panel went stale. (a) Open Settings → Allow → back to ÖRZA still showed
+   "ÖRZA needs your camera · Open Settings" (sn99); (b) Allow access → allowed → camera closed without a photo kept the
+   panel too. Now the panel re-checks the permission whenever the app becomes active (gone + toast "Camera access is on —
+   tap Take photo." once allowed; switches Allow access ↔ Open Settings when the status changed) and is cleared as soon
+   as a pick gets past the permission step (snap.tsx; new `photoPermission()` in src/lib/image.ts).
+8. FIXED — Camera / photo permission could never be asked again after a block. expo-modules remembers `canAskAgain`
+   from the last request, so after "Don't allow" twice and then "Ask every time" in system Settings it still read false;
+   `ensureCameraPermission` skipped the request when `canAskAgain` was false → straight to "Open Settings" with no
+   dialog (sn102, reproduced with `pm revoke` + cleared flags). Now it always requests when not granted — a really
+   blocked permission returns at once without a dialog (sn104: dialog shown again). Also used by medicine / Rx photos.
+9. FIXED (polish) — "Use another photo" on the scan-error panel showed a camera icon but opens the gallery; gallery icon.
+10. OPEN / partly fixed — A photo taken while Android stopped ÖRZA (low memory, camera in front) was silently lost: the
+   app restarts on Today (sn125). Expo's documented answer is `ImagePicker.getPendingResultAsync()` on start, which the
+   app never called. Added: Snap passes `owner: 'snap'` to `pickPhotos`, which remembers it in SecureStore while the
+   camera / picker is open; the tabs layout calls `recoverSnapPhoto()` once per start → `takePendingPhotos('snap')` →
+   opens Snap with the photo ("Your photo is back — add a note or analyse it."). On this **dev-client** build the mark
+   is read correctly (`{"owner":"snap",…}`) but `getPendingResultAsync()` returns `null` — the dev launcher creates the
+   React context ~20 s after the camera result arrives, so expo-modules has nobody to hand it to. Needs a check on a
+   release / preview build (camera open → `adb shell am kill in.co.ylo.orza` → take the photo → Snap should show it).
+   Medicine / Rx photos don't pass an owner (unchanged).
+
 ## Environment notes
 
 - Dev build on the 2 GB emulator: native heap 450–580 MB, ~900 MB swap in use; RenderThread 50–70 % + main thread
   ~30 % CPU even when idle on Today or Snap (the tab bar's Snap halo animates forever). One ANR ("ÖRZA isn't responding",
   main thread `Waited 5002ms for KeyEvent`, 12:20:25) right after the offline test while the system was swapping; the
   lower half of Snap stayed blank (keyboard space not given back) for > 3 s after the keyboard closed during that time.
+- Resumed session (16:05): the dev element inspector was left open ("Tap something to inspect it") — app restarted.
+  `app_start` force-stop + immediate start was cancelled ("refused to die while trying to launch") twice; one launch
+  died as "failed to complete startup" (bg ANR — class verification at 25–150 bytecodes/s, swap 1.49 / 1.51 GB used).
+  `scripts/e2e/adb.sh` `app_start` now waits for the old process to go before starting.
+- Two more ANRs "Waited 5002ms for FocusEvent(hasFocus=true)" right when ÖRZA came back to the front (from system
+  Settings 16:16, from the camera 16:29); the app showed a black window for a few seconds, then recovered. App PSS
+  ~670 MB (dev build), swap full — environment, but worth a look on a release build / real device.
+- `adb reverse tcp:8081` silently disappeared during the session (HMR "Cannot connect to Expo CLI" warning in JS logs);
+  re-added.

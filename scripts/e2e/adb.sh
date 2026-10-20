@@ -40,6 +40,10 @@ wait_text() {
 app_start() {
   "$A" reverse tcp:8081 tcp:8081 >/dev/null
   "$A" shell am force-stop in.co.ylo.orza
+  # A slow emulator can take seconds to reap the old process; starting before that cancels the launch
+  # ("refused to die while trying to launch … cancelling the process start") and leaves the home screen.
+  local i=0; while [ $i -lt 20 ] && "$A" shell pidof in.co.ylo.orza >/dev/null 2>&1; do sleep 1; i=$((i+1)); done
+  sleep 3 # the system notices the death a little after the pid disappears
   "$A" shell am start -a android.intent.action.VIEW -d "exp+orza://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081" in.co.ylo.orza >/dev/null
 }
 app_logs() { "$A" logcat -d -s ReactNativeJS:V | tail -"${1:-40}"; }

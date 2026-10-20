@@ -1,9 +1,16 @@
 import { Tabs } from 'expo-router/js-tabs';
+import { useEffect } from 'react';
 
 import { TabBar } from '@/components/TabBar';
+import { recoverSnapPhoto } from '@/features/snap/pending';
 import { colors } from '@/theme';
 
 export default function TabsLayout() {
+  // A meal photo taken just before Android stopped ÖRZA (low memory while the camera was open) → back to Snap with it.
+  useEffect(() => {
+    void recoverSnapPhoto().catch(() => null);
+  }, []);
+
   return (
     <Tabs
       tabBar={(props) => <TabBar {...props} />}

@@ -15,6 +15,8 @@ export const KEYS = {
   deviceDeclared: 'orza.device.declared',
   /** A session signed out while offline: still live on the server until the app ends it (next launch or sign-in). */
   unrevoked: 'orza.session.unrevoked',
+  /** Which screen opened the camera / photo picker (Android may stop ÖRZA meanwhile — see `takePendingPhotos`). */
+  pendingPick: 'orza.pick.pending',
 } as const;
 
 type Key = (typeof KEYS)[keyof typeof KEYS];

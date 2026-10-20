@@ -1,12 +1,12 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Alert, BackHandler, Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, AppState, BackHandler, Linking, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { ApiError, errorMessage, validationField } from '@/lib/api';
 import { useAuth, useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
-import { pickPhotos, toUploadDataUrl, type PhotoSource } from '@/lib/image';
+import { PhotoPermissionError, photoPermission, pickPhotos, toUploadDataUrl, type PhotoSource, type PickedPhoto } from '@/lib/image';
 import { colors, gutter, radii, spacing } from '@/theme';
 import { Button, Icon, IconButton, Screen, ScreenHeader, Text, TextField, toast, useTabBarSpace } from '@/ui';
 
@@ -25,6 +25,7 @@ import {
   SlowDownPanel,
   SnapTips,
 } from '@/features/snap/Panels';
+import { SNAP_PICK_OWNER, takeRecoveredSnapPhoto } from '@/features/snap/pending';
 import { ScanReview } from '@/features/snap/ScanReview';
 import type { Scan, ScanPhase, ScanProblem } from '@/features/snap/types';
 import { NOTE_MAX, SCAN_PHOTO } from '@/features/snap/utils';
@@ -135,18 +136,23 @@ export default function Snap() {
   const picking = useRef(false);
   const scanSent = useRef(false);
 
-  const pick = async (source: PhotoSource) => {
+  /** Get a photo (camera / gallery, or one recovered after Android restarted the app) and prepare it for analysis. */
+  const preparePhoto = async (source: PhotoSource, get: () => Promise<PickedPhoto[]>, recovered = false) => {
     if (busy || logging || picking.current) return;
     picking.current = true;
     setPreparing(source);
     try {
-      const picked = await pickPhotos(source);
+      const picked = await get();
+      // Getting this far means access was given (e.g. "Allow access" → allowed, then the camera was closed): the
+      // "ÖRZA needs your camera" panel no longer applies.
+      setProblem((p) => (p?.kind === 'permission' && p.source === source ? null : p));
       if (!picked.length) return; // cancelled — keep whatever was there
       const { dataUrl } = await toUploadDataUrl(picked[0].uri, SCAN_PHOTO);
       reset(true);
       setPhoto({ uri: picked[0].uri, dataUrl });
       setPhase('ready');
       haptics.soft();
+      if (recovered) toast.info('Your photo is back — add a note or analyse it.');
     } catch (e) {
       const p = scanProblem(e);
       if (p.kind === 'permission') {
@@ -161,11 +167,50 @@ export default function Snap() {
       setPreparing(null);
     }
   };
+  const pick = (source: PhotoSource) => preparePhoto(source, () => pickPhotos(source, { owner: SNAP_PICK_OWNER }));
+
+  // Android stopped ÖRZA while the camera was open and restarted it with the photo (low memory): the tabs layout opens
+  // Snap, and the photo continues here instead of being lost.
+  const recoverRef = useRef(preparePhoto);
+  useEffect(() => {
+    recoverRef.current = preparePhoto;
+  });
+  useFocusEffect(
+    useCallback(() => {
+      const recovered = takeRecoveredSnapPhoto();
+      if (recovered) void recoverRef.current('camera', async () => [recovered], true);
+    }, [])
+  );
+
+  // Back from Settings (Open Settings → camera allowed): the "needs access" panel refreshes — it goes away once access
+  // is on, and switches between "Allow access" and "Open Settings" when the status changed. Skipped while a picker /
+  // the permission dialog is open (that flow updates the panel itself).
+  const permissionSource = problem?.kind === 'permission' ? problem.source : null;
+  useEffect(() => {
+    if (!permissionSource) return;
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s !== 'active' || picking.current) return;
+      photoPermission(permissionSource)
+        .then((status) => {
+          if (picking.current) return;
+          if (status === 'granted') {
+            setProblem((p) => (p?.kind === 'permission' ? null : p));
+            toast.info(permissionSource === 'camera' ? 'Camera access is on — tap Take photo.' : 'Photo access is on — choose a photo.');
+            scrollTop();
+          } else {
+            const next = scanProblem(new PhotoPermissionError(status, permissionSource));
+            setProblem((p) => (p?.kind === 'permission' && p.source === permissionSource ? next : p));
+          }
+        })
+        .catch(() => null);
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scrollTop only reads refs
+  }, [permissionSource]);
 
   /* ─── analyse ─── */
 
   const analyse = () => {
-    console.log("[D1-TEMP] analyse", !!photo, busy, scanSent.current);
     if (!photo || busy || scanSent.current) return;
     scanSent.current = true;
     setPhase('scanning');

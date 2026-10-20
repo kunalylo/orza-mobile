@@ -415,3 +415,9 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   mass 1), opaque toast kept inside the gutters, Today/Meals recover by themselves after a lost connection (`retryWhileUnreachable`),
   offline banner wording, Meals offline refresh toast. Open: Undo on the logged card not pressed on device (AI budget), live step
   counting needs a real phone.
+- 2026-10-20: **NEXT after D1 (client requirement, repeated):** steps must count fully automatically "like other health apps" and sync with
+  them. Task "auto steps v2": (1) Android primary source = Google Play services Recording API on mobile (`LocalRecordingClient`,
+  TYPE_STEP_COUNT_DELTA, play-services-fitness in `modules/orza-steps`; background recording with no foreground service, up to 10 days),
+  our step-counter sampler = fallback without Play services; (2) two-way sync — keep reading Health Connect / Apple Health (highest source
+  per day, no double counting) and add an opt-in "Share my steps with Health Connect" write (WRITE_STEPS, own data origin; HC priority dedupes);
+  (3) real-device test on a USB-connected Android phone (the emulator has no step sensor) — ask the user to connect one.

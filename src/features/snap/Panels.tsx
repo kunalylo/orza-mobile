@@ -256,7 +256,8 @@ export function ScanErrorPanel({ message, onRetry, onPickAnother }: { message: s
       actions={
         <View style={styles.row}>
           {onRetry ? <Button label="Try again" icon="rotate-cw" onPress={onRetry} style={styles.grow} /> : null}
-          <Button label="Use another photo" icon="camera" variant={onRetry ? 'secondary' : 'primary'} onPress={onPickAnother} style={styles.grow} />
+          {/* Opens the gallery (Retake under the photo opens the camera) — so the gallery icon, not a camera. */}
+          <Button label="Use another photo" icon="image" variant={onRetry ? 'secondary' : 'primary'} onPress={onPickAnother} style={styles.grow} />
         </View>
       }
     >
