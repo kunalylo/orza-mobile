@@ -1,13 +1,16 @@
 /**
  * Weight tile + the steps / weight entry sheets (keyboard-safe numeric field). Steps count themselves on Today
- * (`StepsCard`); `StepsSheet` is the typing fallback when no automatic source exists. Wording and validation follow
- * the web's StepsCard / WeightCard.
+ * (`StepsCard`); `StepsSheet` is the typing fallback when no automatic source exists, and the member's way to correct
+ * a counted day ("edit": the number becomes the day's base, steps counted after it add on — `@/lib/steps/policy`).
+ * Wording and validation follow the web's StepsCard / WeightCard.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type TextInput } from 'react-native';
 
 import { ApiError, errorMessage } from '@/lib/api';
+import { useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
+import { recordManualSteps } from '@/lib/steps/sync';
 import { colors, radii, spacing } from '@/theme';
 import { Button, Icon, PressableScale, ProgressBar, Sheet, Text, TextField, toast } from '@/ui';
 
@@ -65,6 +68,7 @@ export function StepsSheet({
   today,
   steps,
   target,
+  mode = 'log',
 }: {
   visible: boolean;
   onClose: () => void;
@@ -72,8 +76,11 @@ export function StepsSheet({
   today: string;
   steps: number;
   target: number;
+  /** "edit": correcting a day the phone counts (or counted) by itself. */
+  mode?: 'log' | 'edit';
 }) {
   const isToday = date === today;
+  const user = useSignedInUser();
   const log = useLogSteps(date);
   const fieldRef = useFocusWhenShown(visible);
   const [input, setInput] = useState('');
@@ -107,6 +114,8 @@ export function StepsSheet({
     setError(null);
     log.mutate(Math.round(n), {
       onSuccess: ({ tracking }) => {
+        // The automatic count must not overwrite the member's own number (lower too).
+        recordManualSteps(user.id, date, typeof tracking.steps === 'number' ? tracking.steps : Math.round(n), today);
         toast.success(`${formatNumber(tracking.steps)} steps saved`);
         onClose();
       },
@@ -125,7 +134,7 @@ export function StepsSheet({
       visible={visible}
       onClose={onClose}
       eyebrow="Steps"
-      title={isToday ? "Today's steps" : `Steps · ${relativeDay(date, today)}`}
+      title={mode === 'edit' ? (isToday ? "Edit today's steps" : `Edit steps · ${relativeDay(date, today)}`) : isToday ? "Today's steps" : `Steps · ${relativeDay(date, today)}`}
       dismissible={!log.isPending}
       footer={<Button label="Save steps" icon="check" variant="energy" block loading={log.isPending} disabled={!input.trim()} onPress={save} haptic="none" />}
     >
@@ -154,7 +163,13 @@ export function StepsSheet({
         onSubmitEditing={save}
         maxLength={7}
         error={error}
-        hint="Enter the total from your phone or watch."
+        hint={
+          mode === 'edit'
+            ? isToday
+              ? 'Your number becomes today’s count — steps counted after this are added on top.'
+              : 'Your number replaces the count for this day.'
+            : 'Enter the total from your phone or watch.'
+        }
         ref={fieldRef}
         suffix="steps"
         containerStyle={styles.field}

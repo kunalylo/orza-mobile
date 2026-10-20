@@ -4,8 +4,11 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { AppState, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
+import { addDays, safeTimeZone } from '@/lib/alarms/schedule';
 import { ApiError, errorMessage } from '@/lib/api';
 import { firstName, useAuth, useSignedInUser } from '@/lib/auth';
+import { dayStartMs } from '@/lib/steps/counter';
+import { useStepsReadingDate } from '@/lib/steps/useSteps';
 import { colors, gutter, radii, spacing } from '@/theme';
 import { Button, GlassCard, Icon, Screen, Text, useTabBarSpace } from '@/ui';
 
@@ -40,6 +43,8 @@ export default function Today() {
   /** A past day being browsed; null = today (follows midnight). */
   const [picked, setPicked] = useState<string | null>(null);
   const [sheet, setSheet] = useState<'steps' | 'weight' | null>(null);
+  /** How the steps sheet opened: typing fallback ("log") or correcting a counted day ("edit"), with the number shown. */
+  const [stepsEntry, setStepsEntry] = useState<{ mode: 'log' | 'edit'; shown: number }>({ mode: 'log', shown: 0 });
   const [refreshing, setRefreshing] = useState(false);
 
   const date = picked && picked < today ? picked : today;
@@ -52,6 +57,16 @@ export default function Today() {
     const sub = AppState.addEventListener('change', (s) => s === 'active' && syncToday());
     return () => sub.remove();
   }, [syncToday]);
+  // Midnight while Today stays open: move to the new day (the steps card would otherwise keep showing yesterday).
+  useEffect(() => {
+    const ms = dayStartMs(addDays(today, 1), safeTimeZone(tz)) - Date.now();
+    const t = setTimeout(syncToday, Math.max(1_000, Math.min(ms + 1_000, 6 * 3_600_000)));
+    return () => clearTimeout(t);
+  }, [today, tz, syncToday]);
+  const stepsDay = useStepsReadingDate();
+  useEffect(() => {
+    if (stepsDay && stepsDay > today) syncToday();
+  }, [stepsDay, today, syncToday]);
 
   const q = useTodayDashboard(date);
   const data = q.data;
@@ -91,28 +106,40 @@ export default function Today() {
   const enter = (delay: number) => (reduce ? undefined : FadeInDown.delay(delay).springify().damping(18));
   const imperial = user.preferences?.units === 'imperial';
   const view = data;
+  const openSteps = (mode: 'log' | 'edit', shownSteps: number) => {
+    setStepsEntry({ mode, shown: shownSteps });
+    setSheet('steps');
+  };
 
   let content: ReactNode;
   if (q.isError && !data) {
     const offline = q.error instanceof ApiError && q.error.isNetwork;
     content = (
-      <Animated.View entering={enter(0)}>
-        <GlassCard tone="strong" style={styles.errorCard} accessibilityRole="alert">
-          <View style={styles.errorIcon}>
-            <Icon name={offline ? 'wifi-off' : 'alert-circle'} size={20} color={colors.error} />
-          </View>
-          <Text variant="h3" tone="ink" align="center">
-            We couldn&apos;t load your day
-          </Text>
-          <Text variant="small" tone="muted" align="center" style={styles.errorText}>
-            {errorMessage(q.error)}
-          </Text>
-          <View style={styles.errorActions}>
-            <Button label="Try again" icon="rotate-cw" onPress={() => void q.refetch()} loading={q.isFetching} />
-            {!isToday ? <Button label="Back to today" variant="secondary" onPress={() => setPicked(null)} /> : null}
-          </View>
-        </GlassCard>
-      </Animated.View>
+      <>
+        <Animated.View entering={enter(0)}>
+          <GlassCard tone="strong" style={styles.errorCard} accessibilityRole="alert">
+            <View style={styles.errorIcon}>
+              <Icon name={offline ? 'wifi-off' : 'alert-circle'} size={20} color={colors.error} />
+            </View>
+            <Text variant="h3" tone="ink" align="center">
+              We couldn&apos;t load your day
+            </Text>
+            <Text variant="small" tone="muted" align="center" style={styles.errorText}>
+              {errorMessage(q.error)}
+            </Text>
+            <View style={styles.errorActions}>
+              <Button label="Try again" icon="rotate-cw" onPress={() => void q.refetch()} loading={q.isFetching} />
+              {!isToday ? <Button label="Back to today" variant="secondary" onPress={() => setPicked(null)} /> : null}
+            </View>
+          </GlassCard>
+        </Animated.View>
+        {/* The phone counts steps without the network: today's count still shows (and saves once back online). */}
+        {isToday ? (
+          <Animated.View entering={enter(60)} style={styles.section}>
+            <StepsCard date={today} today={today} serverSteps={null} target={user.targets?.steps > 0 ? user.targets.steps : DEFAULT_STEP_TARGET} tz={tz} />
+          </Animated.View>
+        ) : null}
+      </>
     );
   } else if (!view) {
     content = <TodaySkeleton />;
@@ -164,7 +191,7 @@ export default function Today() {
             serverSteps={view.tracking.steps || 0}
             target={view.targets.steps > 0 ? view.targets.steps : DEFAULT_STEP_TARGET}
             tz={tz}
-            onLog={() => setSheet('steps')}
+            onLog={openSteps}
           />
         </Animated.View>
 
@@ -223,8 +250,9 @@ export default function Today() {
             onClose={() => setSheet(null)}
             date={shown.date}
             today={shown.today}
-            steps={shown.tracking.steps || 0}
+            steps={stepsEntry.mode === 'edit' ? stepsEntry.shown : shown.tracking.steps || 0}
             target={shown.targets.steps > 0 ? shown.targets.steps : DEFAULT_STEP_TARGET}
+            mode={stepsEntry.mode}
           />
           <WeightSheet
             visible={sheet === 'weight'}

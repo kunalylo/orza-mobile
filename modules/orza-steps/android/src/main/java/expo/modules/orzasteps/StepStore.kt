@@ -1,22 +1,68 @@
 package expo.modules.orzasteps
 
 import android.content.Context
-import android.content.SharedPreferences
+import android.util.AtomicFile
 import android.util.Log
 import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.io.FileNotFoundException
+import java.io.FileOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Raw samples (a bounded ring buffer: KEEP_MS / MAX_SAMPLES) and the sampler's settings, in SharedPreferences.
- * Every read-modify-write of the samples happens under one lock (receivers, the sensor thread and JS calls overlap).
+ * Raw samples (a bounded ring buffer: KEEP_MS / MAX_SAMPLES) and the sampler's settings (on / off, the member's time
+ * zone), as two small JSON files in `noBackupFilesDir` — never part of Auto Backup or a device transfer, so a new phone
+ * never inherits another phone's counter readings or an "on" switch. Written through AtomicFile (synced, then renamed:
+ * a shutdown sample survives the power-off that follows it). Every read-modify-write happens under one lock (receivers,
+ * the sensor thread and JS calls overlap).
  */
 internal object StepStore {
   private val lock = Any()
+  private val legacyChecked = AtomicBoolean(false)
 
-  private fun prefs(context: Context): SharedPreferences =
-    context.getSharedPreferences(StepConst.PREFS, Context.MODE_PRIVATE)
+  private fun file(context: Context, name: String): File = File(context.applicationContext.noBackupFilesDir, name)
+
+  /** Earlier builds kept everything in SharedPreferences "orza_steps" (backed up) — drop it once per process. */
+  private fun dropLegacy(context: Context) {
+    if (!legacyChecked.compareAndSet(false, true)) return
+    try {
+      context.applicationContext.deleteSharedPreferences(StepConst.LEGACY_PREFS)
+    } catch (e: Exception) {
+      // Nothing there.
+    }
+  }
+
+  private fun readText(file: File): String? =
+    try {
+      String(AtomicFile(file).readFully(), Charsets.UTF_8)
+    } catch (e: FileNotFoundException) {
+      null
+    } catch (e: Exception) {
+      Log.w(StepConst.TAG, "Couldn't read ${file.name}", e)
+      null
+    }
+
+  private fun writeText(file: File, text: String): Boolean {
+    val atomic = AtomicFile(file)
+    var out: FileOutputStream? = null
+    return try {
+      out = atomic.startWrite()
+      out.write(text.toByteArray(Charsets.UTF_8))
+      atomic.finishWrite(out)
+      true
+    } catch (e: Exception) {
+      if (out != null) atomic.failWrite(out)
+      Log.w(StepConst.TAG, "Couldn't write ${file.name}", e)
+      false
+    }
+  }
+
+  /* ───────────────────────────── Samples ───────────────────────────── */
 
   private fun readUnlocked(context: Context): MutableList<StepSample> {
-    val raw = prefs(context).getString(StepConst.KEY_SAMPLES, null) ?: return ArrayList()
+    dropLegacy(context)
+    val raw = readText(file(context, StepConst.SAMPLES_FILE)) ?: return ArrayList()
     return try {
       val arr = JSONArray(raw)
       val out = ArrayList<StepSample>(arr.length())
@@ -35,13 +81,15 @@ internal object StepStore {
   private fun writeUnlocked(context: Context, samples: List<StepSample>): Boolean {
     val arr = JSONArray()
     for (s in samples) arr.put(s.toJson())
-    return prefs(context).edit().putString(StepConst.KEY_SAMPLES, arr.toString()).commit()
+    return writeText(file(context, StepConst.SAMPLES_FILE), arr.toString())
   }
 
   /**
-   * Stores `sample` (appended: the list stays in the order the readings were taken) unless it adds nothing:
-   * - a read the app asked for (`force` false) within MIN_STORE_GAP_MS of the last stored sample of the same boot;
-   * - a forced sample identical to one stored less than DUPLICATE_MS ago.
+   * Stores `sample` (appended: the list stays in the order the readings were taken) unless it adds nothing. Against the
+   * last stored sample of the same boot:
+   * - a read the app asked for (`force` false) within MIN_STORE_GAP_MS is not stored;
+   * - a forced sample within DUPLICATE_MS replaces it (dropped when the counter didn't move) — cumulative counter, so
+   *   no step is lost, and a burst of broadcasts can't flood the buffer.
    * Then drops samples older than KEEP_MS and the oldest beyond MAX_SAMPLES. True when stored.
    */
   fun add(context: Context, sample: StepSample, force: Boolean): Boolean {
@@ -56,7 +104,10 @@ internal object StepStore {
         }
         if (gap >= 0L && gap < StepConst.MIN_STORE_GAP_MS) {
           if (!force) return false
-          if (gap < StepConst.DUPLICATE_MS && last.counter == sample.counter) return false
+          if (gap < StepConst.DUPLICATE_MS) {
+            if (last.counter == sample.counter) return false
+            samples.removeAt(samples.size - 1)
+          }
         }
       }
       samples.add(sample)
@@ -92,19 +143,53 @@ internal object StepStore {
 
   fun clear(context: Context) {
     synchronized(lock) {
-      prefs(context).edit().remove(StepConst.KEY_SAMPLES).commit()
+      dropLegacy(context)
+      try {
+        AtomicFile(file(context, StepConst.SAMPLES_FILE)).delete()
+      } catch (e: Exception) {
+        Log.w(StepConst.TAG, "Couldn't clear the step samples", e)
+      }
     }
   }
 
-  fun timeZone(context: Context): String? = prefs(context).getString(StepConst.KEY_TIME_ZONE, null)
+  /* ───────────────────────────── Settings ───────────────────────────── */
 
-  fun setTimeZone(context: Context, timeZone: String) {
-    prefs(context).edit().putString(StepConst.KEY_TIME_ZONE, timeZone).apply()
+  private fun readState(context: Context): JSONObject {
+    dropLegacy(context)
+    val raw = readText(file(context, StepConst.STATE_FILE)) ?: return JSONObject()
+    return try {
+      JSONObject(raw)
+    } catch (e: Exception) {
+      JSONObject()
+    }
   }
 
-  fun isEnabled(context: Context): Boolean = prefs(context).getBoolean(StepConst.KEY_ENABLED, false)
+  private fun updateState(context: Context, change: (JSONObject) -> Unit) {
+    synchronized(lock) {
+      val state = readState(context)
+      change(state)
+      writeText(file(context, StepConst.STATE_FILE), state.toString())
+    }
+  }
+
+  fun timeZone(context: Context): String? {
+    synchronized(lock) {
+      val tz = readState(context).optString("tz", "")
+      return tz.ifEmpty { null }
+    }
+  }
+
+  fun setTimeZone(context: Context, timeZone: String) {
+    updateState(context) { it.put("tz", timeZone) }
+  }
+
+  fun isEnabled(context: Context): Boolean {
+    synchronized(lock) {
+      return readState(context).optBoolean("enabled", false)
+    }
+  }
 
   fun setEnabled(context: Context, enabled: Boolean) {
-    prefs(context).edit().putBoolean(StepConst.KEY_ENABLED, enabled).commit()
+    updateState(context) { it.put("enabled", enabled) }
   }
 }

@@ -8,7 +8,7 @@ import { Linking, PermissionsAndroid, Platform } from 'react-native';
 import * as sampler from '../../../modules/orza-steps';
 import { healthBridge } from '../health/bridge';
 
-import { coversWholeDay, dailyStepCounts, dayStartMs, type StepSample } from './counter';
+import { coversDayEnd, coversWholeDay, dailyStepCounts, dayStartMs, type StepSample } from './counter';
 import { bestOf, dayRanges, type Candidate } from './shared';
 import { permissionHistory, setPermissionHistory } from './store';
 import type { DaySteps, ReadOptions, StepPermission, StepsAccess, StepsReader } from './types';
@@ -52,7 +52,14 @@ async function phoneDays(dates: readonly string[], opts: ReadOptions): Promise<M
   for (const date of dates) {
     const d = days.get(date);
     if (!d) continue;
-    out.set(date, { source: 'phone', steps: d.steps, ...(coversWholeDay(d, tz) ? {} : { partialFrom: d.coveredFrom }) });
+    out.set(date, {
+      source: 'phone',
+      steps: d.steps,
+      ...(coversWholeDay(d, tz) ? {} : { partialFrom: d.coveredFrom }),
+      ...(d.estimatedSteps > 0 ? { estimated: d.estimatedSteps } : {}),
+      // A past day is final once a reading after its midnight exists (a background run may not have one yet).
+      complete: coversDayEnd(d, tz),
+    });
   }
   return out;
 }
@@ -103,7 +110,7 @@ export const stepsReader: StepsReader = {
     for (let i = 0; i < dates.length; i++) {
       const date = dates[i];
       // 0 from Health Connect means nothing synced into it for that day ("no data"), not a day without steps.
-      const candidates: Candidate[] = [{ source: 'health_connect', steps: health[i] || null }];
+      const candidates: Candidate[] = [{ source: 'health_connect', steps: health[i] || null, complete: !!health[i] }];
       const p = phone.get(date);
       if (p) candidates.push(p);
       const best = bestOf(date, candidates);

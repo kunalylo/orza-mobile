@@ -7,6 +7,11 @@
  * - a reboot (or the counter restarted) → the new value was walked since the restart (from boot time when known);
  * - a delta faster than MAX_STEPS_PER_HOUR is a glitch and ignored (the next plausible reading carries on);
  * and each delta is credited to local days in the member's time zone, split across midnight in proportion to time.
+ *
+ * "Same boot" is decided by the boot clock (`elapsed`) whenever both readings have it: it restarts only with the
+ * kernel, while BOOT_COUNT can move without one (a runtime restart re-sends BOOT_COMPLETED). Readings of one boot are
+ * re-anchored to that boot's latest wall clock, so a reading taken before network time was set (or across a manual
+ * clock change) lands at its real instant.
  */
 import { addDays, safeTimeZone, utcToZoned, zonedToUtc } from '../alarms/schedule';
 
@@ -31,6 +36,8 @@ export interface DayCount {
   coveredTo: number;
   /** Some of the count comes from a long gap between samples that crossed midnight (split by time: an estimate). */
   estimated: boolean;
+  /** How many of `steps` are such an estimate (0 when none). */
+  estimatedSteps: number;
 }
 
 /** Faster than this is a sensor glitch, not walking (elite sprinting is ~18 000 steps an hour). */
@@ -41,8 +48,12 @@ export const MIN_RATE_WINDOW_MS = 15 * 60_000;
 export const ESTIMATE_GAP_MS = 3 * 3_600_000;
 
 const HOUR_MS = 3_600_000;
-/** A day counts as covered from its start when coverage begins within this of midnight. */
+/** A day counts as covered from its start (to its end) when coverage begins (ends) within this of midnight. */
 const COVER_SLACK_MS = 60_000;
+/** Readings of one boot whose wall clocks disagree by more than this were taken under different clocks. */
+const CLOCK_SLACK_MS = 2 * 60_000;
+/** A boot instant this much later than the previous reading means a new kernel boot (absorbs small clock fixes). */
+const BOOT_SLACK_MS = 5 * 60_000;
 
 /* ───────────────────────────── Time zone helpers ───────────────────────────── */
 
@@ -91,16 +102,19 @@ function bootInstant(s: StepSample): number | null {
   return hasElapsed(s) ? s.ts - s.elapsed : null;
 }
 
+const knownBoot = (s: StepSample) => Number.isFinite(s.boot) && s.boot >= 0;
+
 /** Which boot a sample belongs to: the boot number, else the boot instant to the minute. */
 function sessionOf(s: StepSample): string {
-  if (Number.isFinite(s.boot) && s.boot >= 0) return `b${s.boot}`;
+  if (knownBoot(s)) return `b${s.boot}`;
   const boot = bootInstant(s);
   return boot != null ? `t${Math.round(boot / 60_000)}` : 'u';
 }
 
 /**
- * Samples in the order they were taken: boots by their first reading, readings within a boot by time since boot
- * (immune to wall-clock changes), exact duplicates dropped.
+ * Samples in the order they were taken: readings within a boot by time since boot (immune to wall-clock changes) and
+ * re-anchored to that boot's latest wall clock; boots by their boot number when every boot has one (it only goes up),
+ * else by boot instant / first reading; exact duplicates dropped.
  */
 export function orderSamples(input: readonly StepSample[]): StepSample[] {
   const sessions = new Map<string, StepSample[]>();
@@ -111,18 +125,23 @@ export function orderSamples(input: readonly StepSample[]): StepSample[] {
     if (list) list.push(s);
     else sessions.set(key, [s]);
   }
-  const groups = [...sessions.values()].map((list) => {
-    const byElapsed = list.every(hasElapsed);
-    list.sort((a, b) => (byElapsed ? a.elapsed - b.elapsed : 0) || a.ts - b.ts || a.counter - b.counter);
+  const groups = [...sessions.values()].map((raw) => {
+    const byElapsed = raw.every(hasElapsed);
+    raw.sort((a, b) => (byElapsed ? a.elapsed - b.elapsed : 0) || a.ts - b.ts || a.counter - b.counter);
+    // One boot clock, one wall clock: the latest reading's clock is the most likely right one (network time is set by
+    // then); a reading whose boot instant disagrees with it by more than CLOCK_SLACK_MS is moved onto that clock.
+    const ref = byElapsed ? bootInstant(raw[raw.length - 1]) : null;
+    const list = ref == null ? raw : raw.map((s) => (Math.abs(s.ts - s.elapsed - ref) > CLOCK_SLACK_MS ? { ...s, ts: ref + s.elapsed } : s));
     const unique: StepSample[] = [];
     for (const s of list) {
       const last = unique[unique.length - 1];
       if (last && last.ts === s.ts && last.counter === s.counter && last.elapsed === s.elapsed) continue;
       unique.push(s);
     }
-    return { first: Math.min(...unique.map((s) => s.ts)), list: unique };
+    return { boot: knownBoot(unique[0]) ? unique[0].boot : -1, start: ref ?? Math.min(...unique.map((s) => s.ts)), list: unique };
   });
-  groups.sort((a, b) => a.first - b.first);
+  const byBootNumber = groups.every((g) => g.boot >= 0);
+  groups.sort((a, b) => (byBootNumber ? a.boot - b.boot : 0) || a.start - b.start);
   return groups.flatMap((g) => g.list);
 }
 
@@ -135,25 +154,47 @@ interface Delta {
   end: number;
   /** A reboot: from the previous reading to the boot nobody could count (phone off / restarting) — covered, 0 steps. */
   gapFrom?: number;
+  /** The readings' clocks can't place it (a reboot whose new reading isn't after the old one, no boot clock): skip. */
+  unplaceable?: boolean;
+}
+
+/**
+ * Did the phone boot again between reading `a` and the later reading `b`? With both boot clocks: yes when b's restarted
+ * (lower) or b's boot instant comes after `a` — a different BOOT_COUNT alone isn't enough (it can move without a
+ * kernel reboot, and then the counter keeps running). Without them: a different boot.
+ */
+function rebootedBetween(a: StepSample, b: StepSample): boolean {
+  if (hasElapsed(a) && hasElapsed(b)) {
+    if (b.elapsed < a.elapsed) return true;
+    if (knownBoot(a) && knownBoot(b) && a.boot === b.boot) return false;
+    return b.ts - b.elapsed > a.ts + BOOT_SLACK_MS;
+  }
+  return sessionOf(a) !== sessionOf(b);
 }
 
 /** Steps between reading `a` and the later reading `b`. */
 function deltaBetween(a: StepSample, b: StepSample): Delta {
-  const sameBoot = sessionOf(a) === sessionOf(b) && !(hasElapsed(a) && hasElapsed(b) && b.elapsed < a.elapsed);
-  if (sameBoot && b.counter >= a.counter) {
+  const rebooted = rebootedBetween(a, b);
+  if (!rebooted && b.counter >= a.counter) {
     // Measure the interval on the boot clock when possible: a wall-clock change in between doesn't stretch it.
     const span = hasElapsed(a) && hasElapsed(b) ? b.elapsed - a.elapsed : b.ts - a.ts;
     return { steps: b.counter - a.counter, start: b.ts - Math.max(0, span), end: b.ts };
   }
   // Rebooted (or the counter restarted): everything on the counter now was walked since it restarted.
+  const boot = rebooted ? bootInstant(b) : null;
+  if (rebooted && b.ts <= a.ts) {
+    // The two boots' clocks disagree: credit the new boot's steps from its own boot when known, else skip it.
+    if (boot != null && boot <= b.ts) return { steps: b.counter, start: boot, end: b.ts };
+    return { steps: b.counter, start: b.ts, end: b.ts, unplaceable: true };
+  }
   let start = a.ts;
-  const boot = sameBoot ? null : bootInstant(b);
   if (boot != null && boot > start && boot <= b.ts) start = boot;
   start = Math.min(start, b.ts);
   return { steps: b.counter, start, end: b.ts, ...(start > a.ts ? { gapFrom: a.ts } : {}) };
 }
 
 function plausible(d: Delta): boolean {
+  if (d.unplaceable) return false;
   const ms = Math.max(d.end - d.start, MIN_RATE_WINDOW_MS);
   return d.steps <= (MAX_STEPS_PER_HOUR * ms) / HOUR_MS;
 }
@@ -166,15 +207,17 @@ class DayBook {
   constructor(private readonly tz: string) {}
 
   private credit(date: string, steps: number, from: number, to: number, estimated: boolean) {
+    const est = estimated ? steps : 0;
     const d = this.days.get(date);
     if (!d) {
-      this.days.set(date, { date, steps, coveredFrom: from, coveredTo: to, estimated });
+      this.days.set(date, { date, steps, coveredFrom: from, coveredTo: to, estimated, estimatedSteps: est });
       return;
     }
     d.steps += steps;
     d.coveredFrom = Math.min(d.coveredFrom, from);
     d.coveredTo = Math.max(d.coveredTo, to);
     d.estimated = d.estimated || estimated;
+    d.estimatedSteps += est;
   }
 
   /** Coverage without steps (the first reading: counting starts here). */
@@ -269,4 +312,10 @@ export function dailyStepCounts(samples: readonly StepSample[], timeZone: string
 /** True when `day`'s coverage starts at (or within a minute of) its local midnight. */
 export function coversWholeDay(day: DayCount, timeZone: string): boolean {
   return day.coveredFrom <= dayStartMs(day.date, safeTimeZone(timeZone)) + COVER_SLACK_MS;
+}
+
+/** True when `day`'s coverage reaches (within a minute of) the next local midnight — a past day's count is final. */
+export function coversDayEnd(day: DayCount, timeZone: string): boolean {
+  const tz = safeTimeZone(timeZone);
+  return day.coveredTo >= dayStartMs(addDays(day.date, 1), tz) - COVER_SLACK_MS;
 }

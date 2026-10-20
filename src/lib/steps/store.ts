@@ -1,6 +1,7 @@
 /**
- * Per-phone step-sync memory: per user and day, what this phone saved and what it last saw on the server (so it never
- * lowers a count), which day's final counts were already saved, and the Android permission history ("blocked").
+ * Per-phone step-sync memory: per user and day, what this phone saved and what it last read from the server (so it
+ * never lowers a count), the day's base (a member's edit / counting that began mid-day — `policy.ts`), whether a past
+ * day's final count was saved, and the Android permission history ("blocked").
  *
  * A small JSON file in the app's documents folder (removed with the app), like the health sync store. Read
  * synchronously and cached; React reads it through `useStepsStore` (useSyncExternalStore).
@@ -14,8 +15,6 @@ import type { DayRecord } from './policy';
 
 interface UserSteps {
   days: Record<string, DayRecord>;
-  /** The member's "today" for which yesterday's and the day before's final counts were saved. */
-  finalizedFor?: string;
 }
 
 interface FileShape {
@@ -99,7 +98,7 @@ export function updateDayRecord(userId: string, date: string, patch: Partial<Day
   changed();
 }
 
-/** Remember the server's count for a day (Today's data / a check before saving) — only when it differs. */
+/** Remember the server's count for a day from a real read — only when it differs. */
 export function noteServerSteps(userId: string, date: string, steps: number) {
   if (!Number.isFinite(steps) || steps < 0) return;
   const rec = getDayRecord(userId, date);
@@ -107,16 +106,10 @@ export function noteServerSteps(userId: string, date: string, steps: number) {
   updateDayRecord(userId, date, { server: steps, serverAt: Date.now() });
 }
 
-export function finalizedFor(userId: string): string | undefined {
-  return load().users[userId]?.finalizedFor;
-}
-
-export function setFinalizedFor(userId: string, today: string) {
-  const all = load();
-  const user = all.users[userId] ?? { days: {} };
-  if (user.finalizedFor === today) return;
-  cache = { ...all, users: { ...all.users, [userId]: { ...user, finalizedFor: today } } };
-  changed();
+/** A past day's final count was saved (it is no longer read). */
+export function markDayFinal(userId: string, date: string) {
+  if (getDayRecord(userId, date)?.final) return;
+  updateDayRecord(userId, date, { final: true });
 }
 
 /* ───────────────────────────── Android permission history ───────────────────────────── */

@@ -78,6 +78,9 @@ class OrzaStepsModule : Module() {
         "permission" to StepSensor.hasPermission(ctx),
         "enabled" to StepStore.isEnabled(ctx),
         "armed" to StepScheduler.isArmed(ctx),
+        "midnightArmed" to StepScheduler.isMidnightArmed(ctx),
+        "exactMidnight" to StepScheduler.canScheduleExact(ctx),
+        "standbyBucket" to StepScheduler.standbyBucket(ctx),
         "samples" to StepStore.count(ctx),
         "timeZone" to StepStore.timeZone(ctx),
         "bootCount" to StepSensor.bootCount(ctx)

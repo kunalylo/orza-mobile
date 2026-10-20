@@ -2,9 +2,9 @@
  * ÖRZA step sampler — Android native module (local Expo module, autolinked from ./modules).
  *
  * Records RAW readings of the phone's hardware step counter (Sensor.TYPE_STEP_COUNTER: steps since boot, reset at
- * every reboot) — on request, about hourly, just before and after midnight, at boot / app update and at shutdown — in a
- * 10-day ring buffer, with the app closed too. Turning readings into daily totals is pure TypeScript
- * (`src/lib/steps/counter.ts`).
+ * every reboot) — on request, about hourly (less often in stricter standby buckets), just before and after midnight, at
+ * boot / app update and at shutdown — in a 10-day ring buffer (never backed up), with the app closed too. Turning
+ * readings into daily totals is pure TypeScript (`src/lib/steps/counter.ts`).
  *
  * `requireOptionalNativeModule` → null where the module isn't built in (Expo Go, web, iOS, an older dev build): every
  * function then resolves to a harmless default and `isOrzaStepsAvailable()` is false.
@@ -28,7 +28,13 @@ export interface NativeStepsStatus {
   available: boolean;
   permission: boolean;
   enabled: boolean;
+  /** The periodic sample is set (none in the Restricted standby bucket). */
   armed: boolean;
+  midnightArmed: boolean;
+  /** Midnight samples are exact ("Alarms & reminders" allowed), else an inexact chain. */
+  exactMidnight: boolean;
+  /** App Standby bucket (10 active · 20 working set · 30 frequent · 40 rare · 45 restricted). */
+  standbyBucket: number;
   samples: number;
   timeZone: string | null;
   bootCount: number;

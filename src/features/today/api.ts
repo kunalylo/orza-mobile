@@ -7,6 +7,7 @@ import { useRef, useState } from 'react';
 
 import { api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { observeServerSteps } from '@/lib/steps/serverSeen';
 import { toast } from '@/ui';
 
 import { MAX_GLASSES, clamp } from './format';
@@ -20,11 +21,20 @@ export const todayKeys = {
 
 /* ───────────────────────────── Query ───────────────────────────── */
 
-/** `GET /api/dashboard/today?date=` — keeps the previous day on screen while the next one loads. */
+/**
+ * `GET /api/dashboard/today?date=` — keeps the previous day on screen while the next one loads. Each real answer also
+ * tells the step sync what the server has for the day (`observeServerSteps`: how it notices an edit made on the website).
+ */
 export function useTodayDashboard(date: string) {
+  const userId = useAuth().user?.id;
   return useQuery({
     queryKey: todayKeys.day(date),
-    queryFn: ({ signal }) => api.get<TodayData>(`/dashboard/today?date=${encodeURIComponent(date)}`, { signal }),
+    queryFn: async ({ signal }) => {
+      const requestedAt = Date.now();
+      const d = await api.get<TodayData>(`/dashboard/today?date=${encodeURIComponent(date)}`, { signal });
+      if (userId && d?.date === date && typeof d.tracking?.steps === 'number') observeServerSteps(userId, date, d.tracking.steps, requestedAt);
+      return d;
+    },
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });

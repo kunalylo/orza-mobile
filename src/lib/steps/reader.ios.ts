@@ -84,8 +84,9 @@ export const stepsReader: StepsReader = {
     for (let i = 0; i < dates.length; i++) {
       const candidates: Candidate[] = [
         // 0 from Apple Health also means "nothing readable" (HealthKit hides a denied read as no data).
-        { source: 'apple_health', steps: health[i] || null },
-        { source: 'phone', steps: phone[i] ?? null },
+        { source: 'apple_health', steps: health[i] || null, complete: !!health[i] },
+        // CMPedometer answers for the whole range it was asked (it records all day by itself).
+        { source: 'phone', steps: phone[i] ?? null, complete: phone[i] != null },
       ];
       const best = bestOf(dates[i], candidates);
       if (best) out.push(best);

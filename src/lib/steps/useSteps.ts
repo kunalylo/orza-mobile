@@ -11,31 +11,37 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 
-import { mergeTracking, todayKeys } from '@/features/today/api';
-import type { TodayData } from '@/features/today/types';
+import { mergeTracking } from '@/features/today/api';
 import { useAuth, useSignedInUser } from '@/lib/auth';
 
 import { safeTimeZone } from '../alarms/schedule';
 
 import { openStepsSettings, stepsReader } from './reader';
 import { useDayRecord } from './store';
-import { bindStepsMember, getStepsState, refreshSteps, subscribeStepsState, type RefreshOptions, type RefreshReason, type StepsMember } from './sync';
+import {
+  ACCESS_TIMEOUT_MS,
+  bindStepsMember,
+  getStepsState,
+  publishStepsAccess,
+  refreshSteps,
+  subscribeStepsState,
+  within,
+  type RefreshOptions,
+  type RefreshReason,
+  type StepsMember,
+} from './sync';
 import type { StepPermission } from './types';
 
-/** Today's server count from React Query counts as current for this long (else the sync asks the server). */
-const SERVER_FRESH_MS = 10 * 60_000;
 /** Live refresh cadence while Today is on screen. */
 const LIVE_EVERY_MS = 60_000;
 
+/**
+ * The sync never trusts Today's cached data to decide a save (this phone's own saves keep that cache looking fresh): it
+ * reads the server right before saving. A save updates the caches here.
+ */
 function foregroundOptions(qc: QueryClient, reason: RefreshReason): RefreshOptions {
   return {
     reason,
-    serverSteps: (date) => {
-      const s = qc.getQueryState<TodayData>(todayKeys.day(date));
-      const d = s?.data;
-      if (!s || !d || d.date !== date || Date.now() - s.dataUpdatedAt > SERVER_FRESH_MS) return null;
-      return typeof d.tracking?.steps === 'number' ? d.tracking.steps : 0;
-    },
     onSaved: (date, tracking) => {
       // The numbers on screen are current now; reports chart the same steps — refetch them when next shown.
       mergeTracking(qc, date, tracking);
@@ -100,15 +106,22 @@ export function useTodaySteps() {
     }, [userId, tz, qc])
   );
 
-  /** One tap: the system prompt (when it can still show), then an immediate read. */
+  /**
+   * One tap: the system prompt (when it can still show), the new permission shown at once, then a read in the
+   * background — never waiting on a run already in flight (its saves can take a while on a slow network).
+   */
   const requestAccess = useCallback(async (): Promise<StepPermission> => {
     const result = await stepsReader.requestPermission();
-    await refreshSteps({ id: userId, timeZone: tz }, foregroundOptions(qc, 'permission'));
+    const access = await within(stepsReader.access(), ACCESS_TIMEOUT_MS);
+    if (access) publishStepsAccess(userId, access);
+    void refreshSteps({ id: userId, timeZone: tz }, foregroundOptions(qc, 'permission'));
     return result;
   }, [userId, tz, qc]);
 
   /** Re-check after Settings / the Health screen (no prompt). */
-  const recheck = useCallback(() => refreshSteps({ id: userId, timeZone: tz }, foregroundOptions(qc, 'permission')), [userId, tz, qc]);
+  const recheck = useCallback(() => {
+    void refreshSteps({ id: userId, timeZone: tz }, foregroundOptions(qc, 'permission'));
+  }, [userId, tz, qc]);
 
   return {
     platform: stepsReader.platform,
@@ -128,4 +141,9 @@ export function useTodaySteps() {
     recheck,
     openSettings: openStepsSettings,
   };
+}
+
+/** The member's today as of the latest steps read (moves past midnight while the app is open). */
+export function useStepsReadingDate(): string | null {
+  return useSyncExternalStore(subscribeStepsState, () => getStepsState().date);
 }

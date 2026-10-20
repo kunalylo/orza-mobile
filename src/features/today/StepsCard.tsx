@@ -2,7 +2,9 @@
  * Steps on Today — counted automatically. A live number and an energy ring to the member's step goal, where the count
  * comes from ("Counted by this phone" / "From Health Connect" / "From Apple Health"), and, when the phone may not
  * count yet, one friendly tap: "Count my steps automatically" (why, then the system prompt; blocked → Settings).
- * Typing steps stays only as a fallback when no automatic source exists (no step counter / permission refused / web).
+ * Typing steps stays only as a fallback when no automatic source exists (no step counter / permission refused / web);
+ * a counted day can still be corrected ("Edit": the member's number, plus steps counted after it).
+ * It also renders without Today's data (offline / loading): the phone's own count needs no network.
  *
  * Reading + saving lives in `@/lib/steps` (`useTodaySteps`): it reads on focus, every minute while Today is visible and
  * on return to the app, and saves the count through `POST /api/track/steps` so the website shows the same number.
@@ -33,6 +35,7 @@ const SOURCE: Record<ShownSource, { icon: IconName; label: string }> = {
   health_connect: { icon: 'mci:heart-pulse', label: 'From Health Connect' },
   apple_health: { icon: 'mci:apple', label: 'From Apple Health' },
   saved: { icon: 'check-circle', label: 'Saved' },
+  edited: { icon: 'edit-3', label: 'Edited by you' },
 };
 
 const ASKABLE: StepPermission[] = ['undetermined', 'denied', 'blocked'];
@@ -70,12 +73,12 @@ export function StepsCard({
   date: string;
   /** The member's today. */
   today: string;
-  /** The day's count on the server (Today's data). */
-  serverSteps: number;
+  /** The day's count on the server (Today's data; null when it isn't loaded — offline). */
+  serverSteps: number | null;
   target: number;
   tz: string;
-  /** Opens the manual entry sheet (fallback only). */
-  onLog: () => void;
+  /** Opens the entry sheet: "log" (the typing fallback) or "edit" (correct a counted day) with the number shown. */
+  onLog?: (mode: 'log' | 'edit', shown: number) => void;
 }) {
   const user = useSignedInUser();
   const steps = useTodaySteps();
@@ -93,7 +96,10 @@ export function StepsCard({
   // Typing is the fallback only: no step counter here (or web), or the member said no to counting.
   const manual = !!access && !counting && (!access.phoneAvailable || permission === 'denied' || permission === 'blocked');
 
-  const shown = shownSteps(live, record, serverSteps) ?? { steps: serverSteps, source: 'saved' as const };
+  // Edit: correct a counted day (low-key for today — counting is the point; plain for past days).
+  const editable = !!onLog && !!access && !manual && (counting || !isToday);
+
+  const shown = shownSteps(live, record, serverSteps) ?? { steps: serverSteps ?? 0, source: 'saved' as const };
   const value = shown.steps;
   const progress = target > 0 ? value / target : 0;
   const reached = target > 0 && value >= target;
@@ -110,10 +116,20 @@ export function StepsCard({
     if (isToday && before?.date === date && before.value < target && value >= target) haptics.success();
   }, [date, value, target, isToday]);
 
+  const base = record?.base;
+  const toGo = `${formatNumber(Math.max(0, target - value))} to go`;
   let status: string;
   if (reached) status = isToday ? 'Step goal reached — lovely work.' : 'Step goal reached.';
-  else if (isToday && live?.partialFrom && shown.source === 'phone') status = `Counting since ${formatTime(new Date(live.partialFrom).toISOString(), tz)} — earlier steps today weren’t seen by this phone.`;
-  else if (isToday && counting) status = `${formatNumber(target - value)} to go · updates on its own`;
+  else if (isToday && shown.source === 'edited') status = counting ? `${toGo} · your number, plus steps counted since` : `${toGo} · your number`;
+  else if (isToday && live?.partialFrom) {
+    const since = formatTime(new Date(live.partialFrom).toISOString(), tz);
+    status =
+      base?.kind === 'start' && base.steps > 0
+        ? `Counting since ${since}, on top of the ${formatNumber(base.steps)} saved earlier today.`
+        : `Counting since ${since} — earlier steps today weren’t seen by this phone.`;
+  } else if (isToday && live?.estimated && shown.source === 'phone')
+    status = `${toGo} · about ${formatNumber(live.estimated)} of these are estimated from hours the phone couldn’t check.`;
+  else if (isToday && counting) status = `${toGo} · updates on its own`;
   else if (isToday) status = value > 0 ? `${formatNumber(target - value)} to go` : 'A short walk after meals is a great place to start.';
   else status = value > 0 ? `${formatNumber(target - value)} short of the goal` : 'No steps for this day.';
 
@@ -183,7 +199,18 @@ export function StepsCard({
         </View>
       ) : null}
 
-      {manual ? <Button label="Log steps" variant="ghost" size="sm" icon="edit-3" onPress={onLog} style={styles.log} /> : null}
+      {manual && onLog ? <Button label="Log steps" variant="ghost" size="sm" icon="edit-3" onPress={() => onLog('log', value)} style={styles.log} /> : null}
+      {editable && onLog ? (
+        <Button
+          label={isToday ? 'Not right? Edit' : 'Edit'}
+          variant="ghost"
+          size="sm"
+          icon="edit-3"
+          onPress={() => onLog('edit', value)}
+          accessibilityHint={isToday ? 'Set today’s steps yourself; steps counted after that are added on' : 'Set this day’s steps yourself'}
+          style={styles.log}
+        />
+      ) : null}
 
       <StepsPermissionSheet visible={explain} onClose={() => setExplain(false)} steps={steps} />
     </GlassCard>

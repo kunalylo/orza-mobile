@@ -23,7 +23,17 @@ export interface DaySteps {
   source: StepSource;
   /** Phone counter only: this phone started counting this day at this instant (epoch ms); earlier steps weren't seen. */
   partialFrom?: number;
+  /**
+   * Phone counter only: how many of `steps` are an estimate — steps from a long stretch the phone couldn't check (off,
+   * or background sampling blocked) spread over the days it crossed by time. Today doesn't save it; past days do.
+   */
+  estimated?: number;
+  /** The source read the whole day (a past day's count is final: saved once, then no longer read). */
+  complete?: boolean;
 }
+
+/** Why a read runs (a queued run keeps the most important one: `permission` > `launch` > `foreground` > …). */
+export type RefreshReason = 'launch' | 'foreground' | 'today' | 'permission' | 'background';
 
 export interface StepsAccess {
   /** The phone's own step counter exists (step sensor / motion coprocessor + the native code to read it). */

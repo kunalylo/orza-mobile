@@ -5,12 +5,16 @@ import org.json.JSONObject
 internal object StepConst {
   const val TAG = "OrzaSteps"
 
-  const val PREFS = "orza_steps"
-  const val KEY_SAMPLES = "samples"
-  const val KEY_TIME_ZONE = "time_zone"
-  const val KEY_ENABLED = "enabled"
+  /**
+   * Everything lives in noBackupFilesDir: never in Auto Backup or a device-to-device transfer (another phone's counter
+   * readings must never be bridged to this phone's). Earlier builds used SharedPreferences "orza_steps", which ARE
+   * backed up (expo-secure-store's backup rules include every shared-prefs file) — removed on first use.
+   */
+  const val SAMPLES_FILE = "orza-steps-samples.json"
+  const val STATE_FILE = "orza-steps-state.json"
+  const val LEGACY_PREFS = "orza_steps"
 
-  /** Raw samples older than this are dropped (the app reads a few days at most; Today + the last 2 days). */
+  /** Raw samples older than this are dropped (the app reads at most the last 7 days, plus 36 h before them). */
   const val KEEP_MS = 10L * 24 * 60 * 60 * 1000
 
   /** Hard cap on stored samples (about-hourly alarms + the app's reads stay far below it in 10 days). */
@@ -22,23 +26,53 @@ internal object StepConst {
    */
   const val MIN_STORE_GAP_MS = 10L * 60 * 1000
 
-  /** A forced sample (alarm, boot, shutdown) identical to one stored less than this long ago isn't stored again. */
+  /**
+   * A forced sample (alarm, boot, shutdown) taken less than this after the last stored sample of the same boot replaces
+   * it (or is dropped when the counter didn't move): the counter is cumulative, so nothing is lost, and a burst of
+   * broadcasts can't flood the ring buffer.
+   */
   const val DUPLICATE_MS = 60L * 1000
 
   /** How long a read waits for the sensor's first event. */
   const val READ_TIMEOUT_MS = 3_000L
 
-  /** After the first event, wait this long for a newer (flushed) value before finishing the read. */
+  /**
+   * When the sensor can't flush (flush() returned false / threw), wait this long after the first event for a newer
+   * value. When it can, the read waits for onFlushCompleted instead (up to READ_TIMEOUT_MS).
+   */
   const val SETTLE_MS = 400L
+
+  /** A reading whose sensor event is at most this old (and the flush didn't complete) is stamped with the event time. */
+  const val MAX_EVENT_AGE_MS = 15L * 60 * 1000
 
   /** A receiver's own time budget (goAsync): it always finishes well before the system's broadcast timeout. */
   const val RECEIVER_BUDGET_MS = 6_000L
 
-  /** The periodic sample: inexact and re-armed on every run, so the system decides (roughly every 1–2 h). */
+  /**
+   * The periodic sample (inexact, re-armed on every run, so the system decides the exact time). Spaced out when Android
+   * puts ÖRZA in a stricter App Standby bucket, whose alarm quota (Frequent 2/h, Rare 1/h) medicine reminders share;
+   * none at all in Restricted (1 alarm a day). The counter is cumulative: periodic samples only bound what a reboot can
+   * lose and keep long gaps (estimates) short.
+   */
   const val PERIODIC_MS = 60L * 60 * 1000
+  const val PERIODIC_FREQUENT_MS = 3L * 60 * 60 * 1000
+  const val PERIODIC_RARE_MS = 4L * 60 * 60 * 1000
 
-  /** Samples this long before and after local midnight, so each day's total splits cleanly. */
+  /** Exact midnight samples ("Alarms & reminders" allowed): this long before and after local midnight. */
   const val MIDNIGHT_OFFSET_MS = 5L * 60 * 1000
+
+  /**
+   * Inexact midnight samples (no "Alarms & reminders"): Android may deliver an inexact alarm up to 75 % of its lead time
+   * late (capped at 1 h from Android 12). The pre-midnight alarm is therefore set so that even its latest delivery is
+   * PRE_MIDNIGHT_MARGIN_MS before midnight, and each run re-arms a closer one (a shorter lead = a smaller window) until
+   * a sample lands within CHAIN_FINAL_GAP_MS of that deadline; then one sample POST_MIDNIGHT_OFFSET_MS after midnight.
+   * In the Frequent / Rare buckets one pre-midnight sample within CHAIN_COARSE_GAP_MS is enough (fewer alarms).
+   */
+  const val PRE_MIDNIGHT_MARGIN_MS = 2L * 60 * 1000
+  const val CHAIN_FINAL_GAP_MS = 15L * 60 * 1000
+  const val CHAIN_COARSE_GAP_MS = 3L * 60 * 60 * 1000
+  const val POST_MIDNIGHT_OFFSET_MS = 3L * 60 * 1000
+  const val INEXACT_WINDOW_CAP_MS = 60L * 60 * 1000
 
   /** Batching latency of the keep-counting listener: the sensor hub buffers steps and the CPU keeps sleeping. */
   const val KEEP_LATENCY_US = 10 * 60 * 1_000_000

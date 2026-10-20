@@ -18,12 +18,17 @@ export interface Candidate {
   source: StepSource;
   steps: number | null;
   partialFrom?: number;
+  /** How many of `steps` are a long-gap estimate (phone counter). */
+  estimated?: number;
+  /** The source read the whole day. */
+  complete?: boolean;
 }
 
 /**
  * The day's automatic count: the highest readable candidate (every source measures the same walking — the higher one
  * missed less; e.g. a watch in Health Connect, or the phone counting live while Health Connect hasn't synced yet).
- * A tie goes to the health store (listed first). Null when no source could read the day.
+ * A tie goes to the health store (listed first). Null when no source could read the day. The winner's own details
+ * (partial / estimated / complete) come with it: a past day is final only when the count it is saved with is.
  */
 export function bestOf(date: string, candidates: readonly Candidate[]): DaySteps | null {
   let best: DaySteps | null = null;
@@ -31,7 +36,14 @@ export function bestOf(date: string, candidates: readonly Candidate[]): DaySteps
     if (c.steps == null || !Number.isFinite(c.steps) || c.steps < 0) continue;
     const steps = Math.round(c.steps);
     if (!best || steps > best.steps) {
-      best = { date, steps, source: c.source, ...(c.partialFrom != null ? { partialFrom: c.partialFrom } : {}) };
+      best = {
+        date,
+        steps,
+        source: c.source,
+        ...(c.partialFrom != null ? { partialFrom: c.partialFrom } : {}),
+        ...(c.estimated ? { estimated: Math.min(steps, Math.round(c.estimated)) } : {}),
+        ...(c.complete ? { complete: true } : {}),
+      };
     }
   }
   return best;

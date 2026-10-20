@@ -383,3 +383,9 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   — 9 areas sequential on the emulator (auth-onboarding, today-meals, snap, meds-rx, alarms, coach, progress-account, care, layout-a11y),
   each test → fix JS → retest → commit; then wrap-up (native fixes, rebuild, retest, PROGRESS, push). Each area keeps `docs/notes/D1-<area>.md`.
   If interrupted: restart emulator / `orza-localtest` / `orza-mobile-metro-local`, run the safety gate, re-run the workflow with resumeFromRunId.
+- 2026-10-20: D1 progress: auth-onboarding DONE (`094f922`: keyboard avoidance on Android edge-to-edge via Screen padding, ft/in focus flow,
+  offline retry feedback + 5 earlier fixes); today-meals partial (`f8bd255`: double meal log on one Enter, logged card visibility, sheet +
+  keyboard, insight glow, composer focus). Client request: "why do we have to enter steps manually — it has to do it by itself" → **auto
+  steps** workflow `orza-mobile-auto-steps` (run `wf_fc8a83eb-b97`): iOS HealthKit / CMPedometer, Android Health Connect / native step-counter
+  sampler (`modules/orza-steps`), pure tested day math, Today card, auto-save via POST /api/track/steps (no backend change). D1 resumes after
+  it (today-meals task now includes auto steps).
