@@ -117,7 +117,7 @@ export default function PasswordSettings() {
     return (
       <Screen backdrop="orb">
         <ScreenHeader back large={false} eyebrow="Security" title="Password changed" />
-        <Animated.View entering={FadeInDown.springify().damping(16)}>
+        <Animated.View entering={FadeInDown.springify().damping(16).stiffness(100).mass(1)}>
           <GlassCard tone="strong" glow padding={spacing.xl} style={styles.done}>
             <View style={styles.doneIcon}>
               <Icon name="check" size={28} color={colors.success} />
@@ -163,7 +163,7 @@ export default function PasswordSettings() {
     >
       <ScreenHeader back large={false} eyebrow="Security" title="Change password" subtitle="Choose a new password for signing in to ÖRZA." />
 
-      <Animated.View entering={FadeInDown.springify().damping(18)}>
+      <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
         <GlassCard padding={spacing.lg} style={styles.card}>
           <TextField
             label="Email"

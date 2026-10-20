@@ -52,7 +52,7 @@ export function PlanPreview({
         {announce}
       </Text>
 
-      <Animated.View key={show ? 'plan' : blocker ? 'blocker' : 'empty'} entering={reduce ? undefined : FadeIn.duration(260)} layout={reduce ? undefined : LinearTransition.springify().damping(20)}>
+      <Animated.View key={show ? 'plan' : blocker ? 'blocker' : 'empty'} entering={reduce ? undefined : FadeIn.duration(260)} layout={reduce ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1)}>
         {show ? (
           <View>
             <Text variant="small" tone="heroSubtle" style={styles.calLabel}>

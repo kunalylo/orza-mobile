@@ -269,7 +269,7 @@ export default function Onboarding() {
       header={header}
       footer={
         prompt && status === 'ready' && !done ? (
-          <Animated.View key={`${prompt.step}-${round}`} entering={FadeInDown.springify().damping(20)} style={styles.composer}>
+          <Animated.View key={`${prompt.step}-${round}`} entering={FadeInDown.springify().damping(20).stiffness(100).mass(1)} style={styles.composer}>
             <ScrollView
               // Under half of the space left above the keyboard: the question being answered stays readable.
               style={{ maxHeight: Math.round((height - keyboardHeight) * 0.44) }}

@@ -46,6 +46,16 @@ export const TIMEOUT_MESSAGE = 'ÖRZA is taking too long to answer. Please try a
 export const GENERIC_MESSAGE = 'Something went wrong. Please try again.';
 
 /** A user-facing message for anything thrown by the client (or elsewhere). */
+/**
+ * `refetchInterval` for a screen's main query: while its last load failed because ÖRZA couldn't be reached (offline,
+ * timeout, 5xx), try again every 15 s, so an offline banner / error card clears itself once the phone is back online.
+ * React Query has no network listener here (React Native, no NetInfo), so a reconnect alone refetches nothing.
+ */
+export function retryWhileUnreachable(query: { state: { status: string; error: unknown } }): number | false {
+  const e = query.state.error;
+  return query.state.status === 'error' && e instanceof ApiError && (e.isNetwork || e.status >= 500) ? 15_000 : false;
+}
+
 export function errorMessage(e: unknown, fallback = GENERIC_MESSAGE): string {
   // Only ApiError messages are written for people; anything else (TypeError, native errors) gets the fallback.
   return e instanceof ApiError && e.message ? e.message : fallback;

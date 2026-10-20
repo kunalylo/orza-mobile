@@ -231,7 +231,7 @@ export function Viewfinder({
         {showResult ? (
           <Animated.View entering={FadeIn.duration(300)} style={StyleSheet.absoluteFill} pointerEvents="none">
             <LinearGradient colors={['rgba(7,9,12,0)', 'rgba(7,9,12,0.6)']} style={styles.resultShade} />
-            <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(16)} style={styles.confChip}>
+            <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(16).stiffness(100).mass(1)} style={styles.confChip}>
               <View style={[styles.dot, { backgroundColor: colors.cyan }]} />
               <Text variant="caption" weight="semibold" tone="ink">
                 Confidence · {percent(confidence ?? 0)}

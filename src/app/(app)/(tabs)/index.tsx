@@ -109,7 +109,7 @@ export default function Today() {
   const openMeal = (meal: Meal) => router.push({ pathname: '/meal/[id]', params: { id: meal.id, date: meal.date } });
   const openMedicines = () => router.navigate('/medicines');
 
-  const enter = (delay: number) => (reduce ? undefined : FadeInDown.delay(delay).springify().damping(18));
+  const enter = (delay: number) => (reduce ? undefined : FadeInDown.delay(delay).springify().damping(18).stiffness(100).mass(1));
   const imperial = user.preferences?.units === 'imperial';
   const view = data;
   const openSteps = (mode: 'log' | 'edit', shownSteps: number) => {
@@ -153,11 +153,13 @@ export default function Today() {
     const viewToday = view.date === view.today;
     content = (
       <View style={stale && styles.stale} pointerEvents={stale ? 'none' : 'auto'} accessibilityState={{ busy: stale }}>
-        {q.isError && !q.isFetching ? (
+        {/* Kept up during the background retries while offline (they used to hide it on and off) — gone on success. */}
+        {q.isError && !refreshing ? (
           <Animated.View entering={enter(0)} style={styles.offline}>
             <Icon name="wifi-off" size={14} color={colors.warning} />
             <Text variant="caption" tone="warning" style={styles.flex}>
-              Showing your last saved numbers — {errorMessage(q.error).replace(/\.$/, '').toLowerCase()}.
+              {/* Its own sentence: lower-casing the server's message turned "ÖRZA" into "örza" mid-banner. */}
+              Showing your last saved numbers. {errorMessage(q.error)}
             </Text>
           </Animated.View>
         ) : null}

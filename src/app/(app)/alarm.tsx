@@ -55,7 +55,7 @@ function Centered({ children }: { children: ReactNode }) {
 function NextDose({ dose, tz }: { dose: DoseItem; tz: string }) {
   const tomorrow = dose.local_date !== todayIn(tz);
   return (
-    <Animated.View entering={FadeInDown.delay(120).springify().damping(18)} style={styles.next}>
+    <Animated.View entering={FadeInDown.delay(120).springify().damping(18).stiffness(100).mass(1)} style={styles.next}>
       <MedPhoto url={dose.photo_urls[0]} size={56} />
       <View style={styles.flex}>
         <Text variant="eyebrow" tone="heroSubtle">
@@ -198,7 +198,7 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
           : "You're all caught up.";
     body = (
       <Centered>
-        <Animated.View entering={ZoomIn.springify().damping(14)}>
+        <Animated.View entering={ZoomIn.springify().damping(14).stiffness(100).mass(1)}>
           <EnergyRing progress={1} size={96} stroke={7} palette="success" trackColor="rgba(255,255,255,0.12)" accessibilityLabel="Done">
             <Icon name="check" size={36} color="#7EE2B8" />
           </EnergyRing>
@@ -245,7 +245,7 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
         {offline ? <OfflineNote /> : null}
 
         {several ? (
-          <Animated.View entering={FadeInDown.delay(80).springify().damping(18)} layout={LinearTransition.springify().damping(20)}>
+          <Animated.View entering={FadeInDown.delay(80).springify().damping(18).stiffness(100).mass(1)} layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}>
             <Button
               label={`Take all ${open.length}`}
               icon="check-circle"
@@ -261,7 +261,7 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
           </Animated.View>
         ) : null}
 
-        <Animated.View layout={LinearTransition.springify().damping(20)} style={styles.cards}>
+        <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.cards}>
           {open.map((d, i) => (
             <AlarmDoseCard
               key={doseKey(d)}
@@ -279,7 +279,7 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
         </Animated.View>
 
         {closed.length ? (
-          <Animated.View layout={LinearTransition.springify().damping(20)} style={styles.doneSection}>
+          <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.doneSection}>
             <Text variant="eyebrow" tone="heroSubtle">
               Already handled
             </Text>
@@ -380,7 +380,7 @@ function TestAlarm({ test, ringing }: { test: string; ringing: boolean }) {
     <AlarmFrame live={!done} label="ÖRZA · Test alarm" onClose={() => void close()}>
       {done ? (
         <Centered>
-          <Animated.View entering={ZoomIn.springify().damping(14)}>
+          <Animated.View entering={ZoomIn.springify().damping(14).stiffness(100).mass(1)}>
             <EnergyRing progress={1} size={96} stroke={7} palette="success" trackColor="rgba(255,255,255,0.12)" accessibilityLabel="Done">
               <Icon name="check" size={36} color="#7EE2B8" />
             </EnergyRing>

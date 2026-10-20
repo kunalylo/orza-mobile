@@ -122,7 +122,7 @@ function StatusPanel({
 }) {
   const reduce = useReducedMotion();
   return (
-    <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18)}>
+    <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
       <GlassCard tone="strong" glow>
         <IconTile icon={icon} tone={tone} />
         <Text variant="eyebrow" tone="subtle" style={styles.eyebrow}>

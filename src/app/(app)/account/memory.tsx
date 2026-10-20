@@ -148,7 +148,7 @@ export default function MemorySettings() {
         <LoadingList />
       ) : (
         <>
-          <Animated.View entering={FadeInDown.springify().damping(18)}>
+          <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
             <GlassCard tone="strong" padding={spacing.lg} style={styles.meter}>
               <View style={styles.meterHead}>
                 <View style={styles.meterIcon}>
@@ -168,7 +168,7 @@ export default function MemorySettings() {
           </Animated.View>
 
           {undo ? (
-            <Animated.View key={`${undo.message}-${undo.previous.length}`} entering={FadeInDown.springify().damping(16)} exiting={FadeOut.duration(180)} style={styles.undo} accessibilityLiveRegion="polite">
+            <Animated.View key={`${undo.message}-${undo.previous.length}`} entering={FadeInDown.springify().damping(16).stiffness(100).mass(1)} exiting={FadeOut.duration(180)} style={styles.undo} accessibilityLiveRegion="polite">
               <Icon name="check-circle" size={16} color={colors.success} />
               <Text variant="label" tone="ink" style={styles.flex}>
                 {undo.message}
@@ -195,9 +195,9 @@ export default function MemorySettings() {
               {memory.map((fact, i) => (
                 <Animated.View
                   key={`${fact}-${i}`}
-                  entering={FadeInDown.delay(Math.min(i, 8) * 30).springify().damping(18)}
+                  entering={FadeInDown.delay(Math.min(i, 8) * 30).springify().damping(18).stiffness(100).mass(1)}
                   exiting={FadeOut.duration(160)}
-                  layout={LinearTransition.springify().damping(20)}
+                  layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
                   style={[styles.fact, i < memory.length - 1 && styles.divider]}
                 >
                   <View style={styles.bullet} />
@@ -210,7 +210,7 @@ export default function MemorySettings() {
             </GlassCard>
           )}
 
-          <Animated.View entering={FadeInDown.delay(80).springify().damping(18)} style={styles.addCard}>
+          <Animated.View entering={FadeInDown.delay(80).springify().damping(18).stiffness(100).mass(1)} style={styles.addCard}>
             <Text variant="eyebrow" tone="subtle" style={styles.addTitle}>
               Add a note
             </Text>

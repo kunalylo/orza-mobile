@@ -404,7 +404,7 @@ export default function Snap() {
           </Animated.View>
         ) : null}
 
-        <Animated.View entering={reduce ? undefined : FadeInDown.delay(40).springify().damping(18)}>
+        <Animated.View entering={reduce ? undefined : FadeInDown.delay(40).springify().damping(18).stiffness(100).mass(1)}>
           <Viewfinder imageUri={photo?.uri ?? null} phase={phase} confidence={scan?.confidence} dishName={scan?.dish_name}>
             {controls}
           </Viewfinder>
@@ -416,7 +416,7 @@ export default function Snap() {
             sideY.current = e.nativeEvent.layout.y;
           }}
         >
-          <Animated.View key={sideKey(phase, problem, aiOff)} entering={reduce ? undefined : FadeInDown.delay(60).springify().damping(18)}>
+          <Animated.View key={sideKey(phase, problem, aiOff)} entering={reduce ? undefined : FadeInDown.delay(60).springify().damping(18).stiffness(100).mass(1)}>
             {side}
           </Animated.View>
         </View>

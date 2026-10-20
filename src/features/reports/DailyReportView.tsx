@@ -14,7 +14,7 @@ import type { DailyReport } from './types';
 export function DailyReportView({ report, imperial, dimmed }: { report: DailyReport; imperial: boolean; dimmed: boolean }) {
   const reduce = useReducedMotion();
   const r = report;
-  const enter = (i: number) => (reduce ? undefined : FadeInDown.delay(i * 60).springify().damping(18));
+  const enter = (i: number) => (reduce ? undefined : FadeInDown.delay(i * 60).springify().damping(18).stiffness(100).mass(1));
 
   return (
     <View style={[styles.stack, dimmed && styles.dimmed]} accessibilityState={{ busy: dimmed }}>

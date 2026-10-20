@@ -39,7 +39,7 @@ export function RecipeDetail({ recipe }: { recipe: Recipe }) {
   const reduce = useReducedMotion();
   const [checked, setChecked] = useState<Set<number>>(() => new Set());
   const tags = displayTags(recipe.tags);
-  const rise = (d: number) => (reduce ? undefined : FadeInDown.delay(d).springify().damping(18));
+  const rise = (d: number) => (reduce ? undefined : FadeInDown.delay(d).springify().damping(18).stiffness(100).mass(1));
 
   const toggle = (i: number) =>
     setChecked((prev) => {

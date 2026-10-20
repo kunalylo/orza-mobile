@@ -13,7 +13,7 @@ import { CalorieChart, Legend, LegendItem, MiniBars } from './WeeklyCharts';
 export function WeeklyReportView({ report, today, imperial, dimmed }: { report: WeeklyReport; today: string; imperial: boolean; dimmed: boolean }) {
   const reduce = useReducedMotion();
   const r = report;
-  const enter = (i: number) => (reduce ? undefined : FadeInDown.delay(i * 60).springify().damping(18));
+  const enter = (i: number) => (reduce ? undefined : FadeInDown.delay(i * 60).springify().damping(18).stiffness(100).mass(1));
 
   return (
     <View style={[styles.stack, dimmed && styles.dimmed]} accessibilityState={{ busy: dimmed }}>

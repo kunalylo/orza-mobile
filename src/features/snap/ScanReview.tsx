@@ -52,7 +52,7 @@ export function ScanReview({
   ];
 
   return (
-    <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18)} layout={reduce ? undefined : LinearTransition.springify().damping(20)}>
+    <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18).stiffness(100).mass(1)} layout={reduce ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1)}>
       <GlassCard tone="strong">
         <View style={styles.eyebrowRow}>
           <Icon name="star" size={12} color={colors.cyan600} />

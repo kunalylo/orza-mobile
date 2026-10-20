@@ -144,7 +144,7 @@ export function DoseRow({ dose, tz, pending, onAct, linkToMedicine = true }: { d
   );
 
   return (
-    <Animated.View layout={LinearTransition.springify().damping(20)} style={[styles.row, due && styles.rowDue, done && styles.rowDone]}>
+    <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={[styles.row, due && styles.rowDue, done && styles.rowDone]}>
       {linkToMedicine ? (
         <PressableScale
           haptic="soft"
@@ -203,7 +203,7 @@ export function TodayTimeline({
         const allDone = list.every((d) => d.status === 'taken' || d.status === 'skipped');
         const anyDue = list.some((d) => d.status === 'due');
         return (
-          <Animated.View key={time} entering={FadeInDown.delay(Math.min(gi, 6) * 60).springify().damping(18)} style={styles.group}>
+          <Animated.View key={time} entering={FadeInDown.delay(Math.min(gi, 6) * 60).springify().damping(18).stiffness(100).mass(1)} style={styles.group}>
             {gi < groups.length - 1 ? <View style={styles.line} /> : null}
             <View style={styles.rail} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
               <View style={[styles.dot, allDone ? styles.dotDone : anyDue ? styles.dotDue : null]} />

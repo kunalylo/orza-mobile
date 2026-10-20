@@ -331,7 +331,7 @@ export function FoodPickerSheet({
       ) : null}
 
       {tab === 'search' && selected && preview ? (
-        <Animated.View entering={FadeInDown.springify().damping(18)} style={styles.block}>
+        <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)} style={styles.block}>
           <Pressable onPress={() => setSelected(null)} accessibilityRole="button" hitSlop={8} style={styles.back}>
             <Icon name="arrow-left" size={15} color={colors.muted} />
             <Text variant="small" weight="medium" tone="muted">

@@ -453,7 +453,7 @@ export interface ChartCardProps {
 export function ChartCard({ title, subtitle, headline, headlineNote, empty, emptyText, dimmed, index = 0, children }: ChartCardProps) {
   const reduce = useReducedMotion();
   return (
-    <Animated.View entering={reduce ? undefined : FadeInDown.delay(80 + index * 70).springify().damping(18)} style={dimmed ? styles.dimmed : undefined}>
+    <Animated.View entering={reduce ? undefined : FadeInDown.delay(80 + index * 70).springify().damping(18).stiffness(100).mass(1)} style={dimmed ? styles.dimmed : undefined}>
       <GlassCard padding={spacing.lg}>
         <View style={styles.cardHead}>
           <View style={styles.flex}>

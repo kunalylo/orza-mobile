@@ -24,7 +24,7 @@ function Checkbox({ checked, label, onToggle }: { checked: boolean; label: strin
       style={[styles.box, checked && styles.boxOn]}
     >
       {checked ? (
-        <Animated.View entering={ZoomIn.springify().damping(14)}>
+        <Animated.View entering={ZoomIn.springify().damping(14).stiffness(100).mass(1)}>
           <Icon name="check" size={15} color={colors.white} />
         </Animated.View>
       ) : null}
@@ -54,9 +54,9 @@ export function ReviewRowCard({
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(Math.min(index, 8) * 45).springify().damping(18)}
+      entering={FadeInDown.delay(Math.min(index, 8) * 45).springify().damping(18).stiffness(100).mass(1)}
       exiting={FadeOut.duration(160)}
-      layout={LinearTransition.springify().damping(20)}
+      layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
       style={[styles.card, problem ? styles.cardError : low ? styles.cardLow : null, !row.include && styles.cardOff]}
     >
       <View style={styles.top}>

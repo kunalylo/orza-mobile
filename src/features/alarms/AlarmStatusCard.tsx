@@ -149,7 +149,7 @@ function FullCard({ browserCount = 0 }: { browserCount?: number }) {
       />
 
       {s.supported && status ? (
-        <Animated.View layout={LinearTransition.springify().damping(20)} style={styles.checks}>
+        <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.checks}>
           {/* Next alarm */}
           {s.ready ? (
             nextDose ? (

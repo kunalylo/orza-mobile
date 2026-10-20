@@ -27,7 +27,7 @@ const tzLabel = (tz: string) => tz.replace(/_/g, ' ');
 
 function ChoiceRow({ title, description, children, last }: { title: string; description?: string; children: ReactNode; last?: boolean }) {
   return (
-    <Animated.View layout={LinearTransition.springify().damping(20)} style={[styles.choiceRow, !last && styles.divider]}>
+    <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={[styles.choiceRow, !last && styles.divider]}>
       <Text variant="title">{title}</Text>
       {description ? (
         <Text variant="small" tone="muted" style={styles.desc}>
@@ -217,7 +217,7 @@ export default function PreferencesSettings() {
             {tzDiffers ? `Your days follow ${tzLabel(tz)}. This phone is set to ${tzLabel(deviceTz)}.` : `Your days follow ${tzLabel(tz)}.`}
           </Text>
           {tzDiffers ? (
-            <Animated.View entering={FadeInDown.springify().damping(18)} style={styles.control}>
+            <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)} style={styles.control}>
               <Button label="Use this phone’s time zone" icon="smartphone" variant="secondary" size="sm" loading={saveProfile.isPending} onPress={applyDeviceTz} style={styles.tzButton} />
             </Animated.View>
           ) : null}

@@ -109,7 +109,7 @@ export function PhotoCarousel({
       {count > 1 ? (
         <View style={styles.dots} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           {urls.map((u, i) => (
-            <Animated.View key={`${i}:${u}`} layout={LinearTransition.springify().damping(18)} style={[styles.dot, i === index && styles.dotOn]} />
+            <Animated.View key={`${i}:${u}`} layout={LinearTransition.springify().damping(18).stiffness(100).mass(1)} style={[styles.dot, i === index && styles.dotOn]} />
           ))}
         </View>
       ) : null}

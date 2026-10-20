@@ -237,9 +237,9 @@ export function ItemEditor({
           return (
             <Animated.View
               key={r.uid}
-              entering={FadeInDown.springify().damping(18)}
+              entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}
               exiting={FadeOut.duration(150)}
-              layout={LinearTransition.springify().damping(20)}
+              layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
               style={styles.row}
             >
               <View style={styles.nameRow}>

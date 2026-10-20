@@ -18,7 +18,7 @@ import { Button, EnergyRing, GlassCard, Icon, Screen, ScreenHeader, Skeleton, Te
 function CreatedRow({ med, today, index }: { med: MedicationClient; today: string; index: number }) {
   const times = med.as_needed ? [] : med.schedule.times;
   return (
-    <Animated.View entering={FadeInDown.delay(220 + Math.min(index, 8) * 60).springify().damping(18)}>
+    <Animated.View entering={FadeInDown.delay(220 + Math.min(index, 8) * 60).springify().damping(18).stiffness(100).mass(1)}>
       <GlassCard padding={spacing.md} style={styles.med}>
         <View style={styles.medTop}>
           <MedPhoto url={med.photo_urls[0]} size={56} accessibilityLabel={`${med.name} photo`} />
@@ -83,10 +83,10 @@ export default function PrescriptionDone() {
     <Screen backdrop="orb">
       <ScreenHeader back large={false} eyebrow="Care · Prescriptions" title="Alarms are set" />
 
-      <Animated.View entering={FadeInDown.delay(40).springify().damping(16)}>
+      <Animated.View entering={FadeInDown.delay(40).springify().damping(16).stiffness(100).mass(1)}>
         <GlassCard tone="dark" glow padding={spacing.xl} style={styles.hero}>
           <EnergyRing progress={1} size={92} stroke={8} palette="success" trackColor="rgba(255,255,255,0.12)" accessibilityLabel="Done">
-            <Animated.View entering={ZoomIn.delay(380).springify().damping(12)}>
+            <Animated.View entering={ZoomIn.delay(380).springify().damping(12).stiffness(100).mass(1)}>
               <Icon name="check" size={34} color={colors.white} />
             </Animated.View>
           </EnergyRing>
@@ -121,7 +121,7 @@ export default function PrescriptionDone() {
         )}
       </View>
 
-      <Animated.View entering={FadeInDown.delay(320).springify().damping(18)} style={styles.actions}>
+      <Animated.View entering={FadeInDown.delay(320).springify().damping(18).stiffness(100).mass(1)} style={styles.actions}>
         <Button label="See today's doses" iconRight="chevron-right" variant="primary" size="lg" block onPress={toMedicines} />
         <View style={styles.row}>
           <Button label="Notifications" icon="bell" variant="secondary" onPress={() => router.push('/reminders')} style={styles.flex} />

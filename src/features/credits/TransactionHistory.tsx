@@ -72,7 +72,7 @@ export function TransactionHistory({ transactions }: { transactions: CreditTrans
           style={styles.empty}
         />
       ) : (
-        <Animated.View key={filter} entering={reduce ? undefined : FadeIn.duration(200)} layout={reduce ? undefined : LinearTransition.springify().damping(20)}>
+        <Animated.View key={filter} entering={reduce ? undefined : FadeIn.duration(200)} layout={reduce ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1)}>
           {groups.map((g) => (
             <View key={g.day} style={styles.group}>
               <Text variant="eyebrow" tone="subtle" style={styles.groupLabel} accessibilityRole="header">

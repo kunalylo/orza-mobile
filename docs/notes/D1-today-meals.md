@@ -82,3 +82,53 @@ Screenshots of the resumed run: `nNN` in the same scratchpad folder. The tab bar
     field showed a caret but no keyboard (and a second focus() is a no-op while RN thinks it is focused). New Sheet
     prop `initialFocus` (src/ui/Sheet.tsx): focuses on the Modal's `onShow`, and on Android retries blur + focus every
     400 ms (max 4) until a keyboard is up; BodyCards + FoodPickerSheet use it.
+
+## Resumed run 2 (2026-10-20 11:00, after the usage-limit pause; checkpoint 0e392b7)
+
+Safety gate SAFE at resume (11:02). Screenshots `pNN`. The previous run's screenshots n54–n82 (weight sheet, a second
+text log "2 roti, dal and a bowl of rice" → breakfast 500 kcal, the Try-saying chip) were never written down; the cases
+below re-verify them. AI budget for the text log is used up (3 server calls so far, 2 of them from bug 3) — no more AI
+meal logs in this run. Emulator note: after ~3.5 h the app process held ~500 MB (5 JS reloads in one process) on a 2 GB
+emulator with swap 100 % full — every tap took seconds; `am kill-all` + `app_start` brought it back to ~245 MB.
+Grey rectangles over a card (n60_b, n70_closed, p06) are Android's keyboard-navigation focus highlight: `adb input
+text` / `keyevent` leave touch mode — a test artefact, not an app bug.
+
+| # | Case | Result | Evidence / notes |
+|---|------|--------|------------------|
+| 22 | Today header after a reload: "Good morning, QA." at 11:06, "2-day streak" (meals on 19 + 20 Oct), skeleton while loading | PASS | p21 skeleton, p22 loaded; insight "1,180 kcal and 85 g protein to go" = 1,680−500 / 101−16 (p11) |
+| 23 | Weight sheet: 500 → "Enter a weight between 20 and 400 kg.", IME ✓ keeps the keyboard; close + reopen → empty field, focused, keyboard up; "72,8" (comma) + ✓ → server `weight_kg: 72.8`, tile 72.8 "Logged today" | PASS | p17, p27a, p29a/b, p30 |
+| 24 | Today's meals list (breakfast group, entry, macros line, + Log / Log a meal) | PASS | p23 |
+| 25 | Edit meal: Lunch chip + roti quantity typed "3" (keyboard up) → Save changes tapped at once | PASS | p33 570 kcal live; p34a keyboard goes down while saving (spinner), p35 back on Today: Lunch · Roti ×3 · 570 kcal; server `meal_type: lunch`, Roti 3 roti 105 g 210 kcal, totals 570 |
+| 26 | Edit meal: change → Android back → "Discard changes?" → back again = keep editing (Dinner still picked) → Discard → leaves, server unchanged (bug 6 holds) | PASS | p67, p68, p69 |
+| 27 | Mic: permission revoked + flags cleared → tap mic → system "Allow ÖRZA to record audio?" → Don't allow → "ÖRZA needs the microphone to hear you. Tap the mic again to allow it — or just type." → mic again → While using the app → listening UI (stop button, "Listening…" placeholder, "Listening — speak now, tap ■ when done", chips dimmed, mic indicator) → no speech → "Didn't catch that — tap the mic and try again, a little closer." | PASS | p41, p42, p44 strip, p45a, p48 |
+| 28 | Past-day logging: Meals ‹ → "Yesterday" + "Logging for Yesterday — new entries go to that day."; food list "banana" → Banana, Snack chip, servings typed "2" + "Add 2 × Banana" tapped with the keyboard up | PASS | p49, p53–p56; server: `date 2026-10-19`, snack, Banana 2 piece 210 kcal; Yesterday totals 2,153 → 2,363 (p58) |
+| 29 | Swipe delete: swipe left → "Delete this meal? 1 item · 210 kcal…" → Android back = keep (card closes) → swipe again → Delete | PASS | p60, p61, p62; server row gone, Snacks 670 → 460 kcal |
+| 30 | Today pull to refresh | PASS | p64 spinner, p65 settled (1,110 left / 570 eaten after the edit) |
+| 31 | Logged card + Undo | BLOCKED | The "Logged to breakfast · AI estimate · 3 items · 500 kcal" card with Adjust portions / Undo was seen (n76, bug 4). Undo itself needs another AI text log — the AI budget for this feature is spent (3 server calls), so not pressed on device. Code: Undo → `removeMeal(meal, true)` = the same delete mutation as cases 7 / 29 + toast "Undone — that meal was removed" |
+| 32 | Offline (wifi + data off): Today pull to refresh | FIXED | p100: banner read "…can't reach örza right now. check your connection…" (lower-cased server message) — bug 15; p101 fixed. After reconnecting the banner stayed until a manual refresh (p106) — bug 16; p113 strip: banner stays through 40 s offline, clears by itself ~10–20 s after reconnect |
+| 33 | Offline: water + / delete a meal → error toast | FIXED | p71/p73b: toast see-through over the dark insight card ("Talk it through" showing through the message) and 419 dp wide in a 379 dp host — both rounded ends off-screen — bug 14; t31c fixed (opaque, inside the gutters). Water value and meal kept, nothing written |
+| 34 | Offline: Meals pull to refresh | FIXED | p102: the spinner ended with no word (cached meals stay) — bug 17; p103 "Can't reach ÖRZA right now…" toast; online again p105 silent success |
+| 35 | Motion: Edit meal rows entering / Add item / remove item, toasts | FIXED | rec2/rec5 frame tracking: rows overshot ±25 px and wobbled ~2.5 s, toasts swelled — bug 13; rec7 after the fix: removed row's neighbour glides 381 → 0 px monotonic, settled in 0.9 s |
+| 36 | Edit meal ring | NOT REPRODUCED | p75/p76: once (after a long session with screen recording) the summary ring stayed an empty track at 938 kcal = 56 %; 4 later opens (p78, p81, p90, p117) drew the arc every time |
+
+13. FIXED — Motion (app-wide, 142 layout animations): Reanimated 4's `withSpring` defaults are mass 4 / stiffness 900,
+    so every `.springify().damping(14–20)` builder (written for Reanimated 3's mass 1 / stiffness 100) ran at a damping
+    ratio of ~0.15: cards entering a screen, item rows added/removed in the meal editor and the toast pill overshot by
+    up to 60 % and wobbled for ~2 s. All chains now set `.stiffness(…)` + `.mass(1)` (existing stiffness kept); rule
+    documented above `motion` in src/theme/index.ts.
+14. FIXED — Toast (src/ui/Toast.tsx): `glassSolid` (92 % white) let a dark card show through the message, and the
+    animated row wasn't limited to the host width, so a two-line message made the pill 40 dp wider than the screen
+    gutters. Opaque white + `maxWidth: '100%'` on the row.
+15. FIXED — Today offline banner (src/app/(app)/(tabs)/index.tsx): the server/network message was lower-cased into the
+    sentence ("örza"). Now two sentences, message as written.
+16. FIXED — Today / Meals after a lost connection: React Query has no network listener in this app (no NetInfo), so
+    the offline banner / "couldn't load your meals" card stayed after the phone was back online until a manual
+    refresh. `retryWhileUnreachable` (src/lib/api.ts) as `refetchInterval` on the Today dashboard and Meals day queries:
+    every 15 s while the last load failed with no response / timeout / 5xx. The banner no longer hides during those
+    background retries (it flickered), only during a pull to refresh.
+17. FIXED — Meals pull to refresh offline ended silently (cached meals stay, error card is only for a day that never
+    loaded) → error toast with the reason.
+
+Emulator note: after the restart the weight sheet's keyboard comes up ~0.8 s after the tap (initialFocus, bug 12) —
+the no-keyboard sheets seen first in this run (p04–p09) were in the memory-starved process noted above.
+Checks: `npm run typecheck`, `npx expo lint`, `npm run test:steps` (66 pass). Safety gate SAFE after each Metro restart.

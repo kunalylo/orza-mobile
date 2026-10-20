@@ -100,7 +100,7 @@ export function MedsCard({ onOpenMedicines, onAddMedicine, onScanPrescription }:
         ) : (
           <View style={styles.list}>
             {shown.map((d) => (
-              <Animated.View key={doseKey(d)} layout={reduce ? undefined : LinearTransition.springify().damping(20)}>
+              <Animated.View key={doseKey(d)} layout={reduce ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1)}>
                 <DoseLine dose={d} tz={tz} pending={!!pendingFor(d)} taking={pendingFor(d) === 'take'} onTake={() => void act(d, 'take')} onOpen={onOpenMedicines} />
               </Animated.View>
             ))}

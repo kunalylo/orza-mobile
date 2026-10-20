@@ -216,9 +216,9 @@ export function RowEditorSheet({
           </Text>
         </Animated.View>
       ) : (
-        <Animated.View layout={LinearTransition.springify().damping(20)} style={styles.timeRow} accessibilityLabel={`Alarm times for ${draft.name || 'this medicine'}`}>
+        <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.timeRow} accessibilityLabel={`Alarm times for ${draft.name || 'this medicine'}`}>
           {times.map((t, i) => (
-            <Animated.View key={t} entering={FadeIn.duration(180)} exiting={FadeOut.duration(140)} layout={LinearTransition.springify().damping(20)} style={styles.timeChip}>
+            <Animated.View key={t} entering={FadeIn.duration(180)} exiting={FadeOut.duration(140)} layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.timeChip}>
               <PressableScale onPress={() => setTimeIndex(i)} haptic="tap" style={styles.timeMain} accessibilityRole="button" accessibilityLabel={`Alarm time ${formatTime12(t)}. Change`}>
                 <Icon name="bell" size={13} color={colors.energyInk} />
                 <Text variant="label">{formatTime12(t)}</Text>

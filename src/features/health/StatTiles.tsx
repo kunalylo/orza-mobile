@@ -32,7 +32,7 @@ interface TileProps {
 function Tile({ label, icon, accent, value, unit, hint, index, ring }: TileProps) {
   const reduce = useReducedMotion();
   return (
-    <Animated.View entering={reduce ? undefined : FadeInDown.delay(60 + index * 60).springify().damping(18)} style={styles.cell}>
+    <Animated.View entering={reduce ? undefined : FadeInDown.delay(60 + index * 60).springify().damping(18).stiffness(100).mass(1)} style={styles.cell}>
       <GlassCard padding={spacing.lg} style={styles.tile} accessible accessibilityLabel={`${label}: ${value}${unit ? ` ${unit}` : ''}. ${hint}`}>
         <View style={styles.tileHead}>
           <Text variant="eyebrow" tone="subtle" numberOfLines={1} style={styles.flex}>

@@ -42,7 +42,7 @@ export function ScoreCard({ report }: { report: DailyReport }) {
           return (
             <Animated.View
               key={`${report.date}-${p.key}`}
-              entering={reduce ? undefined : FadeInRight.delay(50 * i).springify().damping(18)}
+              entering={reduce ? undefined : FadeInRight.delay(50 * i).springify().damping(18).stiffness(100).mass(1)}
               style={styles.part}
               accessible
               accessibilityLabel={`${p.label}: ${p.points} of ${p.max} points. ${formatNumber(p.value)} of ${formatNumber(p.target)} ${p.unit}.`}

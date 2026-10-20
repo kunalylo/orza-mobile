@@ -18,7 +18,7 @@ export function TargetsCallout({ targets, onDismiss, title = 'Your daily targets
     { label: 'Steps', value: formatNumber(targets.steps) },
   ];
   return (
-    <Animated.View entering={FadeInDown.springify().damping(16)} exiting={FadeOut.duration(180)} style={styles.card} accessibilityLiveRegion="polite">
+    <Animated.View entering={FadeInDown.springify().damping(16).stiffness(100).mass(1)} exiting={FadeOut.duration(180)} style={styles.card} accessibilityLiveRegion="polite">
       <View style={styles.head}>
         <Icon name="mci:creation" size={16} color={colors.energyInk} />
         <Text variant="label" tone="ink" style={styles.flex}>

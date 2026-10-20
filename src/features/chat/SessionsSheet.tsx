@@ -71,8 +71,8 @@ export function SessionsSheet({ visible, onClose, sessions, loading, error, onRe
           return (
             <Animated.View
               key={s.id}
-              entering={reduce ? undefined : FadeInDown.delay(Math.min(i, 8) * 30).springify().damping(20)}
-              layout={reduce ? undefined : LinearTransition.springify().damping(20)}
+              entering={reduce ? undefined : FadeInDown.delay(Math.min(i, 8) * 30).springify().damping(20).stiffness(100).mass(1)}
+              layout={reduce ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1)}
               style={[styles.row, active && styles.rowActive]}
             >
               <PressableScale

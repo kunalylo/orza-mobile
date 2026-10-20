@@ -27,7 +27,7 @@ import { haptics } from '@/lib/haptics';
 import { colors, radii, spacing } from '@/theme';
 import { Button, EmptyState, GlassCard, Icon, IconButton, Orb, PressableScale, Screen, ScreenHeader, Skeleton, Tag, Text, toast } from '@/ui';
 
-const enter = (i: number) => FadeInDown.delay(40 + i * 50).springify().damping(18);
+const enter = (i: number) => FadeInDown.delay(40 + i * 50).springify().damping(18).stiffness(100).mass(1);
 /** This build rings alarms on the phone (the native module / iOS notifications) — not Expo Go or the web preview. */
 const alarmsOnPhone = alarmAdapter.maxScheduled > 0;
 
@@ -52,7 +52,7 @@ export default function Reminders() {
   const whatsappAvailable = !!integrations?.whatsapp.configured;
   const whatsappReady = whatsappAvailable && !!integrations?.whatsapp.opt_in && !!integrations?.whatsapp.phone;
   const remindersEnabled = integrations ? integrations.reminders_enabled : user.preferences?.reminders !== false;
-  const layout = reduceMotion ? undefined : LinearTransition.springify().damping(20);
+  const layout = reduceMotion ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1);
 
   const upNext = reminders
     .filter((r) => r.active && r.next_at)

@@ -28,7 +28,7 @@ export default function AdminNotice() {
       <View style={styles.top}>
         <Orb size={Math.min(240, height * 0.3)} tone="dark" />
       </View>
-      <Animated.View entering={FadeInDown.springify().damping(18)} style={styles.copy}>
+      <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)} style={styles.copy}>
         <Tag label={user.admin_role === 'super' ? 'Super admin' : 'Admin'} tone="hero" icon="shield" />
         <Text variant="h1" tone="inverse" accessibilityRole="header" style={styles.title}>
           Admins use the web console

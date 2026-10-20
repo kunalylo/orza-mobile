@@ -64,7 +64,7 @@ export function WeightTrendCard({ points, target, imperial, today }: { points: W
         ) : null}
       </View>
 
-      <Animated.View key={n === 0 ? 'empty' : view} entering={reduce ? undefined : FadeIn.duration(220)} layout={reduce ? undefined : LinearTransition.springify().damping(20)} style={styles.body}>
+      <Animated.View key={n === 0 ? 'empty' : view} entering={reduce ? undefined : FadeIn.duration(220)} layout={reduce ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.body}>
         {n === 0 ? (
           <View style={styles.empty}>
             <View style={styles.emptyDisc}>

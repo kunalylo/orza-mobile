@@ -36,7 +36,7 @@ const decimal = (s: string, max: number) => s.replace(',', '.').replace(/[^\d.]/
 
 function FormCard({ eyebrow, children, delay }: { eyebrow: string; children: ReactNode; delay: number }) {
   return (
-    <Animated.View entering={FadeInDown.delay(delay).springify().damping(18)} style={styles.section}>
+    <Animated.View entering={FadeInDown.delay(delay).springify().damping(18).stiffness(100).mass(1)} style={styles.section}>
       <Text variant="eyebrow" tone="subtle" style={styles.sectionTitle} accessibilityRole="header">
         {eyebrow}
       </Text>
@@ -214,7 +214,7 @@ export default function ProfileSettings() {
       />
 
       {goal ? (
-        <Animated.View entering={FadeInDown.springify().damping(18)}>
+        <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
           <GlassCard tone="energy" padding={spacing.lg} onPress={() => router.push('/goals')} accessibilityLabel={`Current goal: ${GOAL_LABELS[goal]}. Change goal`} style={styles.goal}>
             <View style={styles.flex}>
               <Text variant="eyebrow" tone="energy">
@@ -373,7 +373,7 @@ export default function ProfileSettings() {
           error={errors.allergies}
           hint={draft.allergies.length ? null : 'No allergies saved — ÖRZA will suggest anything that fits your diet.'}
         >
-          <Animated.View layout={LinearTransition.springify().damping(20)} style={styles.chips}>
+          <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.chips}>
             {ALLERGY_SUGGESTIONS.map((o) => {
               const on = draft.allergies.includes(o.value);
               return <Chip key={o.value} label={o.label} role="checkbox" selected={on} icon={on ? 'check' : undefined} onPress={() => toggleAllergy(o.value)} />;

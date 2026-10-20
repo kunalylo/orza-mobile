@@ -81,9 +81,9 @@ export function PhotoGrid({
   return (
     <View style={styles.wrap}>
       {items.length > 0 || busy ? (
-        <Animated.View layout={LinearTransition.springify().damping(20)} style={styles.grid} accessibilityLabel={`${label} photos`}>
+        <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.grid} accessibilityLabel={`${label} photos`}>
           {items.map((p, i) => (
-            <Animated.View key={p.id} entering={ZoomIn.springify().damping(16)} exiting={FadeOut} layout={LinearTransition.springify().damping(20)} style={styles.tile}>
+            <Animated.View key={p.id} entering={ZoomIn.springify().damping(16).stiffness(100).mass(1)} exiting={FadeOut} layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.tile}>
               <MedPhoto url={p.url} fill radius={radii.sm} accessibilityLabel={`${label} photo ${i + 1}${i === 0 ? ' (shown on alarms)' : ''}`} />
               {i === 0 ? (
                 <View style={styles.badge}>

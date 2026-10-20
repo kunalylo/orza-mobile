@@ -4,7 +4,7 @@
  */
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, retryWhileUnreachable } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 import type { AiStatus, FoodHit, Meal, MealItemInput, MealsResponse, MealType, TextLogResponse } from './types';
@@ -86,6 +86,8 @@ export function useMealsDay(date: string) {
       const meals = Array.isArray(res?.meals) ? [...res.meals].sort(byCreated) : [];
       return withMeals(meals, res);
     },
+    // Offline: the "couldn't load your meals" card clears itself once ÖRZA can be reached again.
+    refetchInterval: retryWhileUnreachable,
   });
 }
 

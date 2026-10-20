@@ -260,7 +260,7 @@ export default function MedicineDetail() {
         right={<IconButton icon="edit-3" accessibilityLabel={`Edit ${med.name}`} onPress={() => router.push({ pathname: '/med/edit', params: { id: med.id } })} />}
       />
 
-      <Animated.View entering={FadeInDown.springify().damping(18)}>
+      <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
         <Carousel med={med} width={contentWidth} />
         {med.uses_prescription_photo ? (
           <View style={styles.rxNote}>
@@ -282,7 +282,7 @@ export default function MedicineDetail() {
       </View>
 
       {/* Schedule */}
-      <Animated.View entering={FadeInDown.delay(60).springify().damping(18)}>
+      <Animated.View entering={FadeInDown.delay(60).springify().damping(18).stiffness(100).mass(1)}>
         <GlassCard padding={spacing.lg} style={styles.section}>
           <Text variant="eyebrow" tone="subtle">
             Schedule
@@ -320,7 +320,7 @@ export default function MedicineDetail() {
 
       {/* Stock */}
       {med.stock ? (
-        <Animated.View entering={FadeInDown.delay(100).springify().damping(18)}>
+        <Animated.View entering={FadeInDown.delay(100).springify().damping(18).stiffness(100).mass(1)}>
           <GlassCard padding={spacing.lg} tone={refill ? 'energy' : 'default'} style={styles.section}>
             <Text variant="eyebrow" tone="subtle">
               Stock
@@ -343,7 +343,7 @@ export default function MedicineDetail() {
 
       {/* Today */}
       {myDoses.length > 0 ? (
-        <Animated.View entering={FadeInDown.delay(140).springify().damping(18)}>
+        <Animated.View entering={FadeInDown.delay(140).springify().damping(18).stiffness(100).mass(1)}>
           <GlassCard padding={spacing.lg} style={styles.section}>
             <Text variant="eyebrow" tone="subtle" style={styles.gapBottom}>
               Today
@@ -359,7 +359,7 @@ export default function MedicineDetail() {
 
       {/* History */}
       {!med.as_needed ? (
-        <Animated.View entering={FadeInDown.delay(180).springify().damping(18)}>
+        <Animated.View entering={FadeInDown.delay(180).springify().damping(18).stiffness(100).mass(1)}>
           <GlassCard padding={spacing.lg} style={styles.section}>
             <Text variant="eyebrow" tone="subtle" style={styles.gapBottom}>
               History

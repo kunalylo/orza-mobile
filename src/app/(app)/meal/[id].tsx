@@ -191,7 +191,7 @@ export default function EditMeal() {
       <Stack.Screen options={{ gestureEnabled: !dirty && !busy }} />
       {header}
 
-      <Animated.View entering={FadeInDown.delay(40).springify().damping(18)}>
+      <Animated.View entering={FadeInDown.delay(40).springify().damping(18).stiffness(100).mass(1)}>
         <GlassCard tone="strong" glow>
           <View style={styles.summary}>
             <EnergyRing progress={target > 0 ? totals.calories / target : 0} size={84} stroke={8} accessibilityLabel={`${formatNumber(totals.calories)} calories`}>
@@ -228,7 +228,7 @@ export default function EditMeal() {
         </GlassCard>
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(90).springify().damping(18)} style={styles.section}>
+      <Animated.View entering={FadeInDown.delay(90).springify().damping(18).stiffness(100).mass(1)} style={styles.section}>
         <Text variant="label" tone="ink" style={styles.label}>
           Meal
         </Text>
@@ -241,7 +241,7 @@ export default function EditMeal() {
         />
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(140).springify().damping(18)} style={styles.section}>
+      <Animated.View entering={FadeInDown.delay(140).springify().damping(18).stiffness(100).mass(1)} style={styles.section}>
         <Text variant="label" tone="ink" style={styles.label}>
           Items
         </Text>

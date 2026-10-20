@@ -12,7 +12,7 @@ import type { HealthDaysResponse, HealthRange } from './types';
 export function SourcesCard({ data, range }: { data: HealthDaysResponse; range: HealthRange }) {
   const reduce = useReducedMotion();
   return (
-    <Animated.View entering={reduce ? undefined : FadeInDown.delay(120).springify().damping(18)}>
+    <Animated.View entering={reduce ? undefined : FadeInDown.delay(120).springify().damping(18).stiffness(100).mass(1)}>
       <GlassCard padding={spacing.lg}>
         <Text variant="h3" tone="ink">
           Sources

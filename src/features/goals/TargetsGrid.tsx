@@ -26,7 +26,7 @@ export function TargetsGrid({ targets, previous }: { targets: Targets; previous?
         const before = previous ? Number(previous[t.key]) || 0 : null;
         const delta = before != null ? Math.round(value - before) : 0;
         return (
-          <Animated.View key={t.key} style={styles.cell} entering={reduce ? undefined : FadeInDown.delay(i * 40).springify().damping(18)}>
+          <Animated.View key={t.key} style={styles.cell} entering={reduce ? undefined : FadeInDown.delay(i * 40).springify().damping(18).stiffness(100).mass(1)}>
             <GlassCard padding={spacing.lg} style={styles.card} accessible accessibilityLabel={`${t.label}: ${formatNumber(value)} ${t.unit}${delta ? `, ${delta > 0 ? 'up' : 'down'} ${formatNumber(Math.abs(delta))} from before` : ''}`}>
               <View style={styles.top}>
                 <Text variant="eyebrow" tone="subtle">

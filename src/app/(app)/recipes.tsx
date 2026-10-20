@@ -137,8 +137,8 @@ export default function Recipes() {
         {list.map((r, i) => (
           <Animated.View
             key={r.id}
-            entering={reduce ? undefined : FadeInDown.delay(Math.min(i, 8) * 40).springify().damping(18)}
-            layout={reduce ? undefined : LinearTransition.springify().damping(20)}
+            entering={reduce ? undefined : FadeInDown.delay(Math.min(i, 8) * 40).springify().damping(18).stiffness(100).mass(1)}
+            layout={reduce ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1)}
           >
             <RecipeTile recipe={r} />
           </Animated.View>
@@ -166,7 +166,7 @@ export default function Recipes() {
           subtitle="AI-generated Indian recipes personalised for your goals — tuned to your diet, allergies and calorie budget."
         />
 
-        <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18)}>
+        <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
           <RecipeGenerator
             aiEnabled={q.data ? q.data.ai_enabled : null}
             cost={q.data?.cost ?? 2}
@@ -203,7 +203,7 @@ export default function Recipes() {
           ) : null}
         </View>
 
-        <Animated.View entering={reduce ? undefined : FadeInDown.delay(80).springify().damping(18)} style={styles.block}>
+        <Animated.View entering={reduce ? undefined : FadeInDown.delay(80).springify().damping(18).stiffness(100).mass(1)} style={styles.block}>
           <KitchenCard user={user} kitchen={q.data?.kitchen} />
         </Animated.View>
 

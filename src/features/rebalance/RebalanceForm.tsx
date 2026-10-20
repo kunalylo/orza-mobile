@@ -91,7 +91,7 @@ export function RebalanceForm({
         ))}
       </View>
       {occasion === 'Other' ? (
-        <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18)} style={styles.custom}>
+        <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18).stiffness(100).mass(1)} style={styles.custom}>
           <TextField
             ref={customRef}
             value={custom}

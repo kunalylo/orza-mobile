@@ -44,8 +44,8 @@ export function ConnectCard({ health }: { health: Health }) {
 
   return (
     <Animated.View
-      entering={reduce ? undefined : FadeInDown.delay(40).springify().damping(18)}
-      layout={reduce ? undefined : LinearTransition.springify().damping(20)}
+      entering={reduce ? undefined : FadeInDown.delay(40).springify().damping(18).stiffness(100).mass(1)}
+      layout={reduce ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1)}
       accessibilityLabel={`${name} connection`}
     >
       <GlassCard glow={!connected} tone={connected ? 'default' : 'strong'} padding={spacing.xl}>

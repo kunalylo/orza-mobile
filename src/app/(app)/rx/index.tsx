@@ -129,11 +129,11 @@ export default function PrescriptionScan() {
         subtitle="Take a photo of your doctor's prescription. ÖRZA reads every medicine — brand names, 1-0-1, BD, TDS, SOS, after food, x 5 days — and sets the alarms for you to review."
       />
 
-      <Animated.View entering={FadeInDown.delay(40).springify().damping(18)}>
+      <Animated.View entering={FadeInDown.delay(40).springify().damping(18).stiffness(100).mass(1)}>
         <GlassCard tone="strong" padding={spacing.md} style={styles.card}>
           <Viewfinder uri={photo?.uri ?? null} scanning={scanning} />
 
-          <Animated.View layout={LinearTransition.springify().damping(20)} style={styles.controls}>
+          <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.controls}>
             {problem ? <ProblemPanel problem={problem} onManual={typeInstead} onRetry={photo ? read : undefined} retrying={scanning} /> : null}
 
             {aiOff && !problem ? (
@@ -203,7 +203,7 @@ export default function PrescriptionScan() {
         </GlassCard>
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(100).springify().damping(18)}>
+      <Animated.View entering={FadeInDown.delay(100).springify().damping(18).stiffness(100).mass(1)}>
         <GlassCard padding={spacing.lg} style={styles.card}>
           <View style={styles.tipHead}>
             <Icon name="mci:lightbulb-on-outline" size={15} color={colors.subtle} />
@@ -230,7 +230,7 @@ export default function PrescriptionScan() {
         </GlassCard>
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(160).springify().damping(18)} style={styles.history}>
+      <Animated.View entering={FadeInDown.delay(160).springify().damping(18).stiffness(100).mass(1)} style={styles.history}>
         <SectionHeader title="Your prescriptions" />
         <HistoryList
           items={history.data}

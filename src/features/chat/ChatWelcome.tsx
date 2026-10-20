@@ -80,7 +80,7 @@ export function ChatWelcome({
   busy: boolean;
 }) {
   const reduce = useReducedMotion();
-  const rise = (delay: number) => (reduce ? undefined : FadeInDown.delay(delay).springify().damping(18));
+  const rise = (delay: number) => (reduce ? undefined : FadeInDown.delay(delay).springify().damping(18).stiffness(100).mass(1));
 
   return (
     <ScrollView

@@ -84,7 +84,7 @@ export default function SignUp() {
     <Screen keyboard backdrop="orb">
       <ScreenHeader back eyebrow="Start free" title="Create your account" subtitle="Two minutes to a plan that fits your food, your culture and your day." />
 
-      <Animated.View entering={FadeInDown.delay(80).springify().damping(18)} style={styles.form}>
+      <Animated.View entering={FadeInDown.delay(80).springify().damping(18).stiffness(100).mass(1)} style={styles.form}>
         <TextField
           label="Your name"
           icon="user"

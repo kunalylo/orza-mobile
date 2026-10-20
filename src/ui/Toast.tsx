@@ -82,7 +82,12 @@ function ToastRow({ item }: { item: ToastItem }) {
 
   const l = look[item.kind];
   return (
-    <Animated.View entering={ZoomIn.springify().damping(16).stiffness(220)} exiting={FadeOutUp.duration(180)} layout={LinearTransition.springify().damping(20)}>
+    <Animated.View
+      entering={ZoomIn.springify().damping(16).stiffness(220).mass(1)}
+      exiting={FadeOutUp.duration(180)}
+      layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
+      style={styles.row}
+    >
       <Pressable
         onPress={() => dismiss(item.id)}
         onPressIn={() => setHold(true)}
@@ -117,6 +122,8 @@ export function ToastHost() {
 }
 
 const styles = StyleSheet.create({
+  // Without it a wrapping message made the pill wider than the host (419 dp in 379) — both rounded ends off-screen.
+  row: { maxWidth: '100%' },
   host: { position: 'absolute', left: 16, right: 16, alignItems: 'center', gap: 8, zIndex: 1000, elevation: 1000 },
   toast: {
     flexDirection: 'row',
@@ -127,7 +134,8 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     paddingRight: 16,
     borderRadius: radii.pill,
-    backgroundColor: colors.glassSolid,
+    // Opaque: over a dark card (Today's insight) a see-through pill showed the card's text and buttons behind the message.
+    backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.hairline,
     ...shadows.floating,

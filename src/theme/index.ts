@@ -163,6 +163,12 @@ export const shadows = {
 
 /* ───────────────────────────── Motion ───────────────────────────── */
 
+/**
+ * Reanimated 4 springs default to mass 4 and stiffness 900: a layout-animation builder given only `.damping(18)` has a
+ * damping ratio of ~0.15 and wobbles past its slot for ~2 s (a toast swells to 1.4×). Every
+ * `.springify().damping(n)` chain therefore also sets `.stiffness(…)` and `.mass(1)`, and `withSpring` configs carry
+ * all three — like the presets below.
+ */
 export const motion = {
   /** Snappy, slightly bouncy — buttons, chips, tab indicator. */
   spring: { damping: 18, stiffness: 260, mass: 0.8 },

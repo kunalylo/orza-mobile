@@ -103,7 +103,7 @@ export function ReminderSheet({ visible, reminder, onClose, whatsappAvailable, w
   }
 
   const busy = save.isPending || del.isPending;
-  const layout = reduceMotion ? undefined : LinearTransition.springify().damping(20);
+  const layout = reduceMotion ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1);
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
 
   const changeKind = (kind: ReminderKind) =>

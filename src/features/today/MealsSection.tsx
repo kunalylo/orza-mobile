@@ -149,7 +149,7 @@ export function MealsSection({
       </View>
 
       {meals.length === 0 ? (
-        <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18)}>
+        <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
           <GlassCard tone="strong" style={styles.empty}>
             <Orb size={84} tone="light" orbits={false} paused={reduce} />
             <Text variant="h3" tone="ink" align="center" style={styles.emptyTitle}>
@@ -169,7 +169,7 @@ export function MealsSection({
       ) : (
         <View style={styles.groups}>
           {MEAL_ORDER.map((type, i) => (
-            <Animated.View key={type} entering={reduce ? undefined : FadeInDown.delay(40 * i).springify().damping(18)}>
+            <Animated.View key={type} entering={reduce ? undefined : FadeInDown.delay(40 * i).springify().damping(18).stiffness(100).mass(1)}>
               <MealGroup type={type} meals={meals.filter((m) => m.meal_type === type)} tz={tz} onLog={onLog} onOpen={onOpen} />
             </Animated.View>
           ))}

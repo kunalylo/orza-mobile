@@ -292,7 +292,7 @@ export default function PrescriptionReview() {
       {content ?? (
         <>
           {/* ─────────── Prescription ─────────── */}
-          <Animated.View entering={FadeInDown.delay(40).springify().damping(18)}>
+          <Animated.View entering={FadeInDown.delay(40).springify().damping(18).stiffness(100).mass(1)}>
             <GlassCard padding={spacing.lg} style={styles.section}>
               <View style={styles.row}>
                 {imageSource ? (
@@ -369,7 +369,7 @@ export default function PrescriptionReview() {
           </Animated.View>
 
           {/* ─────────── Medicines ─────────── */}
-          <Animated.View entering={FadeInDown.delay(100).springify().damping(18)} style={styles.medsHead}>
+          <Animated.View entering={FadeInDown.delay(100).springify().damping(18).stiffness(100).mass(1)} style={styles.medsHead}>
             <Text variant="h2" accessibilityRole="header">
               Medicines
             </Text>
@@ -389,7 +389,7 @@ export default function PrescriptionReview() {
             </Animated.View>
           ) : null}
 
-          <Animated.View layout={LinearTransition.springify().damping(20)} style={styles.list}>
+          <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.list}>
             {list.map((r, i) => (
               <ReviewRowCard
                 key={r.key}
@@ -416,7 +416,7 @@ export default function PrescriptionReview() {
           </Animated.View>
 
           {/* ─────────── Options ─────────── */}
-          <Animated.View entering={FadeInDown.delay(160).springify().damping(18)}>
+          <Animated.View entering={FadeInDown.delay(160).springify().damping(18).stiffness(100).mass(1)}>
             <GlassCard padding={spacing.lg} style={styles.section}>
               <Text variant="label">Start alarms from</Text>
               <PressableScale onPress={() => setDatePicker(true)} haptic="tap" style={styles.dateBtn} accessibilityRole="button" accessibilityLabel={`Start date ${formatDateLong(startDate)}. Change`}>

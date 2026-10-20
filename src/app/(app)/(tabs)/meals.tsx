@@ -121,7 +121,10 @@ export default function Meals() {
     setRefreshing(true);
     syncToday();
     try {
-      await Promise.all([day.refetch(), refresh().catch(() => null)]);
+      const [res] = await Promise.all([day.refetch(), refresh().catch(() => null)]);
+      // The day's cached meals stay on screen (the error card is only for a day that never loaded) — so say that the
+      // refresh didn't get through; offline it used to end silently.
+      if (res.isError && res.data) toast.error(errorMessage(res.error));
     } finally {
       setRefreshing(false);
     }
@@ -181,11 +184,11 @@ export default function Meals() {
           right={<IconButton icon="camera" accessibilityLabel="Snap a meal" onPress={openSnap} />}
         />
 
-        <Animated.View entering={FadeInDown.delay(40).springify().damping(18)} style={styles.dateRow}>
+        <Animated.View entering={FadeInDown.delay(40).springify().damping(18).stiffness(100).mass(1)} style={styles.dateRow}>
           <DateNavigator date={date} today={today} onChange={changeDate} />
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(90).springify().damping(18)}>
+        <Animated.View entering={FadeInDown.delay(90).springify().damping(18).stiffness(100).mass(1)}>
           <MealComposer
             ref={composerRef}
             date={date}
@@ -222,7 +225,7 @@ export default function Meals() {
         ) : null}
 
         {loadError ? (
-          <Animated.View entering={FadeInDown.springify().damping(18)} style={styles.section}>
+          <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)} style={styles.section}>
             <GlassCard tone="strong">
               <View style={styles.errorRow}>
                 <Icon name={day.error instanceof ApiError && day.error.isNetwork ? 'wifi-off' : 'alert-circle'} size={20} color={colors.error} />
@@ -240,7 +243,7 @@ export default function Meals() {
           </Animated.View>
         ) : (
           <>
-            <Animated.View entering={FadeInDown.delay(140).springify().damping(18)} style={styles.section}>
+            <Animated.View entering={FadeInDown.delay(140).springify().damping(18).stiffness(100).mass(1)} style={styles.section}>
               <DailySummary totals={day.data?.totals ?? null} targets={user.targets} dayLabel={dayLabel} loading={loading} />
             </Animated.View>
             <View style={styles.sectionLg}>

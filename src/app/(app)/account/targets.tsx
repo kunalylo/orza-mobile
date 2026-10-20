@@ -229,7 +229,7 @@ export default function TargetsSettings() {
         subtitle="These drive your Today ring, reports and suggestions. Fine-tune them, or reset to what ÖRZA recommends."
       />
 
-      <Animated.View entering={FadeInDown.springify().damping(18)}>
+      <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
         <GlassCard tone="strong" glow padding={spacing.lg} style={styles.hero}>
           <View style={styles.heroTop}>
             <EnergyRing
@@ -282,7 +282,7 @@ export default function TargetsSettings() {
         </GlassCard>
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(80).springify().damping(18)} style={styles.grid}>
+      <Animated.View entering={FadeInDown.delay(80).springify().damping(18).stiffness(100).mass(1)} style={styles.grid}>
         {TARGET_FIELDS.map((f) => (
           <TargetTile
             key={f.key}

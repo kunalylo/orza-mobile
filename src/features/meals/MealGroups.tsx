@@ -201,7 +201,7 @@ export function MealGroups({
       {loading ? (
         <GroupsSkeleton />
       ) : meals.length === 0 ? (
-        <Animated.View entering={FadeInDown.springify().damping(18)}>
+        <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
           <EmptyState
             icon="mci:silverware-fork-knife"
             title={isToday ? 'Nothing logged yet today' : 'Nothing logged for this day'}
@@ -219,7 +219,7 @@ export function MealGroups({
             const kcal = sumNutrients(list.map((m) => m.totals)).calories;
             const tone = MEAL_TONE[type];
             return (
-              <Animated.View key={type} layout={LinearTransition.springify().damping(20)}>
+              <Animated.View key={type} layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}>
                 <View style={styles.groupHead}>
                   <View style={styles.groupTitle}>
                     <View style={[styles.groupIcon, { backgroundColor: tone.bg }]}>
@@ -250,9 +250,9 @@ export function MealGroups({
                 {list.map((m) => (
                   <Animated.View
                     key={m.id}
-                    entering={FadeInDown.springify().damping(18)}
+                    entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}
                     exiting={FadeOut.duration(180)}
-                    layout={LinearTransition.springify().damping(20)}
+                    layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
                     style={styles.cardWrap}
                   >
                     <MealCard meal={m} tz={tz} onEdit={onEdit} onDelete={onDelete} />

@@ -172,7 +172,7 @@ export default function Settings() {
         subtitle="Tune ÖRZA to your body, your food and your pace. Everything here is private to you."
       />
 
-      <Animated.View entering={FadeInDown.springify().damping(18)}>
+      <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
         <AccountSummary user={user} />
       </Animated.View>
 

@@ -5,7 +5,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 
-import { api, errorMessage } from '@/lib/api';
+import { api, errorMessage, retryWhileUnreachable } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { observeServerSteps } from '@/lib/steps/serverSeen';
 import { saveManualSteps } from '@/lib/steps/sync';
@@ -38,6 +38,8 @@ export function useTodayDashboard(date: string) {
     },
     placeholderData: keepPreviousData,
     staleTime: 30_000,
+    // Offline: the "last saved numbers" banner stayed after the connection came back, until a pull to refresh.
+    refetchInterval: retryWhileUnreachable,
   });
 }
 

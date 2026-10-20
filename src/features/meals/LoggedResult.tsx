@@ -28,7 +28,7 @@ export function LoggedResult({
   const t = meal.totals;
 
   return (
-    <Animated.View entering={FadeInDown.springify().damping(18)} exiting={FadeOut.duration(160)}>
+    <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)} exiting={FadeOut.duration(160)}>
       <GlassCard tone="strong" style={styles.card} padding={spacing.lg}>
         <View style={styles.head}>
           <View style={styles.check}>

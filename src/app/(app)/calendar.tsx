@@ -26,7 +26,7 @@ import { haptics } from '@/lib/haptics';
 import { colors, spacing } from '@/theme';
 import { Chip, GlassCard, Icon, IconButton, Screen, ScreenHeader, Text, toast } from '@/ui';
 
-const enter = (i: number) => FadeInDown.delay(40 + i * 60).springify().damping(18);
+const enter = (i: number) => FadeInDown.delay(40 + i * 60).springify().damping(18).stiffness(100).mass(1);
 const NOT_CONNECTED: ExternalCalendarState = { connected: false };
 
 /**

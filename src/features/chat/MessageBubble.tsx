@@ -27,8 +27,8 @@ import type { Meal, UIMessage } from './types';
  * The conversation is an inverted FlatList, whose cells are flipped vertically — so `FadeInUp` (which starts
  * above its final spot) appears to rise from below, like a new message should.
  */
-const ENTER_USER = FadeInUp.springify().damping(18).stiffness(220);
-const ENTER_ASSISTANT = FadeInUp.springify().damping(20).stiffness(160);
+const ENTER_USER = FadeInUp.springify().damping(18).stiffness(220).mass(1);
+const ENTER_ASSISTANT = FadeInUp.springify().damping(20).stiffness(160).mass(1);
 
 function OrzaLabel({ time }: { time?: string }) {
   return (

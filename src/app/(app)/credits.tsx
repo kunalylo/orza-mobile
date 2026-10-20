@@ -52,7 +52,7 @@ export default function Credits() {
     }
   }
 
-  const enter = (i: number) => (reduce ? undefined : FadeInDown.delay(i * 70).springify().damping(18));
+  const enter = (i: number) => (reduce ? undefined : FadeInDown.delay(i * 70).springify().damping(18).stiffness(100).mass(1));
 
   return (
     <Screen backdrop="orb" scroll={false} padded={false} edges={['top']} contentContainerStyle={styles.noPad}>

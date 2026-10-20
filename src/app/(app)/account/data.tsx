@@ -150,7 +150,7 @@ export default function DataSettings() {
         subtitle="Your data is stored securely. We never share personal health information without your consent."
       />
 
-      <Animated.View entering={FadeInDown.springify().damping(18)}>
+      <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
         <GlassCard tone="strong" glow padding={spacing.lg} style={styles.card}>
           <View style={styles.cardHead}>
             <View style={[styles.cardIcon, { backgroundColor: colors.cyan50 }]}>
@@ -173,7 +173,7 @@ export default function DataSettings() {
             style={styles.cardBtn}
           />
           {exported ? (
-            <Animated.View entering={FadeInDown.springify().damping(18)} exiting={FadeOut.duration(150)}>
+            <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)} exiting={FadeOut.duration(150)}>
               <Note icon="check-circle" tint={TINTS.success}>
                 {exported.status === 'shared'
                   ? `Your data is ready (${formatBytes(exported.bytes)}). Export again any time.`
@@ -215,7 +215,7 @@ export default function DataSettings() {
         />
       </SettingsGroup>
 
-      <Animated.View entering={FadeInDown.delay(140).springify().damping(18)} style={styles.danger}>
+      <Animated.View entering={FadeInDown.delay(140).springify().damping(18).stiffness(100).mass(1)} style={styles.danger}>
         <Text variant="eyebrow" tone="subtle" style={styles.dangerTitle}>
           Danger zone
         </Text>

@@ -10,7 +10,7 @@ export function FormBanner({ message, tone = 'error' }: { message: string | null
   const error = tone === 'error';
   return (
     <Animated.View
-      entering={FadeInDown.springify().damping(18)}
+      entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}
       exiting={FadeOut.duration(150)}
       accessibilityRole="alert"
       accessibilityLiveRegion="assertive"

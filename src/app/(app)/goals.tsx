@@ -60,7 +60,7 @@ export default function Goals() {
     }
   }
 
-  const enter = (i: number) => (reduce ? undefined : FadeInDown.delay(i * 60).springify().damping(18));
+  const enter = (i: number) => (reduce ? undefined : FadeInDown.delay(i * 60).springify().damping(18).stiffness(100).mass(1));
 
   return (
     <Screen backdrop="orb" scroll={false} padded={false} keyboard edges={['top']} contentContainerStyle={styles.noPad}>

@@ -36,7 +36,7 @@ function PlanRow({ plan, highlighted, onDelete, deleting }: { plan: RebalancePla
   const range = first && last ? ` · ${formatShortDate(first)} – ${formatShortDate(last)}` : '';
 
   return (
-    <Animated.View layout={reduce ? undefined : LinearTransition.springify().damping(20)} style={[styles.row, open && styles.rowOpen, deleting && styles.dim]}>
+    <Animated.View layout={reduce ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={[styles.row, open && styles.rowOpen, deleting && styles.dim]}>
       <View style={styles.rowHead}>
         <PressableScale
           onPress={() => setOpen((o) => !o)}
@@ -130,7 +130,7 @@ export function PlanHistory({ plans, loading, highlightId, onDeleted }: { plans:
   return (
     <View style={styles.list}>
       {plans.map((p, i) => (
-        <Animated.View key={p.id} entering={reduce ? undefined : FadeInDown.delay(Math.min(i, 8) * 40).springify().damping(18)}>
+        <Animated.View key={p.id} entering={reduce ? undefined : FadeInDown.delay(Math.min(i, 8) * 40).springify().damping(18).stiffness(100).mass(1)}>
           <PlanRow plan={p} highlighted={p.id === highlightId} deleting={del.isPending && del.variables === p.id} onDelete={() => confirmDelete(p)} />
         </Animated.View>
       ))}

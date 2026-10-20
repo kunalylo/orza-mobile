@@ -120,7 +120,7 @@ export function WeekStrip({ week, date, today, target, onSelect }: { week: WeekD
           const isToday = d.date === today;
           const label = `${relativeDay(d.date, today)}: ${d.meals ? `${formatNumber(d.calories)} kcal across ${d.meals} meal${d.meals === 1 ? '' : 's'}` : 'nothing logged'}`;
           return (
-            <Animated.View key={d.date} entering={reduce ? undefined : FadeInDown.delay(30 * i).springify().damping(18)} style={styles.dayWrap}>
+            <Animated.View key={d.date} entering={reduce ? undefined : FadeInDown.delay(30 * i).springify().damping(18).stiffness(100).mass(1)} style={styles.dayWrap}>
               <PressableScale
                 onPress={() => {
                   if (d.date === date || d.date > today) return;

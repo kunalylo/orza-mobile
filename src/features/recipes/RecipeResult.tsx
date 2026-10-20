@@ -71,7 +71,7 @@ export function RecipeResultCard({
   const more = recipe.ingredients.length - preview.length;
 
   return (
-    <Animated.View key={recipe.id} entering={reduce ? undefined : FadeInDown.springify().damping(18)}>
+    <Animated.View key={recipe.id} entering={reduce ? undefined : FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
       <GlassCard tone="strong" glow padding={0}>
         <LinearGradient colors={gradients.energy} {...diagonal} style={styles.topBar} />
         <View style={styles.resultBody}>

@@ -48,7 +48,7 @@ export default function More() {
     >
       <ScreenHeader eyebrow={name ? `${greeting()}, ${name}` : 'ÖRZA'} title="More" />
 
-      <Animated.View entering={FadeInDown.springify().damping(18)}>
+      <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
         <AccountCard user={user} />
       </Animated.View>
 

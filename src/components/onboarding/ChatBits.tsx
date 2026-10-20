@@ -51,7 +51,7 @@ export function Avatar() {
 
 export function Bubble({ item }: { item: ChatItem }) {
   const mine = item.role === 'user';
-  const entering = item.instant ? undefined : mine ? FadeInUp.springify().damping(18).stiffness(200) : FadeInDown.springify().damping(18).stiffness(160);
+  const entering = item.instant ? undefined : mine ? FadeInUp.springify().damping(18).stiffness(200).mass(1) : FadeInDown.springify().damping(18).stiffness(160).mass(1);
   if (item.summary) {
     return (
       <Animated.View entering={entering} style={styles.rowAssistant}>

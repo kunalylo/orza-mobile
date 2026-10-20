@@ -231,7 +231,7 @@ export function PlanView({ plan, matched, showMessage = true }: { plan: Rebalanc
       </Text>
       <View style={styles.days}>
         {plan.days.map((d, i) => (
-          <Animated.View key={d.date} entering={reduce ? undefined : FadeInDown.delay(80 * i).springify().damping(18)}>
+          <Animated.View key={d.date} entering={reduce ? undefined : FadeInDown.delay(80 * i).springify().damping(18).stiffness(100).mass(1)}>
             <DayCard plan={plan} day={d} index={i} />
           </Animated.View>
         ))}

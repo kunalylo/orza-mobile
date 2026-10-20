@@ -45,7 +45,7 @@ export const TINTS = {
 /** Eyebrow + frosted card that holds a list of rows. */
 export function SettingsGroup({ title, children, delay = 0, footer, style }: { title?: string; children: ReactNode; delay?: number; footer?: string; style?: StyleProp<ViewStyle> }) {
   return (
-    <Animated.View entering={FadeInDown.delay(delay).springify().damping(18)} style={[styles.group, style]}>
+    <Animated.View entering={FadeInDown.delay(delay).springify().damping(18).stiffness(100).mass(1)} style={[styles.group, style]}>
       {title ? (
         <Text variant="eyebrow" tone="subtle" style={styles.groupTitle} accessibilityRole="header">
           {title}
@@ -248,7 +248,7 @@ export function SaveBar({
 }) {
   return (
     <View style={styles.saveBar}>
-      <Animated.View layout={LinearTransition.springify().damping(20)}>
+      <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}>
         <Text variant="caption" tone={dirty ? 'energy' : 'subtle'} align="center" accessibilityLiveRegion="polite" style={styles.saveNote} numberOfLines={2}>
           {dirty ? 'You have unsaved changes.' : idleNote ?? 'Everything is saved.'}
         </Text>

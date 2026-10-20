@@ -410,3 +410,8 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   background sampler (the emulator has no TYPE_STEP_COUNTER). Planned next for reliability: Google's Recording API on mobile (Play services
   `LocalRecordingClient`, background step recording without a foreground service) as the primary Android phone source, our sampler as
   fallback. Dev note: Metro over 10.0.2.2:8081 can still blank-screen → `adb reverse` + localhost:8081 (`adb.sh app_start`). D1 resumes.
+- 2026-10-20: D1 today-meals DONE (notes `docs/notes/D1-today-meals.md`, 36 cases, 17 bugs fixed). Last part: app-wide spring fix
+  (Reanimated 4 defaults mass 4 / stiffness 900 made every `.springify().damping(n)` wobble ~2 s — all chains now set stiffness +
+  mass 1), opaque toast kept inside the gutters, Today/Meals recover by themselves after a lost connection (`retryWhileUnreachable`),
+  offline banner wording, Meals offline refresh toast. Open: Undo on the logged card not pressed on device (AI budget), live step
+  counting needs a real phone.

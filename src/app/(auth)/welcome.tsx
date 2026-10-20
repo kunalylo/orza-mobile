@@ -8,7 +8,7 @@ import { useAuth } from '@/lib/auth';
 import { colors, spacing } from '@/theme';
 import { Button, Icon, Orb, Screen, Text } from '@/ui';
 
-const enter = (i: number) => FadeInDown.delay(180 + i * 90).springify().damping(18).stiffness(140);
+const enter = (i: number) => FadeInDown.delay(180 + i * 90).springify().damping(18).stiffness(140).mass(1);
 
 const SIGNALS = [
   { icon: 'mci:silverware-fork-knife', value: '450 kcal', label: 'Lunch' },
@@ -52,7 +52,7 @@ export default function Welcome() {
 
       <View style={[styles.signals, compact && styles.hidden]}>
         {SIGNALS.map((s, i) => (
-          <Animated.View key={s.label} entering={FadeInDown.delay(500 + i * 110).springify().damping(16)} style={styles.signal}>
+          <Animated.View key={s.label} entering={FadeInDown.delay(500 + i * 110).springify().damping(16).stiffness(100).mass(1)} style={styles.signal}>
             <Icon name={s.icon} size={14} color={i === 1 ? colors.violet300 : i === 2 ? colors.cyan300 : colors.amber} />
             <View style={styles.signalText}>
               <Text variant="label" tone="inverse" numberOfLines={1} style={styles.signalValue}>

@@ -72,7 +72,7 @@ function HistoryRow({ p, index, year, tz, onPress }: { p: PrescriptionClient; in
   const title = rxTitle(p);
   const date = formatDateShort(rxDate(p, tz), year);
   return (
-    <Animated.View entering={FadeInDown.delay(Math.min(index, 6) * 45).springify().damping(18)} exiting={FadeOut.duration(180)} layout={LinearTransition.springify().damping(20)}>
+    <Animated.View entering={FadeInDown.delay(Math.min(index, 6) * 45).springify().damping(18).stiffness(100).mass(1)} exiting={FadeOut.duration(180)} layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}>
       <GlassCard
         padding={spacing.md}
         onPress={onPress}

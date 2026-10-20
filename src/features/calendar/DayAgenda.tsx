@@ -189,7 +189,7 @@ export function DayAgenda({
           </View>
         ) : (
           events.map((e, i) => (
-            <Animated.View key={`${e.id}-${date}`} entering={reduceMotion ? undefined : FadeInDown.delay(Math.min(i, 8) * 30).springify().damping(20)}>
+            <Animated.View key={`${e.id}-${date}`} entering={reduceMotion ? undefined : FadeInDown.delay(Math.min(i, 8) * 30).springify().damping(20).stiffness(100).mass(1)}>
               <EventRow event={e} tz={tz} date={date} />
             </Animated.View>
           ))

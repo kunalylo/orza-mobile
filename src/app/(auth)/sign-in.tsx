@@ -52,7 +52,7 @@ export default function SignIn() {
     <Screen keyboard backdrop="orb">
       <ScreenHeader back eyebrow="Welcome back" title="Sign in to ÖRZA" subtitle="Pick up right where you left off — meals, medicines and all." />
 
-      <Animated.View entering={FadeInDown.delay(80).springify().damping(18)} style={styles.form}>
+      <Animated.View entering={FadeInDown.delay(80).springify().damping(18).stiffness(100).mass(1)} style={styles.form}>
         <FormBanner message={notice} tone="info" />
         <TextField
           label="Email"

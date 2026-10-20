@@ -125,7 +125,7 @@ export function ScheduleEditor({ value, onChange, today, error }: { value: Sched
           <Text variant="label" style={styles.label}>
             Alarm times
           </Text>
-          <Animated.View layout={LinearTransition.springify().damping(20)} style={styles.chips}>
+          <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.chips}>
             {d.times.map((t, i) => (
               <Animated.View key={`${i}-${t}`} entering={FadeIn.springify()} exiting={FadeOut} style={styles.timePill}>
                 <PressableScale haptic="soft" onPress={() => setTimeIndex(i)} accessibilityRole="button" accessibilityLabel={`Alarm time ${i + 1}: ${formatTime12(t)}. Change`} style={styles.timeBtn}>

@@ -69,7 +69,7 @@ export default function Rebalance() {
           subtitle="Enjoyed a special meal? ÖRZA creates a supportive recovery plan — no guilt, just smart wellness strategies."
         />
 
-        <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18)}>
+        <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
           <RebalanceForm
             aiEnabled={q.isPending ? undefined : q.data?.ai_enabled}
             cost={q.data?.cost}
@@ -85,7 +85,7 @@ export default function Rebalance() {
               resultY.current = e.nativeEvent.layout.y;
             }}
           >
-            <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18)}>
+            <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
               <Text variant="eyebrow" tone="energy">
                 Your rebalance plan
               </Text>
@@ -124,7 +124,7 @@ export default function Rebalance() {
           </View>
         ) : null}
 
-        <Animated.View entering={reduce ? undefined : FadeInDown.delay(80).springify().damping(18)} style={styles.section}>
+        <Animated.View entering={reduce ? undefined : FadeInDown.delay(80).springify().damping(18).stiffness(100).mass(1)} style={styles.section}>
           <HowItWorks />
         </Animated.View>
 

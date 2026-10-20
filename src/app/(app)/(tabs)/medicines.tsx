@@ -96,12 +96,12 @@ export default function Medicines() {
         right={<IconButton icon="plus" variant="solid" accessibilityLabel="Add a medicine" onPress={openAdd} haptic="firm" />}
       />
 
-      <Animated.View entering={FadeInDown.delay(40).springify().damping(18)}>
+      <Animated.View entering={FadeInDown.delay(40).springify().damping(18).stiffness(100).mass(1)}>
         <ScanHero />
       </Animated.View>
 
       {/* Alarms on this phone: the next alarm, or what stops them ringing; doses inside quiet hours. */}
-      <Animated.View entering={FadeInDown.delay(70).springify().damping(18)}>
+      <Animated.View entering={FadeInDown.delay(70).springify().damping(18).stiffness(100).mass(1)}>
         <AlarmStatusCard variant="compact" hideWhenIdle={noMeds} style={styles.section} />
       </Animated.View>
 
@@ -129,7 +129,7 @@ export default function Medicines() {
       ) : null}
 
       {noMeds ? (
-        <Animated.View entering={FadeInDown.delay(100).springify().damping(18)}>
+        <Animated.View entering={FadeInDown.delay(100).springify().damping(18).stiffness(100).mass(1)}>
           <GlassCard padding={spacing.sm} style={styles.section}>
             <EmptyState
               icon="mci:pill"
@@ -145,7 +145,7 @@ export default function Medicines() {
       ) : (
         <>
           {/* Today */}
-          <Animated.View entering={FadeInDown.delay(100).springify().damping(18)}>
+          <Animated.View entering={FadeInDown.delay(100).springify().damping(18).stiffness(100).mass(1)}>
             <GlassCard padding={spacing.lg} style={styles.section}>
               <View style={styles.todayHead}>
                 <View style={styles.flex}>
@@ -198,7 +198,7 @@ export default function Medicines() {
           </Animated.View>
 
           {/* Adherence */}
-          <Animated.View entering={FadeInDown.delay(160).springify().damping(18)}>
+          <Animated.View entering={FadeInDown.delay(160).springify().damping(18).stiffness(100).mass(1)}>
             <GlassCard padding={spacing.lg} style={styles.section}>
               <Text variant="eyebrow" tone="subtle" style={styles.cardEyebrow}>
                 Last 7 days
@@ -232,7 +232,7 @@ export default function Medicines() {
               <DashedNote body="No medicines for this person yet." />
             ) : (
               filteredMeds.map((m, i) => (
-                <Animated.View key={m.id} entering={FadeInDown.delay(Math.min(i, 8) * 45).springify().damping(18)}>
+                <Animated.View key={m.id} entering={FadeInDown.delay(Math.min(i, 8) * 45).springify().damping(18).stiffness(100).mass(1)}>
                   <MedicineCard med={m} today={today} onPress={() => router.push({ pathname: '/med/[id]', params: { id: m.id } })} />
                 </Animated.View>
               ))

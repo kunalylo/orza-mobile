@@ -98,7 +98,7 @@ const isInt = (s: string, min: number, max: number) => s !== '' && Number.isInte
 
 function Section({ title, icon, children, delay = 0 }: { title: string; icon?: 'bell' | 'mci:pill' | 'calendar' | 'package' | 'user'; children: ReactNode; delay?: number }) {
   return (
-    <Animated.View entering={FadeInDown.delay(delay).springify().damping(18)}>
+    <Animated.View entering={FadeInDown.delay(delay).springify().damping(18).stiffness(100).mass(1)}>
       <GlassCard padding={spacing.lg} style={styles.section}>
         <View style={styles.sectionHead}>
           {icon ? <Icon name={icon} size={16} color={colors.energyInk} /> : null}

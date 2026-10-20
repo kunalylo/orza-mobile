@@ -76,9 +76,9 @@ export function AlarmDoseCard({
   const timing = TIMING_INSTRUCTION[dose.timing];
   return (
     <Animated.View
-      entering={FadeInDown.springify().damping(18)}
+      entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}
       exiting={FadeOut.duration(180)}
-      layout={LinearTransition.springify().damping(20)}
+      layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
       style={[styles.card, primary && styles.cardPrimary]}
     >
       <PhotoCarousel
@@ -179,7 +179,7 @@ export function HandledDoseRow({ dose, tz }: { dose: HandledDose; tz: string }) 
     <Animated.View
       entering={FadeIn.duration(220)}
       exiting={FadeOut.duration(160)}
-      layout={LinearTransition.springify().damping(20)}
+      layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
       style={styles.done}
       accessible
       accessibilityLabel={`${dose.name}${dose.strength ? ` ${dose.strength}` : ''}: ${detail}`}
