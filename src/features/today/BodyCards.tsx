@@ -8,9 +8,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type TextInput } from 'react-native';
 
 import { ApiError, errorMessage } from '@/lib/api';
-import { useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
-import { recordManualSteps } from '@/lib/steps/sync';
 import { colors, radii, spacing } from '@/theme';
 import { Button, Icon, PressableScale, ProgressBar, Sheet, Text, TextField, toast } from '@/ui';
 
@@ -80,8 +78,8 @@ export function StepsSheet({
   mode?: 'log' | 'edit';
 }) {
   const isToday = date === today;
-  const user = useSignedInUser();
-  const log = useLogSteps(date);
+  // Saved through the step sync: the member's number stays the day's count (counting adds on top, never overwrites).
+  const log = useLogSteps(date, today);
   const fieldRef = useFocusWhenShown(visible);
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -114,8 +112,6 @@ export function StepsSheet({
     setError(null);
     log.mutate(Math.round(n), {
       onSuccess: ({ tracking }) => {
-        // The automatic count must not overwrite the member's own number (lower too).
-        recordManualSteps(user.id, date, typeof tracking.steps === 'number' ? tracking.steps : Math.round(n), today);
         toast.success(`${formatNumber(tracking.steps)} steps saved`);
         onClose();
       },

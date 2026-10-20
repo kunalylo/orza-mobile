@@ -8,6 +8,7 @@ import { useRef, useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { observeServerSteps } from '@/lib/steps/serverSeen';
+import { saveManualSteps } from '@/lib/steps/sync';
 import { toast } from '@/ui';
 
 import { MAX_GLASSES, clamp } from './format';
@@ -49,6 +50,17 @@ export function mergeTracking(qc: QueryClient, date: string, t: TrackingDay) {
     const next: TodayData = { ...d, tracking: { ...d.tracking, ...t } };
     if (t.weight_kg != null && (!d.last_weight || t.date >= d.last_weight.date)) next.last_weight = { weight_kg: t.weight_kg, date: t.date };
     return next;
+  });
+}
+
+/**
+ * A real read of the day's step count (the step sync checks the server right before each save): Today's number follows
+ * it — a count set lower on the website, or saved higher by another phone, shows without waiting for a refetch.
+ */
+export function mergeServerSteps(qc: QueryClient, date: string, steps: number) {
+  qc.setQueryData<TodayData>(todayKeys.day(date), (d) => {
+    if (!d || d.date !== date || d.tracking.steps === steps) return undefined; // nothing to change
+    return { ...d, tracking: { ...d.tracking, steps } };
   });
 }
 
@@ -150,11 +162,17 @@ export function useWaterWriter(date: string, glasses: number) {
 
 /* ───────────────────────────── Steps & weight ───────────────────────────── */
 
-/** `POST /api/track/steps {steps, date}` — the day's total. */
-export function useLogSteps(date: string) {
+/**
+ * `POST /api/track/steps {steps, date}` — the day's total, typed by the member (fallback / Edit). Goes through the step
+ * sync (`saveManualSteps`): the member's number then stays the day's count — automatic counting adds on top of it and
+ * never overwrites it.
+ */
+export function useLogSteps(date: string, today: string) {
   const qc = useQueryClient();
+  const userId = useAuth().user?.id;
   return useMutation({
-    mutationFn: (steps: number) => api.post<TrackingResponse>('/track/steps', { steps: Math.round(steps), date }),
+    mutationFn: (steps: number): Promise<TrackingResponse> =>
+      userId ? saveManualSteps(userId, date, Math.round(steps), today) : api.post<TrackingResponse>('/track/steps', { steps: Math.round(steps), date }),
     onMutate: () => {
       activeWrites += 1;
     },

@@ -8,10 +8,11 @@
  *   keeps the most important reason (`plan.mergeReason`). Every native / health call is time-bounded.
  * - Saving runs on its own queue (the newest readings win, pending past days are kept): a slow network never holds up
  *   Today or the permission flow.
- * - Before each save the phone READS the server's current count (one GET per save; saves are throttled) and never
- *   lowers it. A real read lower than this phone's last save is the member's edit (website / another phone): it becomes
- *   the day's base and steps counted after it add on top (`policy.ts`); the Edit sheet on the phone does the same
- *   (`recordManualSteps`). Remaining race: a count saved elsewhere between that GET and the POST (about a second).
+ * - Saving one day is `save.ts` (I/O injected, tested): before each save the phone READS the server's current count
+ *   (one GET per save; saves are throttled) and never lowers it. A real read lower than this phone's last save is the
+ *   member's edit (website / another phone): it becomes the day's base and steps counted after it add on top
+ *   (`policy.ts`); the Edit sheet on the phone does the same (`saveManualSteps`). Remaining race: a count saved
+ *   elsewhere between that GET and the POST (about a second).
  * - Past days: up to 7 back, until a source read the whole day (`complete`) and its count is saved — then final.
  * - `syncStepsInBackground()`: the same from the alarm background task (`lib/alarms/background.ts`) — the session and
  *   member snapshot then come from the Keychain, and Android reads stored samples only (no live sensor read).
@@ -28,24 +29,10 @@ import { safeTimeZone, utcToZoned } from '../alarms/schedule';
 import { getHealthRecord } from '../health/store';
 
 import { mergeDays, mergeReason, pendingPastDays, shouldReadPast } from './plan';
-import {
-  clampSteps,
-  editBase,
-  editedOnServer,
-  knownFloor,
-  needsStartBase,
-  postTarget,
-  rebased,
-  serverAllows,
-  shouldPost,
-  startBase,
-  withBase,
-  type AutoCount,
-  type DayRecord,
-} from './policy';
 import { stepsReader } from './reader';
-import { forgetServerObservations, observeServerSteps, serverObservation } from './serverSeen';
-import { getDayRecord, markDayFinal, noteServerSteps, updateDayRecord } from './store';
+import { applyManualSteps, saveDay, type SaveDeps } from './save';
+import { forgetServerObservations } from './serverSeen';
+import { getDayRecord, markDayFinal, updateDayRecord } from './store';
 import type { DaySteps, RefreshReason, StepsAccess } from './types';
 
 export type { RefreshReason } from './types';
@@ -117,6 +104,8 @@ export interface RefreshOptions {
   reason: RefreshReason;
   /** A save went through — update the app's caches. */
   onSaved?: (date: string, tracking: TrackingDay) => void;
+  /** A real read of a day's count on the server (before a save) — Today's number can follow it. */
+  onServerSteps?: (date: string, steps: number) => void;
 }
 
 /** Reads closer together than this are skipped (Today's timer, focus and the app returning can coincide). */
@@ -207,7 +196,7 @@ async function readAndPublish(member: StepsMember, opts: RefreshOptions) {
   }
 
   if (!getSessionToken() || stale() || !days.length) return;
-  queueSave({ userId: member.id, epoch: myEpoch, today, days, onSaved: opts.onSaved });
+  queueSave({ userId: member.id, epoch: myEpoch, today, days, onSaved: opts.onSaved, onServerSteps: opts.onServerSteps });
 }
 
 /* ───────────────────────────── Save queue ───────────────────────────── */
@@ -219,6 +208,7 @@ interface SaveJob {
   today: string;
   days: DaySteps[];
   onSaved?: (date: string, tracking: TrackingDay) => void;
+  onServerSteps?: (date: string, steps: number) => void;
 }
 
 let saving: Promise<void> | null = null;
@@ -252,14 +242,29 @@ export async function stepSavesSettled(ms: number): Promise<void> {
   }
 }
 
+/** The day the automatic queue is saving right now (a manual save waits for it, see `saveManualSteps`). */
+let dayInFlight: Promise<unknown> | null = null;
+/** A manual save (Edit / Log sheet) in progress: the automatic queue waits for it between days. */
+let manualInFlight: Promise<unknown> | null = null;
+/** How long a manual save waits for the automatic one in flight (it is time-bounded itself). */
+const MANUAL_WAIT_MS = 25_000;
+
 async function runSave(job: SaveJob) {
   const stale = () => job.epoch !== epoch;
   // Today first (what the member is looking at), then past days newest first.
   const days = [...job.days].sort((a, b) => (a.date === job.today ? -1 : b.date === job.today ? 1 : b.date.localeCompare(a.date)));
   for (const day of days) {
+    if (manualInFlight) await within(manualInFlight, MANUAL_WAIT_MS + SAVE_TIMEOUT_MS);
     if (stale()) return;
     const isToday = day.date === job.today;
-    const ok = await saveDay(job.userId, day, isToday, job.onSaved, stale);
+    const run = saveDay(saveDeps, job.userId, day, isToday, { onSaved: job.onSaved, onServerSteps: job.onServerSteps, stale });
+    dayInFlight = run;
+    let ok = false;
+    try {
+      ok = await run;
+    } finally {
+      if (dayInFlight === run) dayInFlight = null;
+    }
     if (stale()) return;
     if (!isToday && ok && day.complete) markDayFinal(job.userId, day.date);
   }
@@ -267,128 +272,50 @@ async function runSave(job: SaveJob) {
 
 /* ───────────────────────────── Saving one day ───────────────────────────── */
 
-/** The day's count on the server right now (`GET /dashboard/today?date=`), null when it answered for another day. */
-async function fetchServerSteps(date: string): Promise<number | null> {
-  const d = await api.get<TodayData>(`/dashboard/today?date=${encodeURIComponent(date)}`, { timeoutMs: SERVER_READ_TIMEOUT_MS });
-  if (d?.date !== date) return null;
-  return typeof d.tracking?.steps === 'number' ? d.tracking.steps : 0;
-}
-
 /** A 4xx other than auth / rate limit / timeout won't succeed on a retry (e.g. a day the server sees as the future). */
 const permanent = (e: unknown) => e instanceof ApiError && e.status >= 400 && e.status < 500 && ![401, 408, 429].includes(e.status);
 
-type ServerRead = { ok: true; steps: number | null } | { ok: false; retry: boolean };
-
-/** A real read of the day's server count, remembered as an observation (`serverSeen`) and on the day's record. */
-async function readServer(userId: string, date: string): Promise<ServerRead> {
-  const requestedAt = Date.now();
-  try {
-    const steps = await fetchServerSteps(date);
-    if (steps != null) {
-      observeServerSteps(userId, date, steps, requestedAt);
-      noteServerSteps(userId, date, steps);
-    }
-    return { ok: true, steps };
-  } catch (e) {
-    return { ok: false, retry: !permanent(e) };
-  }
-}
-
-/** Accept the member's edit to `steps` (seen on the server, or made on this phone) as the day's base. */
-function acceptEdit(userId: string, date: string, steps: number, auto: AutoCount | null): DayRecord | undefined {
-  const now = Date.now();
-  const n = clampSteps(steps);
-  updateDayRecord(userId, date, { base: editBase(n, auto, now), sent: n, sentAt: now, sentSource: 'edited', server: n, serverAt: now });
-  return getDayRecord(userId, date);
-}
+/** The real store + API behind `save.ts`. */
+const saveDeps: SaveDeps = {
+  getRecord: getDayRecord,
+  updateRecord: updateDayRecord,
+  async fetchServerSteps(date) {
+    const d = await api.get<TodayData>(`/dashboard/today?date=${encodeURIComponent(date)}`, { timeoutMs: SERVER_READ_TIMEOUT_MS });
+    if (d?.date !== date) return null;
+    return typeof d.tracking?.steps === 'number' ? d.tracking.steps : 0;
+  },
+  async postSteps(date, steps) {
+    const res = await api.post<{ tracking: TrackingDay }>('/track/steps', { steps, date }, { timeoutMs: SAVE_TIMEOUT_MS });
+    return res?.tracking ?? null;
+  },
+  isPermanent: permanent,
+  now: () => Date.now(),
+};
 
 /**
- * Saves `day` when the policy says so. False when it should be retried later (offline, server error) — a past day is
- * only marked final after a true.
+ * The member's own number for a day (the Edit / Log sheet): `POST /api/track/steps`, then recorded per
+ * `save.applyManualSteps` (it becomes the day's base when something counts the day, or when it lowers the day).
+ * Serialised with the automatic queue: it first waits (bounded) for an automatic save in flight, and the queue waits
+ * for it before its next day — so an automatic save can't land on the server after the member's number and undo it.
  */
-async function saveDay(
-  userId: string,
-  day: DaySteps,
-  isToday: boolean,
-  onSaved: SaveJob['onSaved'],
-  stale: () => boolean
-): Promise<boolean> {
-  let rec = getDayRecord(userId, day.date);
-
-  // A real server read made after this phone's last save shows a lower count: the member set the day themselves.
-  const seen = serverObservation(userId, day.date);
-  if (seen && editedOnServer(rec, seen)) rec = acceptEdit(userId, day.date, seen.steps, day);
-
-  // This phone began counting partway through the day: carry on from what was already saved that day.
-  if (needsStartBase(day, rec)) {
-    const server = await readServer(userId, day.date);
-    if (stale()) return true;
-    if (!server.ok) return !server.retry;
-    rec = getDayRecord(userId, day.date);
-    if (!rec?.base) {
-      updateDayRecord(userId, day.date, { base: startBase(day, rec, server.steps, Date.now()) });
-      rec = getDayRecord(userId, day.date);
-    }
-  }
-
-  // The best source changed under a base: re-anchor it on the new one.
-  const moved = rebased(rec?.base, day, Date.now());
-  if (moved) {
-    updateDayRecord(userId, day.date, { base: moved });
-    rec = getDayRecord(userId, day.date);
-  }
-
-  const target = postTarget(day, rec, isToday);
-  if (target == null) return true;
-  if (rec?.base && rec.base.last !== target) {
-    updateDayRecord(userId, day.date, { base: { ...rec.base, last: target } });
-    rec = getDayRecord(userId, day.date);
-  }
-  if (!shouldPost(target, rec, Date.now(), !isToday)) return true;
-
-  // Never lower the server's count: read it right before saving (one GET per save; saves are throttled).
-  const server = await readServer(userId, day.date);
-  if (stale()) return true;
-  if (!server.ok) return !server.retry;
-  rec = getDayRecord(userId, day.date);
-  const fresh = serverObservation(userId, day.date);
-  if (fresh && editedOnServer(rec, fresh)) {
-    acceptEdit(userId, day.date, fresh.steps, day);
-    return true; // the next run saves from the member's number
-  }
-  if (!serverAllows(target, server.steps) || target <= knownFloor(rec)) return true;
-
-  const steps = clampSteps(target);
-  try {
-    const res = await api.post<{ tracking: TrackingDay }>('/track/steps', { steps, date: day.date }, { timeoutMs: SAVE_TIMEOUT_MS });
-    if (stale()) return true;
+export function saveManualSteps(userId: string, date: string, steps: number, today: string): Promise<{ tracking: TrackingDay }> {
+  const run = (async () => {
+    if (dayInFlight) await within(dayInFlight, MANUAL_WAIT_MS);
+    const res = await api.post<{ tracking: TrackingDay }>('/track/steps', { steps, date });
     const saved = typeof res?.tracking?.steps === 'number' ? res.tracking.steps : steps;
-    const at = Date.now();
-    const source = withBase(day, rec?.base)?.source ?? day.source;
-    updateDayRecord(userId, day.date, { sent: saved, sentAt: at, sentSource: source, server: saved, serverAt: at });
-    if (res?.tracking) onSaved?.(day.date, res.tracking);
-    return true;
-  } catch (e) {
-    return permanent(e);
-  }
-}
-
-/**
- * The member typed the day's steps on this phone (the Edit / Log sheet) and the server took `steps`. On a past day,
- * with a count running today, or lower than what the day already had, it becomes the day's base: the member's number,
- * plus steps counted after it today (lower than the automatic count too — a bus ride counted as walking). A count
- * typed today with nothing counting is a plain save (counting that starts later adds on top of it).
- */
-export function recordManualSteps(userId: string, date: string, steps: number, today: string) {
-  const live = state.userId === userId && state.date === date && state.today?.date === date ? state.today : null;
-  const n = clampSteps(steps);
-  const now = Date.now();
-  observeServerSteps(userId, date, n, now);
-  if (date !== today || live || n < knownFloor(getDayRecord(userId, date))) {
-    acceptEdit(userId, date, n, live);
-    return;
-  }
-  updateDayRecord(userId, date, { server: n, serverAt: now });
+    const live = state.userId === userId && state.date === date && state.today?.date === date ? state.today : null;
+    applyManualSteps(saveDeps, userId, date, saved, today, live);
+    return res;
+  })();
+  const held = run.then(
+    () => undefined,
+    () => undefined
+  );
+  manualInFlight = held;
+  void held.then(() => {
+    if (manualInFlight === held) manualInFlight = null;
+  });
+  return run;
 }
 
 /* ───────────────────────────── Background / sign-out ───────────────────────────── */

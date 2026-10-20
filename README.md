@@ -91,12 +91,16 @@ src/
   after planner changes.
 - **Steps**: counted automatically — members never type them (`@/lib/steps`). `useStepsAutoSync()` (mounted in
   `(app)/_layout`) reads + saves on launch / foreground; `useTodaySteps()` drives Today's `StepsCard` (live every
-  minute while visible). Sources per day, highest wins: Android's hardware step counter through `modules/orza-steps`
-  (native raw-sample ring buffer, allow-while-idle alarms ~hourly + midnight ± 5 min, boot / update / shutdown) turned
-  into days by the pure `counter.ts`; iOS CMPedometer (expo-sensors); Health Connect / Apple Health only while
-  connected on the Health screen (`healthBridge.stepsBetween`). Saves go through `POST /track/steps` and only ever
-  raise a day's count (`policy.ts`); the alarm background task also runs `syncStepsInBackground()`; sign-out calls
-  `clearStepsOnSignOut()`. `npm run test:steps` after changing the day math or the policy.
+  minute while visible; it also shows offline). Sources per day, highest wins: Android's hardware step counter through
+  `modules/orza-steps` (native raw-sample ring buffer in `noBackupFilesDir`, allow-while-idle alarms ~hourly — spaced
+  out in stricter App Standby buckets — plus midnight samples, exact when "Alarms & reminders" is allowed; boot /
+  update / shutdown) turned into days by the pure `counter.ts`; iOS CMPedometer (expo-sensors); Health Connect /
+  Apple Health only while connected on the Health screen (`healthBridge.stepsBetween`). Saving one day is `save.ts`
+  (reads the server right before every `POST /track/steps`, only ever raises a day's count — except the member's own
+  number: an edit on the website / another phone, or the card's "Edit" (`saveManualSteps`), becomes the day's base and
+  steps counted after it add on, `policy.ts`); past days are saved once read to their end (up to 7 back, `plan.ts`).
+  The alarm background task also runs `syncStepsInBackground()`; sign-out calls `clearStepsOnSignOut()`.
+  `npm run test:steps` after changing the day math, the policy or the sync decisions.
 - **Route types**: after adding/removing a route file run `npm run routes` (regenerates `.expo/types/router.d.ts` without a
   dev server); `npm run typecheck` does that and then `tsc --noEmit`.
 - Never edit `android/` or `ios/` — configure native behaviour in `app.json` / config plugins.

@@ -11,7 +11,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 
-import { mergeTracking } from '@/features/today/api';
+import { mergeServerSteps, mergeTracking } from '@/features/today/api';
 import { useAuth, useSignedInUser } from '@/lib/auth';
 
 import { safeTimeZone } from '../alarms/schedule';
@@ -47,6 +47,7 @@ function foregroundOptions(qc: QueryClient, reason: RefreshReason): RefreshOptio
       mergeTracking(qc, date, tracking);
       void qc.invalidateQueries({ queryKey: ['reports'], refetchType: 'none' });
     },
+    onServerSteps: (date, steps) => mergeServerSteps(qc, date, steps),
   };
 }
 
@@ -141,9 +142,4 @@ export function useTodaySteps() {
     recheck,
     openSettings: openStepsSettings,
   };
-}
-
-/** The member's today as of the latest steps read (moves past midnight while the app is open). */
-export function useStepsReadingDate(): string | null {
-  return useSyncExternalStore(subscribeStepsState, () => getStepsState().date);
 }

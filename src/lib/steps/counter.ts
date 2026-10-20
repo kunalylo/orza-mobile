@@ -54,6 +54,11 @@ const COVER_SLACK_MS = 60_000;
 const CLOCK_SLACK_MS = 2 * 60_000;
 /** A boot instant this much later than the previous reading means a new kernel boot (absorbs small clock fixes). */
 const BOOT_SLACK_MS = 5 * 60_000;
+/**
+ * Readings stamped before this (2025-01-01) were taken under a reset clock (a phone that lost its time shows 1970 /
+ * 2009 / 2016 until network time arrives). Kept only when their boot has a later, sane reading to re-anchor them.
+ */
+const MIN_PLAUSIBLE_TS = Date.UTC(2025, 0, 1);
 
 /* ───────────────────────────── Time zone helpers ───────────────────────────── */
 
@@ -125,7 +130,8 @@ export function orderSamples(input: readonly StepSample[]): StepSample[] {
     if (list) list.push(s);
     else sessions.set(key, [s]);
   }
-  const groups = [...sessions.values()].map((raw) => {
+  const groups: { boot: number; start: number; list: StepSample[] }[] = [];
+  for (const raw of sessions.values()) {
     const byElapsed = raw.every(hasElapsed);
     raw.sort((a, b) => (byElapsed ? a.elapsed - b.elapsed : 0) || a.ts - b.ts || a.counter - b.counter);
     // One boot clock, one wall clock: the latest reading's clock is the most likely right one (network time is set by
@@ -134,12 +140,14 @@ export function orderSamples(input: readonly StepSample[]): StepSample[] {
     const list = ref == null ? raw : raw.map((s) => (Math.abs(s.ts - s.elapsed - ref) > CLOCK_SLACK_MS ? { ...s, ts: ref + s.elapsed } : s));
     const unique: StepSample[] = [];
     for (const s of list) {
+      if (s.ts < MIN_PLAUSIBLE_TS) continue; // a reset clock nothing could re-anchor
       const last = unique[unique.length - 1];
       if (last && last.ts === s.ts && last.counter === s.counter && last.elapsed === s.elapsed) continue;
       unique.push(s);
     }
-    return { boot: knownBoot(unique[0]) ? unique[0].boot : -1, start: ref ?? Math.min(...unique.map((s) => s.ts)), list: unique };
-  });
+    if (!unique.length) continue;
+    groups.push({ boot: knownBoot(unique[0]) ? unique[0].boot : -1, start: ref ?? Math.min(...unique.map((s) => s.ts)), list: unique });
+  }
   const byBootNumber = groups.every((g) => g.boot >= 0);
   groups.sort((a, b) => (byBootNumber ? a.boot - b.boot : 0) || a.start - b.start);
   return groups.flatMap((g) => g.list);

@@ -8,7 +8,6 @@ import { addDays, safeTimeZone } from '@/lib/alarms/schedule';
 import { ApiError, errorMessage } from '@/lib/api';
 import { firstName, useAuth, useSignedInUser } from '@/lib/auth';
 import { dayStartMs } from '@/lib/steps/counter';
-import { useStepsReadingDate } from '@/lib/steps/useSteps';
 import { colors, gutter, radii, spacing } from '@/theme';
 import { Button, GlassCard, Icon, Screen, Text, useTabBarSpace } from '@/ui';
 
@@ -57,16 +56,23 @@ export default function Today() {
     const sub = AppState.addEventListener('change', (s) => s === 'active' && syncToday());
     return () => sub.remove();
   }, [syncToday]);
-  // Midnight while Today stays open: move to the new day (the steps card would otherwise keep showing yesterday).
+  // Midnight while Today stays open: move to the new day (the steps card would otherwise keep showing yesterday's
+  // saved count under a Live pill). Re-armed after every hop, so a long wait is split into ≤ 6 h steps.
   useEffect(() => {
-    const ms = dayStartMs(addDays(today, 1), safeTimeZone(tz)) - Date.now();
-    const t = setTimeout(syncToday, Math.max(1_000, Math.min(ms + 1_000, 6 * 3_600_000)));
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      const ms = dayStartMs(addDays(todayInTz(tz), 1), safeTimeZone(tz)) - Date.now();
+      t = setTimeout(
+        () => {
+          syncToday();
+          arm();
+        },
+        Math.max(1_000, Math.min(ms + 1_000, 6 * 3_600_000))
+      );
+    };
+    arm();
     return () => clearTimeout(t);
-  }, [today, tz, syncToday]);
-  const stepsDay = useStepsReadingDate();
-  useEffect(() => {
-    if (stepsDay && stepsDay > today) syncToday();
-  }, [stepsDay, today, syncToday]);
+  }, [tz, syncToday]);
 
   const q = useTodayDashboard(date);
   const data = q.data;

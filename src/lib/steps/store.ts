@@ -98,14 +98,6 @@ export function updateDayRecord(userId: string, date: string, patch: Partial<Day
   changed();
 }
 
-/** Remember the server's count for a day from a real read — only when it differs. */
-export function noteServerSteps(userId: string, date: string, steps: number) {
-  if (!Number.isFinite(steps) || steps < 0) return;
-  const rec = getDayRecord(userId, date);
-  if (rec?.server === steps) return;
-  updateDayRecord(userId, date, { server: steps, serverAt: Date.now() });
-}
-
 /** A past day's final count was saved (it is no longer read). */
 export function markDayFinal(userId: string, date: string) {
   if (getDayRecord(userId, date)?.final) return;
