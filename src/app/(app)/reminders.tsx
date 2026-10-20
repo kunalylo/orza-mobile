@@ -154,7 +154,7 @@ export default function Reminders() {
 
       {/* Up next */}
       <Animated.View entering={enter(1)}>
-        <GlassCard tone="dark" glow padding={spacing.xl} style={styles.section}>
+        <GlassCard tone="hero" glow padding={spacing.xl} style={styles.section}>
           <View style={styles.heroOrb} pointerEvents="none">
             <Orb size={120} tone="dark" orbits={false} paused={reduceMotion} />
           </View>

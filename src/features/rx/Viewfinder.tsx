@@ -139,10 +139,11 @@ const styles = StyleSheet.create({
   dim: { backgroundColor: 'rgba(7,9,12,0.55)' },
   lineWrap: { position: 'absolute', left: 0, right: 0, top: 0, height: 64, justifyContent: 'center' },
   line: { height: 2, marginHorizontal: spacing.md, borderRadius: 1, backgroundColor: colors.cyan300, boxShadow: '0px 0px 12px rgba(47,210,240,0.9)' },
+  // Inside the top-left corner mark: at the frame's edge it sat on the mark, whose lines showed through the glass.
   badge: {
     position: 'absolute',
-    top: spacing.md,
-    left: spacing.md,
+    top: 24,
+    left: 24,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,

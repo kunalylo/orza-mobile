@@ -36,9 +36,10 @@ export function explainPhotoPermission(e: PhotoPermissionError) {
 
 /**
  * Pick up to `max` photos and prepare each as an upload data URL. Shows friendly messages itself and returns
- * only the photos that worked ([] on cancel or refusal).
+ * only the photos that worked ([] on cancel or refusal). `onPrepare` fires once photos were picked and are being
+ * resized — not while the camera / picker is still open, so "Preparing…" never shows for a photo not chosen yet.
  */
-export async function pickUploadPhotos(source: PhotoSource, max: number): Promise<string[]> {
+export async function pickUploadPhotos(source: PhotoSource, max: number, onPrepare?: () => void): Promise<string[]> {
   if (max <= 0) return [];
   let picked;
   try {
@@ -48,6 +49,7 @@ export async function pickUploadPhotos(source: PhotoSource, max: number): Promis
     else toast.error(source === 'camera' ? "We couldn't open the camera. Please try again." : "We couldn't open your photos. Please try again.");
     return [];
   }
+  if (picked.length) onPrepare?.();
   const out: string[] = [];
   for (const p of picked) {
     try {

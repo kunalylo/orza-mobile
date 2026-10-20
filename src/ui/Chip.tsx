@@ -80,7 +80,7 @@ export function Tag({ label, tone = 'neutral', icon, dot, style }: TagProps) {
     <View style={[styles.tag, { backgroundColor: c.bg, borderColor: c.border }, style]}>
       {dot ? <View style={[styles.dot, { backgroundColor: c.fg }]} /> : null}
       {icon ? <Icon name={icon} size={12} color={c.fg} /> : null}
-      <Text variant="eyebrow" color={c.fg} style={styles.tagText} numberOfLines={1}>
+      <Text variant="eyebrow" color={c.fg} style={styles.tagText} numberOfLines={2}>
         {label}
       </Text>
     </View>
@@ -112,7 +112,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 9,
     paddingVertical: 4,
+    // Never wider than its row: a long status ("Snoozed until 12:40 pm" beside a dose photo) wraps inside the pill
+    // instead of running past the card's edge.
+    maxWidth: '100%',
   },
-  tagText: { fontSize: 10, lineHeight: 13, letterSpacing: 1.1 },
+  tagText: { fontSize: 10, lineHeight: 13, letterSpacing: 1.1, flexShrink: 1 },
   dot: { width: 6, height: 6, borderRadius: 3 },
 });

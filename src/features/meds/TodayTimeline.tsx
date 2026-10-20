@@ -3,6 +3,7 @@
  * and Take · Snooze 10 min · Skip (or "Taken early" / "Take after all").
  */
 import { router } from 'expo-router';
+import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 
@@ -10,7 +11,7 @@ import { colors, fonts, radii, spacing } from '@/theme';
 import { Button, Icon, IconButton, PressableScale, Skeleton, Tag, Text } from '@/ui';
 
 import { MedPhoto } from './MedPhoto';
-import { doseKey, formatTime12, medicineTitle, SNOOZE_MINUTES, STATUS_META, statusDetail, TIMING_LABEL } from './shared';
+import { clockIn, doseKey, formatTime12, medicineTitle, SNOOZE_MINUTES, STATUS_META, statusDetail, TIMING_LABEL } from './shared';
 import type { DoseAction, DoseItem } from './types';
 
 export function TimelineSkeleton() {
@@ -37,7 +38,12 @@ export function TimelineSkeleton() {
   );
 }
 
-function DoseActions({ dose, pending, onAct }: { dose: DoseItem; pending?: DoseAction; onAct: (a: DoseAction) => void }) {
+/**
+ * Take · Snooze · Skip wrap on a narrow card: Take and Snooze share the first line (growing to fill it), Skip and the
+ * optional `trailing` control (the full-screen alarm button, pushed to the right) the next — instead of three lone
+ * buttons stacked one per line beside a separate icon column.
+ */
+function DoseActions({ dose, pending, onAct, trailing }: { dose: DoseItem; pending?: DoseAction; onAct: (a: DoseAction) => void; trailing?: ReactNode }) {
   const busy = !!pending;
   if (dose.status === 'due' || dose.status === 'missed' || dose.status === 'snoozed') {
     return (
@@ -51,7 +57,7 @@ function DoseActions({ dose, pending, onAct }: { dose: DoseItem; pending?: DoseA
           disabled={busy}
           onPress={() => onAct('take')}
           accessibilityLabel={`Take ${dose.name}`}
-          style={styles.takeBtn}
+          style={[styles.takeBtn, styles.grow]}
         />
         <Button
           label={`Snooze ${SNOOZE_MINUTES} min`}
@@ -62,6 +68,7 @@ function DoseActions({ dose, pending, onAct }: { dose: DoseItem; pending?: DoseA
           disabled={busy}
           onPress={() => onAct('snooze')}
           accessibilityLabel={`Snooze ${dose.name} for ${SNOOZE_MINUTES} minutes`}
+          style={styles.grow}
         />
         <Button
           label="Skip"
@@ -73,6 +80,7 @@ function DoseActions({ dose, pending, onAct }: { dose: DoseItem; pending?: DoseA
           onPress={() => onAct('skip')}
           accessibilityLabel={`Skip ${dose.name}`}
         />
+        {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
       </View>
     );
   }
@@ -111,6 +119,12 @@ function DoseActions({ dose, pending, onAct }: { dose: DoseItem; pending?: DoseA
   return null;
 }
 
+/** The status pill: like `statusDetail`, but "Snoozed · 5:40 pm" — the long form didn't fit beside the photo. */
+function statusTag(dose: DoseItem, tz: string): string {
+  if (dose.status === 'snoozed' && dose.snooze_until) return `Snoozed · ${clockIn(tz, new Date(dose.snooze_until))}`;
+  return statusDetail(dose, tz);
+}
+
 export function DoseRow({ dose, tz, pending, onAct, linkToMedicine = true }: { dose: DoseItem; tz: string; pending?: DoseAction; onAct: (d: DoseItem, a: DoseAction) => void; linkToMedicine?: boolean }) {
   const meta = STATUS_META[dose.status];
   const done = dose.status === 'taken' || dose.status === 'skipped';
@@ -135,7 +149,7 @@ export function DoseRow({ dose, tz, pending, onAct, linkToMedicine = true }: { d
           {dose.dose}
         </Text>
         <View style={styles.tags}>
-          <Tag label={statusDetail(dose, tz)} tone={meta.tone} dot />
+          <Tag label={statusTag(dose, tz)} tone={meta.tone} dot />
           {dose.timing !== 'any' ? <Tag label={TIMING_LABEL[dose.timing]} tone="warning" /> : null}
           {dose.for_person ? <Tag label={`For ${dose.for_person}`} tone="violet" /> : null}
         </View>
@@ -160,21 +174,23 @@ export function DoseRow({ dose, tz, pending, onAct, linkToMedicine = true }: { d
         info
       )}
       {dose.status === 'taken' ? null : (
-        <View style={styles.actionRow}>
-          <View style={styles.flex}>
-            <DoseActions dose={dose} pending={pending} onAct={(a) => onAct(dose, a)} />
-          </View>
-          {dose.status === 'due' || dose.status === 'snoozed' ? (
-            <IconButton
-              icon="maximize-2"
-              variant="plain"
-              size={38}
-              iconSize={16}
-              accessibilityLabel={`Open the full-screen alarm for ${dose.name}`}
-              onPress={() => router.push({ pathname: '/alarm', params: { med: dose.medication_id, at: dose.scheduled_for } })}
-            />
-          ) : null}
-        </View>
+        <DoseActions
+          dose={dose}
+          pending={pending}
+          onAct={(a) => onAct(dose, a)}
+          trailing={
+            dose.status === 'due' || dose.status === 'snoozed' ? (
+              <IconButton
+                icon="maximize-2"
+                variant="plain"
+                size={38}
+                iconSize={16}
+                accessibilityLabel={`Open the full-screen alarm for ${dose.name}`}
+                onPress={() => router.push({ pathname: '/alarm', params: { med: dose.medication_id, at: dose.scheduled_for } })}
+              />
+            ) : null
+          }
+        />
       )}
     </Animated.View>
   );
@@ -274,7 +290,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  actionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   takeBtn: { minWidth: 88 },
+  grow: { flexGrow: 1 },
+  trailing: { marginLeft: 'auto' },
 });

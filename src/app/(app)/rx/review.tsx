@@ -438,11 +438,12 @@ export default function PrescriptionReview() {
                   setEdited(true);
                   if (formError?.field === 'for_person') setFormError(null);
                 }}
-                placeholder="e.g. Mom — leave empty if they're yours"
+                // Short placeholder: the long one wrapped inside the one-line field and lost its end ("…if they're / yours").
+                placeholder="e.g. Mom, Papa"
                 maxLength={40}
                 autoCapitalize="words"
                 error={formError?.field === 'for_person' ? formError.message : null}
-                hint={rx?.patient_name ? `The prescription names ${rx.patient_name}.` : undefined}
+                hint={rx?.patient_name ? `The prescription names ${rx.patient_name}. Leave empty if they're yours.` : "Leave empty if they're yours."}
                 containerStyle={styles.forField}
                 icon="user"
               />

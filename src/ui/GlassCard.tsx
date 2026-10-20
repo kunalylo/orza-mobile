@@ -1,16 +1,21 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { useId, type ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import type { HapticKind } from '@/lib/haptics';
-import { colors, radii, shadows, spacing } from '@/theme';
+import { colors, gradients, radii, shadows, spacing } from '@/theme';
 
 import { PressableScale } from './PressableScale';
 
 export interface GlassCardProps extends Omit<ViewProps, 'style'> {
   children?: ReactNode;
-  /** `default` frosted white, `strong` more opaque, `dark` for the hero, `energy` warm-tinted. */
-  tone?: 'default' | 'strong' | 'dark' | 'energy';
+  /**
+   * `default` frosted white, `strong` more opaque, `energy` warm-tinted. `hero` is the solid dark ÖRZA hero surface for
+   * light pages; `dark` is translucent glass for screens that already sit on the dark hero backdrop (it is nearly
+   * invisible on a light page — white text on cream).
+   */
+  tone?: 'default' | 'strong' | 'dark' | 'hero' | 'energy';
   /** A soft warm glow in the top-right corner (like the web's plan cards). */
   glow?: boolean;
   padding?: number;
@@ -44,6 +49,7 @@ export function GlassCard({ children, tone = 'default', glow, padding = spacing.
   const surface = [styles.base, toneStyle[tone], { padding, borderRadius: radius }, style];
   const content = (
     <>
+      {tone === 'hero' ? <LinearGradient colors={gradients.hero} style={StyleSheet.absoluteFill} pointerEvents="none" /> : null}
       {glow ? <CornerGlow id={glowId} /> : null}
       {children}
     </>
@@ -66,6 +72,7 @@ const toneStyle = StyleSheet.create({
   default: { backgroundColor: colors.glass, borderColor: colors.hairline, ...shadows.glass },
   strong: { backgroundColor: colors.glassSolid, borderColor: colors.hairline, ...shadows.glass },
   dark: { backgroundColor: colors.heroGlass, borderColor: colors.heroGlassBorder },
+  hero: { backgroundColor: colors.hero, borderColor: 'rgba(255,255,255,0.08)', ...shadows.floating },
   energy: { backgroundColor: colors.energyBg, borderColor: 'rgba(255,122,106,0.22)', ...shadows.glass },
 });
 

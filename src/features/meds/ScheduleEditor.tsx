@@ -247,12 +247,15 @@ export function ScheduleEditor({ value, onChange, today, error }: { value: Sched
 
       <View style={styles.summary} accessibilityLiveRegion="polite">
         {'schedule' in preview ? (
-          <Text variant="small" tone="muted">
+          // Eyebrow on its own line: nested inside the sentence its smaller line height squeezed the wrapped lines.
+          <>
             <Text variant="eyebrow" tone="subtle">
-              Summary ·{' '}
+              Summary
             </Text>
-            {scheduleSummary({ schedule: preview.schedule, as_needed: d.as_needed }, today)}
-          </Text>
+            <Text variant="small" tone="muted" style={styles.summaryText}>
+              {scheduleSummary({ schedule: preview.schedule, as_needed: d.as_needed }, today)}
+            </Text>
+          </>
         ) : (
           <Text variant="small" tone="error">
             {preview.error}
@@ -271,8 +274,9 @@ export function ScheduleEditor({ value, onChange, today, error }: { value: Sched
         title={timeIndex === -1 ? 'Add an alarm time' : 'Alarm time'}
         onClose={() => setTimeIndex(null)}
         onSubmit={(t) => {
-          if (timeIndex === -1) set({ times: [...d.times, t] });
-          else if (timeIndex != null) set({ times: d.times.map((x, j) => (j === timeIndex ? t : x)) });
+          // Kept in clock order (and without repeats) so the pills read like the day: 5:00 pm · 5:15 pm · 9:00 pm.
+          const next = timeIndex === -1 ? [...d.times, t] : timeIndex != null ? d.times.map((x, j) => (j === timeIndex ? t : x)) : d.times;
+          set({ times: [...new Set(next)].sort() });
         }}
       />
       <DatePickerSheet
@@ -364,4 +368,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.glassSolid,
   },
   summary: { paddingHorizontal: spacing.md, paddingVertical: spacing.md, borderRadius: radii.sm, backgroundColor: 'rgba(255,255,255,0.6)' },
+  summaryText: { marginTop: 2 },
 });

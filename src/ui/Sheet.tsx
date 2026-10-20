@@ -68,6 +68,8 @@ export function Sheet(props: SheetProps) {
   return <SheetModal {...props} onHidden={onHidden} />;
 }
 
+const dbg = (m: string) => console.log(m);
+
 function SheetModal({
   visible,
   onClose,
@@ -125,6 +127,7 @@ function SheetModal({
   }, [initialFocus]);
 
   useEffect(() => {
+    console.log('DBG sheet effect', title, visible);
     if (visible) {
       drag.set(0);
       progress.set(reduceMotion ? withTiming(1, { duration: motion.fast }) : withSpring(1, motion.springSoft));
@@ -134,6 +137,7 @@ function SheetModal({
       Keyboard.dismiss();
       progress.set(
         withTiming(0, { duration: reduceMotion ? motion.fast : motion.base }, (finished) => {
+          scheduleOnRN(dbg, `DBG sheet hide done ${String(finished)}`);
           if (finished) scheduleOnRN(onHidden);
         }),
       );

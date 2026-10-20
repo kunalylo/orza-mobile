@@ -35,7 +35,7 @@ export function EmptyState({ title, body, icon, eyebrow, actionLabel, onAction, 
           {eyebrow}
         </Text>
       ) : null}
-      <Text variant="h3" align="center" accessibilityRole="header">
+      <Text variant="h3" align="center" accessibilityRole="header" style={styles.title}>
         {title}
       </Text>
       {body ? (
@@ -62,6 +62,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   eyebrow: { marginBottom: spacing.sm },
+  // Full width, not shrink-wrapped by the centred column: Android measures Playfair with negative letter spacing a
+  // hair narrower than it draws, so a shrink-wrapped one-line title wrapped its last word onto a clipped second line
+  // ("No medicines yet" showed as "No medicines").
+  title: { alignSelf: 'stretch' },
   body: { marginTop: spacing.sm, maxWidth: 340 },
   action: { marginTop: spacing.xl, alignSelf: 'center' },
 });

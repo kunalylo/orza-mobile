@@ -86,7 +86,12 @@ export function RowEditorSheet({
   if (!draft) return null;
   const update = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch });
   const times = [...draft.times].filter(isHHMM).sort();
-  const pattern = activeQuickPattern({ as_needed: draft.as_needed, times });
+  // The pattern the member tapped (TDS) wins over the first one with the same times (1-1-1).
+  const tapped = QUICK_PATTERNS.find((q) => q.key === draft.frequency_text);
+  const pattern =
+    tapped && (tapped.as_needed ? draft.as_needed : !draft.as_needed && [...(tapped.times ?? [])].sort().join(',') === times.join(','))
+      ? tapped.key
+      : activeQuickPattern({ as_needed: draft.as_needed, times });
 
   const { daysText, savedTimes: _savedTimes, ...base } = draft;
   const daysNum = daysText.trim() ? Number(daysText) : undefined;
@@ -133,7 +138,10 @@ export function RowEditorSheet({
 
   const setSos = (on: boolean) => {
     haptics.select();
-    if (on) update({ as_needed: true, times: [], frequency_text: draft.frequency_text || 'SOS', savedTimes: times.length ? times : draft.savedTimes });
+    // A pattern this editor filled in (1-0-1 on a typed medicine) would read "As written · 1-0-1" on an SOS row; what
+    // the doctor actually wrote (a scanned "1 tab if fever") is kept.
+    const wasPattern = !draft.frequency_text || QUICK_PATTERNS.some((q) => q.key === draft.frequency_text);
+    if (on) update({ as_needed: true, times: [], frequency_text: wasPattern ? 'SOS' : draft.frequency_text, savedTimes: times.length ? times : draft.savedTimes });
     else {
       // Back to the times it had (or was scanned with) before it was marked SOS.
       const back = times.length ? times : draft.savedTimes?.length ? draft.savedTimes : row?.times.filter(isHHMM).length ? [...row.times] : ['08:00'];

@@ -5,7 +5,7 @@
  */
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, StyleSheet, Switch, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 
@@ -142,6 +142,8 @@ export default function EditMedicine() {
   const [initFor, setInitFor] = useState<string | null>(current?.id ?? null);
   const [newPhotos, setNewPhotos] = useState<PhotoItem[]>([]);
   const [photoBusy, setPhotoBusy] = useState(false);
+  /** A camera / photo picker is open — one at a time (a second tap while it opens would stack another). */
+  const picking = useRef(false);
   const [errors, setErrors] = useState<Errors>({});
   const [exit, setExit] = useState(false);
 
@@ -191,14 +193,17 @@ export default function EditMedicine() {
 
   async function addPhotos(source: PhotoSource) {
     const room = maxPhotos - photoItems.length;
-    if (room <= 0) return;
-    setPhotoBusy(true);
+    if (room <= 0 || picking.current || photoBusy) return;
+    picking.current = true;
     try {
-      const images = await pickUploadPhotos(source, room);
+      const images = await pickUploadPhotos(source, room, () => setPhotoBusy(true));
       if (!images.length) return;
       if (editing && current) {
+        // Only the first photo rings on alarms (a prescription stand-in counts as no photo).
+        const firstPhoto = !current.photo_ids.length || current.uses_prescription_photo;
         for (const image of images) await photos.add.mutateAsync({ id: current.id, image });
-        toast.success(images.length === 1 ? 'Photo added — alarms show it' : `${images.length} photos added`);
+        const added = images.length === 1 ? 'Photo added' : `${images.length} photos added`;
+        toast.success(firstPhoto ? `${added} — alarms show ${images.length === 1 ? 'it' : 'the first one'}` : added);
       } else {
         setNewPhotos((p) => [...p, ...images.map((url, i) => ({ id: `new-${Date.now()}-${i}`, url }))].slice(0, MAX_PHOTOS_ON_CREATE));
         haptics.success();
@@ -207,6 +212,7 @@ export default function EditMedicine() {
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
+      picking.current = false;
       setPhotoBusy(false);
     }
   }

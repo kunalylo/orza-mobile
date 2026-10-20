@@ -262,8 +262,13 @@ export function useDoseActions(date: string, tz: string) {
     writes.inFlight += 1;
     doseWrites.set(date, writes);
     // The pressed Button already gave a tap; confirm with a success / soft tick once the server agrees.
+    // Optimistic row in the same render as the pending state — waiting for cancelQueries first showed a spinner on the
+    // old row for over a second on a slow phone before "Taken" appeared. A cancelled GET puts the cache back to how it
+    // was when that GET started, so the row is applied again once the cancel has settled.
+    const optimistic = withAction(d, action);
+    replaceDose(key, optimistic);
     await qc.cancelQueries({ queryKey: medsKeys.today(date) });
-    replaceDose(key, withAction(d, action));
+    replaceDose(key, optimistic);
     try {
       const log = await medsApi.dose(d, action);
       // The alarm engine keeps the confirmed log (a failed refetch can't lose it) and drops older queued presses.

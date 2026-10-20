@@ -84,7 +84,7 @@ export default function PrescriptionDone() {
       <ScreenHeader back large={false} eyebrow="Care · Prescriptions" title="Alarms are set" />
 
       <Animated.View entering={FadeInDown.delay(40).springify().damping(16).stiffness(100).mass(1)}>
-        <GlassCard tone="dark" glow padding={spacing.xl} style={styles.hero}>
+        <GlassCard tone="hero" glow padding={spacing.xl} style={styles.hero}>
           <EnergyRing progress={1} size={92} stroke={8} palette="success" trackColor="rgba(255,255,255,0.12)" accessibilityLabel="Done">
             <Animated.View entering={ZoomIn.delay(380).springify().damping(12).stiffness(100).mass(1)}>
               <Icon name="check" size={34} color={colors.white} />

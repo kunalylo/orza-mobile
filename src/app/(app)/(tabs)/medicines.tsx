@@ -26,7 +26,7 @@ const openScan = () => router.push('/rx');
 
 function ScanHero() {
   return (
-    <GlassCard tone="dark" glow padding={spacing.xl} style={styles.hero}>
+    <GlassCard tone="hero" glow padding={spacing.xl} style={styles.hero}>
       <View style={styles.heroOrb} pointerEvents="none">
         <Orb size={110} tone="dark" orbits={false} />
       </View>
@@ -186,9 +186,11 @@ export default function Medicines() {
                 <DashedNote
                   title="No doses scheduled today"
                   body={
-                    medsList.some((m) => m.active && !m.as_needed)
-                      ? 'Nothing is due today on your current schedules. Enjoy the day.'
-                      : 'Medicines with alarm times will show up here with Take, Snooze and Skip.'
+                    filter !== 'all'
+                      ? 'Nothing is scheduled today for this person. Choose Everyone to see all doses.'
+                      : medsList.some((m) => m.active && !m.as_needed)
+                        ? 'Nothing is due today on your current schedules. Enjoy the day.'
+                        : 'Medicines with alarm times will show up here with Take, Snooze and Skip.'
                   }
                 />
               ) : (
@@ -201,7 +203,8 @@ export default function Medicines() {
           <Animated.View entering={FadeInDown.delay(160).springify().damping(18).stiffness(100).mass(1)}>
             <GlassCard padding={spacing.lg} style={styles.section}>
               <Text variant="eyebrow" tone="subtle" style={styles.cardEyebrow}>
-                Last 7 days
+                {/* Adherence comes for all medicines together — say so while the list is filtered to one person. */}
+                {filter === 'all' ? 'Last 7 days' : 'Last 7 days · everyone'}
               </Text>
               {adherence.data ? (
                 <AdherenceStrip data={adherence.data} today={today} />

@@ -5,7 +5,7 @@
 import { router, useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useState } from 'react';
-import { Alert, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
 
 import { useAiStatus } from '@/features/meals/api';
@@ -147,7 +147,13 @@ export default function PrescriptionScan() {
 
             {scanning ? (
               <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.reading} accessibilityLiveRegion="polite">
-                <Button label="Reading your prescription…" variant="energy" size="lg" block loading />
+                {/* Not a loading Button: that hides its label, so the wait read as a bare spinner on an orange bar. */}
+                <View style={styles.readingPill} accessibilityRole="progressbar" accessibilityLabel="Reading your prescription">
+                  <ActivityIndicator color={colors.energyInk} />
+                  <Text variant="title" color={colors.energyInk}>
+                    Reading your prescription…
+                  </Text>
+                </View>
                 <Text variant="caption" tone="muted" align="center">
                   Usually 10–30 seconds. Handwriting can take a little longer.
                 </Text>
@@ -260,6 +266,18 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(11,143,166,0.22)',
   },
   reading: { gap: spacing.sm },
+  readingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: 56,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.pill,
+    backgroundColor: colors.energyBg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,122,106,0.22)',
+  },
   actions: { gap: spacing.sm },
   row: { flexDirection: 'row', gap: spacing.sm },
   manual: { alignSelf: 'center' },
