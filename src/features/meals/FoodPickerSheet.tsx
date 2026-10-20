@@ -122,12 +122,6 @@ export function FoodPickerSheet({
     return () => clearTimeout(t);
   }, [q]);
 
-  // Focus the search box once the sheet has sprung up (not when arriving with a phrase to look at).
-  useEffect(() => {
-    if (!visible || initialQuery) return;
-    const t = setTimeout(() => searchRef.current?.focus(), 380);
-    return () => clearTimeout(t);
-  }, [visible, initialQuery]);
 
   const search = useFoodSearch(tab === 'search' && visible ? term : '');
   const results = search.data ?? [];
@@ -216,7 +210,17 @@ export function FoodPickerSheet({
     ) : undefined;
 
   return (
-    <Sheet visible={visible} onClose={onClose} eyebrow="Food list · always free" title="Add from food list" full footer={footer} dismissible={!saving}>
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      eyebrow="Food list · always free"
+      title="Add from food list"
+      full
+      footer={footer}
+      dismissible={!saving}
+      // The search box, keyboard up — not when arriving with a phrase to look at.
+      initialFocus={initialQuery ? undefined : searchRef}
+    >
       <Segmented
         accessibilityLabel="How to add food"
         size="sm"

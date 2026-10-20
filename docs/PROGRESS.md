@@ -405,3 +405,8 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   note all checked (3 small fixes from it); the sampler itself needs the real-phone checklist in the notes. Dev note:
   the 10.0.2.2 Metro blank screen recurred → `adb reverse` + `localhost:8081` (README, `adb.sh app_start`). Next: D1
   resumes (today-meals …) and the real-phone steps checks.
+- 2026-10-20: **Auto steps done + pushed** (`59bad40`): 20 review fixes, steps tests 66/66, native `orza-steps` compiles, emulator-verified
+  permission flow / card states / manual fallback / offline / local-server save. Unverified (needs a real Android phone): live counting +
+  background sampler (the emulator has no TYPE_STEP_COUNTER). Planned next for reliability: Google's Recording API on mobile (Play services
+  `LocalRecordingClient`, background step recording without a foreground service) as the primary Android phone source, our sampler as
+  fallback. Dev note: Metro over 10.0.2.2:8081 can still blank-screen → `adb reverse` + localhost:8081 (`adb.sh app_start`). D1 resumes.

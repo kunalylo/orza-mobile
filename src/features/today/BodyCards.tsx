@@ -4,7 +4,7 @@
  * a counted day ("edit": the number becomes the day's base, steps counted after it add on — `@/lib/steps/policy`).
  * Wording and validation follow the web's StepsCard / WeightCard.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type TextInput } from 'react-native';
 
 import { ApiError, errorMessage } from '@/lib/api';
@@ -43,20 +43,6 @@ function fieldMessage(e: unknown, field: string): string | null {
   return null;
 }
 
-/**
- * Raise the keyboard once the sheet has sprung up. With `autoFocus` the field was focused before the sheet's Modal
- * window had focus on Android: it looked focused, but no keyboard came up until it was tapped again.
- */
-function useFocusWhenShown(visible: boolean) {
-  const ref = useRef<TextInput>(null);
-  useEffect(() => {
-    if (!visible) return undefined;
-    const t = setTimeout(() => ref.current?.focus(), 380);
-    return () => clearTimeout(t);
-  }, [visible]);
-  return ref;
-}
-
 /* ───────────────────────────── Steps (typing fallback) ───────────────────────────── */
 
 export function StepsSheet({
@@ -80,7 +66,8 @@ export function StepsSheet({
   const isToday = date === today;
   // Saved through the step sync: the member's number stays the day's count (counting adds on top, never overwrites).
   const log = useLogSteps(date, today);
-  const fieldRef = useFocusWhenShown(visible);
+  // The sheet focuses it (keyboard up) once it is on screen.
+  const fieldRef = useRef<TextInput>(null);
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [wasVisible, setWasVisible] = useState(visible);
@@ -130,6 +117,7 @@ export function StepsSheet({
       visible={visible}
       onClose={onClose}
       eyebrow="Steps"
+      initialFocus={fieldRef}
       title={mode === 'edit' ? (isToday ? "Edit today's steps" : `Edit steps · ${relativeDay(date, today)}`) : isToday ? "Today's steps" : `Steps · ${relativeDay(date, today)}`}
       dismissible={!log.isPending}
       footer={<Button label="Save steps" icon="check" variant="energy" block loading={log.isPending} disabled={!input.trim()} onPress={save} haptic="none" />}
@@ -156,6 +144,8 @@ export function StepsSheet({
         placeholder={steps > 0 ? formatNumber(steps) : 'e.g. 6500'}
         keyboardType="number-pad"
         returnKeyType="done"
+        // Keep the keyboard on "done": a number that doesn't pass stays in the field to fix (the sheet closes on save).
+        submitBehavior="submit"
         onSubmitEditing={save}
         maxLength={7}
         error={error}
@@ -278,7 +268,8 @@ export function WeightSheet({
 }) {
   const isToday = date === today;
   const log = useLogWeight(date);
-  const fieldRef = useFocusWhenShown(visible);
+  // The sheet focuses it (keyboard up) once it is on screen.
+  const fieldRef = useRef<TextInput>(null);
   const unit = info.imperial ? 'lb' : 'kg';
   const current = currentWeight(info);
   const [input, setInput] = useState('');
@@ -324,6 +315,7 @@ export function WeightSheet({
       visible={visible}
       onClose={onClose}
       eyebrow="Weight"
+      initialFocus={fieldRef}
       title={isToday ? "Today's weigh-in" : `Weigh-in · ${relativeDay(date, today)}`}
       dismissible={!log.isPending}
       footer={<Button label="Save weight" icon="check" variant="primary" block loading={log.isPending} disabled={!input.trim()} onPress={save} haptic="none" />}
@@ -350,6 +342,8 @@ export function WeightSheet({
         placeholder={current != null ? String(kgToDisplay(current, info.imperial)) : info.imperial ? 'e.g. 154' : 'e.g. 70.5'}
         keyboardType="decimal-pad"
         returnKeyType="done"
+        // Keep the keyboard on "done": a number that doesn't pass stays in the field to fix (the sheet closes on save).
+        submitBehavior="submit"
         onSubmitEditing={save}
         maxLength={6}
         error={error}

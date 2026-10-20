@@ -111,6 +111,8 @@ function CalendarSheet({
   for (let i = 0; i < lead; i++) cells.push(null);
   for (let d = 1; d <= days; d++) cells.push(`${view.y}-${pad(view.m)}-${pad(d)}`);
   while (cells.length % 7) cells.push(null);
+  const weeks: (string | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
 
   const shift = (delta: number) => {
     haptics.select();
@@ -129,41 +131,48 @@ function CalendarSheet({
         </Text>
         <IconButton icon="chevron-right" variant="glass" size={38} accessibilityLabel="Next month" disabled={atMax} onPress={() => shift(1)} haptic="none" />
       </View>
-      <View style={styles.grid}>
-        {WEEK_LETTERS.map((w, i) => (
-          <View key={`w${i}`} style={styles.cell} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            <Text variant="eyebrow" tone="subtle">
-              {w}
-            </Text>
+      {/* One row per week (cells flex: 1) in one block: a single wrapping row of 1/7-width cells broke after six on Android. */}
+      <View>
+        <View style={styles.week}>
+          {WEEK_LETTERS.map((w, i) => (
+            <View key={`w${i}`} style={styles.cell} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              <Text variant="eyebrow" tone="subtle">
+                {w}
+              </Text>
+            </View>
+          ))}
+        </View>
+        {weeks.map((week, wi) => (
+          <View key={`wk${wi}`} style={styles.week}>
+            {week.map((d, i) => {
+              if (!d) return <View key={`e${i}`} style={styles.cell} />;
+              const future = d > today;
+              const selected = d === value;
+              const isToday = d === today;
+              const dayNum = Number(d.slice(8));
+              const weekday = WEEK_NAMES[new Date(`${d}T00:00:00Z`).getUTCDay()];
+              return (
+                <View key={d} style={styles.cell}>
+                  <Pressable
+                    disabled={future}
+                    onPress={() => onPick(d)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected, disabled: future }}
+                    accessibilityLabel={`${weekday} ${dayNum} ${MONTHS_LONG[view.m - 1]}${isToday ? ', today' : ''}`}
+                    style={({ pressed }) => [styles.day, isToday && !selected && styles.dayToday, pressed && styles.pressed, future && styles.dayFuture]}
+                  >
+                    {selected ? (
+                      <LinearGradient colors={gradients.energy} start={diagonal.start} end={diagonal.end} style={[StyleSheet.absoluteFill, styles.dayFill]} />
+                    ) : null}
+                    <Text variant="label" weight={selected || isToday ? 'bold' : 'medium'} color={selected ? colors.white : future ? colors.subtle : colors.ink}>
+                      {dayNum}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })}
           </View>
         ))}
-        {cells.map((d, i) => {
-          if (!d) return <View key={`e${i}`} style={styles.cell} />;
-          const future = d > today;
-          const selected = d === value;
-          const isToday = d === today;
-          const dayNum = Number(d.slice(8));
-          const weekday = WEEK_NAMES[new Date(`${d}T00:00:00Z`).getUTCDay()];
-          return (
-            <View key={d} style={styles.cell}>
-              <Pressable
-                disabled={future}
-                onPress={() => onPick(d)}
-                accessibilityRole="button"
-                accessibilityState={{ selected, disabled: future }}
-                accessibilityLabel={`${weekday} ${dayNum} ${MONTHS_LONG[view.m - 1]}${isToday ? ', today' : ''}`}
-                style={({ pressed }) => [styles.day, isToday && !selected && styles.dayToday, pressed && styles.pressed, future && styles.dayFuture]}
-              >
-                {selected ? (
-                  <LinearGradient colors={gradients.energy} start={diagonal.start} end={diagonal.end} style={[StyleSheet.absoluteFill, styles.dayFill]} />
-                ) : null}
-                <Text variant="label" weight={selected || isToday ? 'bold' : 'medium'} color={selected ? colors.white : future ? colors.subtle : colors.ink}>
-                  {dayNum}
-                </Text>
-              </Pressable>
-            </View>
-          );
-        })}
       </View>
       <Text variant="caption" tone="subtle" align="center" style={styles.note}>
         You can look back at any day — new meals are added to the day you pick.
@@ -196,8 +205,8 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.6 },
   monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  cell: { width: `${100 / 7}%`, aspectRatio: 1, maxHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  week: { flexDirection: 'row' },
+  cell: { flex: 1, height: 46, alignItems: 'center', justifyContent: 'center' },
   day: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   dayFill: { borderRadius: 20 },
   dayToday: { borderWidth: 1.5, borderColor: colors.coral },

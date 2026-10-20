@@ -12,8 +12,8 @@
  * The parent owns `visible`; the sheet animates out before it unmounts. Pass `scroll={false}` when the child is
  * its own list (FlatList) and `full` to use the full height even with little content (search results).
  */
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type TextInput } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -51,6 +51,12 @@ export interface SheetProps {
   closeButton?: boolean;
   /** Screen-reader label for the sheet (defaults to the title). */
   accessibilityLabel?: string;
+  /**
+   * A field to focus, keyboard up, once the sheet is on screen (use this, not `autoFocus` or a timer). Android: a field
+   * focused before the sheet's Modal window has focus looks focused but brings no keyboard — and `focus()` is a no-op
+   * while it already counts as focused — so the sheet waits for the Modal's `onShow` and re-focuses if no keyboard came.
+   */
+  initialFocus?: RefObject<TextInput | null>;
 }
 
 export function Sheet(props: SheetProps) {
@@ -77,6 +83,7 @@ function SheetModal({
   onBlockedDismiss,
   closeButton,
   accessibilityLabel,
+  initialFocus,
 }: SheetProps & { onHidden: () => void }) {
   const reduceMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
@@ -89,6 +96,33 @@ function SheetModal({
 
   // The keyboard is this sheet's while it is mounted — the screen below must not make room for it (see sheetKeyboard).
   useEffect(() => holdSheetKeyboard(), []);
+
+  // `initialFocus`: focus once the Modal is shown; on Android retry (blur + focus) while no keyboard has come up.
+  const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const open = useRef(visible);
+  useEffect(() => {
+    open.current = visible;
+  }, [visible]);
+  useEffect(
+    () => () => {
+      if (focusTimer.current) clearTimeout(focusTimer.current);
+    },
+    [],
+  );
+  const onShow = useCallback(() => {
+    if (!initialFocus) return;
+    let tries = 0;
+    const attempt = () => {
+      focusTimer.current = null;
+      const input = initialFocus.current;
+      if (!input || !open.current || (tries > 0 && Keyboard.isVisible())) return;
+      if (tries > 0 && input.isFocused()) input.blur();
+      input.focus();
+      tries += 1;
+      if (Platform.OS === 'android' && tries < 4) focusTimer.current = setTimeout(attempt, 400);
+    };
+    focusTimer.current = setTimeout(attempt, 50);
+  }, [initialFocus]);
 
   useEffect(() => {
     if (visible) {
@@ -139,7 +173,7 @@ function SheetModal({
   const bottomPad = keyboard > 0 ? keyboard + spacing.md : Math.max(insets.bottom, spacing.lg);
 
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={requestClose}>
+    <Modal visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={requestClose} onShow={onShow}>
       <GestureHandlerRootView style={styles.fill}>
         <Animated.View style={[styles.backdrop, backdropStyle]}>
           <Pressable
