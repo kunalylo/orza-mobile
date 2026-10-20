@@ -247,7 +247,8 @@ export function Viewfinder({
           </Animated.View>
         ) : null}
 
-        <Brackets active={scanning} />
+        {/* On results the confidence chip and the dish name take the corners — the brackets ran through both. */}
+        {showResult ? null : <Brackets active={scanning} />}
       </View>
 
       {children ? <View style={styles.controls}>{children}</View> : null}

@@ -71,6 +71,10 @@ export function Button({
 
   return (
     <PressableScale
+      // A new native view per variant: on Android (Fabric) a rounded `overflow: hidden` view whose border goes away
+      // (secondary → energy / primary) stopped drawing its children — Snap's "Analyse photo" (the reused "Choose from
+      // gallery" button) showed as a blank coral pill with no gradient and no label.
+      key={variant}
       testID={testID}
       onPress={inactive ? undefined : onPress}
       disabled={inactive}

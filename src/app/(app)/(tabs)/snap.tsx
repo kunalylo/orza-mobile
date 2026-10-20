@@ -53,7 +53,8 @@ export default function Snap() {
   const [pastDay, setPastDay] = useState<string | null>(null);
   const [mealType, setMealType] = useState<MealType>(() => guessMealType(tz));
   const [photo, setPhoto] = useState<Photo | null>(null);
-  const [preparing, setPreparing] = useState(false);
+  /** The source being picked / prepared (its button shows the spinner); null = idle. */
+  const [preparing, setPreparing] = useState<PhotoSource | null>(null);
   const [note, setNote] = useState('');
   const [noteError, setNoteError] = useState<string | null>(null);
   const [phase, setPhase] = useState<ScanPhase>('idle');
@@ -65,6 +66,9 @@ export default function Snap() {
 
   const scrollRef = useRef<ScrollView>(null);
   const sideY = useRef(0);
+  /** Until when a move of the side panel re-runs the requested scroll to it (see `scrollToSide`). */
+  const sideScrollUntil = useRef(0);
+  const sideScrollTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const date = pastDay && pastDay < today ? pastDay : today;
   const isToday = date === today;
@@ -97,14 +101,20 @@ export default function Snap() {
   const aiOff = aiStatus?.ai_enabled === false || problem?.kind === 'ai_disabled';
   const scanCost = aiStatus?.costs?.scan ?? FALLBACK_COSTS.scan;
   const scanning = phase === 'scanning';
-  const busy = preparing || scanning;
+  const busy = preparing !== null || scanning;
   const logging = confirmMut.isPending;
 
   const scrollTop = () => scrollRef.current?.scrollTo({ y: 0, animated: !reduce });
+  const scrollToSideNow = () => scrollRef.current?.scrollTo({ y: Math.max(0, sideY.current - spacing.md), animated: !reduce });
   const scrollToSide = () => {
-    // Wait a frame so the new panel has laid out.
-    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, sideY.current - spacing.md), animated: !reduce }));
+    // The panel moves when the controls above it change — results drop the note + Analyse block (~300 dp) — and its
+    // new position arrives a little after the state change: scrolling to the old one opened the review past its dish
+    // name and totals. Scroll now-ish, and again whenever the panel reports a new position during the next second.
+    sideScrollUntil.current = Date.now() + 1000;
+    clearTimeout(sideScrollTimer.current);
+    sideScrollTimer.current = setTimeout(scrollToSideNow, 120);
   };
+  useEffect(() => () => clearTimeout(sideScrollTimer.current), []);
 
   const reset = (keepNote = false) => {
     setPhoto(null);
@@ -120,9 +130,15 @@ export default function Snap() {
 
   /* ─── photo ─── */
 
+  // Synchronous guards: a second tap (or a hardware Enter's key-down + key-up) can arrive before `busy` re-renders —
+  // that would open two pickers, or send the photo twice and spend the scan's credits twice.
+  const picking = useRef(false);
+  const scanSent = useRef(false);
+
   const pick = async (source: PhotoSource) => {
-    if (busy || logging) return;
-    setPreparing(true);
+    if (busy || logging || picking.current) return;
+    picking.current = true;
+    setPreparing(source);
     try {
       const picked = await pickPhotos(source);
       if (!picked.length) return; // cancelled — keep whatever was there
@@ -141,14 +157,17 @@ export default function Snap() {
         toast.error(p.message);
       }
     } finally {
-      setPreparing(false);
+      picking.current = false;
+      setPreparing(null);
     }
   };
 
   /* ─── analyse ─── */
 
   const analyse = () => {
-    if (!photo || busy) return;
+    console.log("[D1-TEMP] analyse", !!photo, busy, scanSent.current);
+    if (!photo || busy || scanSent.current) return;
+    scanSent.current = true;
     setPhase('scanning');
     setProblem(null);
     setNoteError(null);
@@ -177,6 +196,9 @@ export default function Snap() {
           }
           setProblem(scanProblem(e));
           scrollToSide();
+        },
+        onSettled: () => {
+          scanSent.current = false;
         },
       }
     );
@@ -242,10 +264,16 @@ export default function Snap() {
     useCallback(() => {
       if (!reviewing) return;
       const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-        Alert.alert('Discard this scan?', "The items ÖRZA found haven't been logged yet.", [
-          { text: 'Keep reviewing', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: () => discardRef.current() },
-        ]);
+        // Back (or a tap outside) on the dialog keeps the review — the safe choice.
+        Alert.alert(
+          'Discard this scan?',
+          "The items ÖRZA found haven't been logged yet.",
+          [
+            { text: 'Keep reviewing', style: 'cancel' },
+            { text: 'Discard', style: 'destructive', onPress: () => discardRef.current() },
+          ],
+          { cancelable: true }
+        );
         return true;
       });
       return () => sub.remove();
@@ -309,16 +337,24 @@ export default function Snap() {
     controls = (
       <View style={styles.gap}>
         <Button
-          label={preparing ? 'Preparing…' : 'Take photo'}
+          label="Take photo"
           icon="camera"
           variant="energy"
           size="lg"
           block
-          loading={preparing}
+          loading={preparing === 'camera'}
           disabled={aiOff || busy}
           onPress={() => void pick('camera')}
         />
-        <Button label="Choose from gallery" icon="image" variant="secondary" block disabled={aiOff || busy} onPress={() => void pick('library')} />
+        <Button
+          label="Choose from gallery"
+          icon="image"
+          variant="secondary"
+          block
+          loading={preparing === 'library'}
+          disabled={aiOff || busy}
+          onPress={() => void pick('library')}
+        />
       </View>
     );
   } else if (phase === 'ready' || phase === 'scanning') {
@@ -347,14 +383,14 @@ export default function Snap() {
           size="lg"
           block
           loading={scanning}
-          disabled={aiOff || preparing}
+          disabled={aiOff || preparing !== null}
           onPress={analyse}
           haptic="firm"
         />
         <View style={styles.subRow}>
           <View style={styles.subActions}>
-            <Button label="Retake" icon="camera" variant="ghost" size="sm" disabled={busy} onPress={() => void pick('camera')} />
-            <Button label="Gallery" icon="image" variant="ghost" size="sm" disabled={busy} onPress={() => void pick('library')} />
+            <Button label="Retake" icon="camera" variant="ghost" size="sm" loading={preparing === 'camera'} disabled={busy} onPress={() => void pick('camera')} />
+            <Button label="Gallery" icon="image" variant="ghost" size="sm" loading={preparing === 'library'} disabled={busy} onPress={() => void pick('library')} />
           </View>
           <Text variant="caption" tone="subtle" style={styles.credits}>
             {scanning ? 'Usually 5–20 seconds' : `${formatNumber(user.credits)} credits left`}
@@ -413,7 +449,9 @@ export default function Snap() {
         <View
           style={styles.side}
           onLayout={(e) => {
+            const moved = e.nativeEvent.layout.y !== sideY.current;
             sideY.current = e.nativeEvent.layout.y;
+            if (moved && Date.now() < sideScrollUntil.current) scrollToSideNow();
           }}
         >
           <Animated.View key={sideKey(phase, problem, aiOff)} entering={reduce ? undefined : FadeInDown.delay(60).springify().damping(18).stiffness(100).mass(1)}>

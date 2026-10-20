@@ -172,8 +172,8 @@ export function NoCreditsPanel({ onCredits, onLogFree, onRetry }: { onCredits: (
         <>
           <Button label="Get more credits" iconRight="arrow-up-right" onPress={onCredits} block />
           <View style={styles.row}>
-            <Button label="Log it for free" variant="secondary" onPress={onLogFree} style={styles.flex} />
-            {onRetry ? <Button label="Try again" icon="rotate-cw" variant="ghost" onPress={onRetry} style={styles.flex} /> : null}
+            <Button label="Log it for free" variant="secondary" onPress={onLogFree} style={styles.grow} />
+            {onRetry ? <Button label="Try again" icon="rotate-cw" variant="ghost" onPress={onRetry} style={styles.grow} /> : null}
           </View>
         </>
       }
@@ -192,8 +192,8 @@ export function SlowDownPanel({ message, onRetry, onTypeInstead }: { message: st
       title="Let's take a short breather"
       actions={
         <View style={styles.row}>
-          {onRetry ? <Button label="Try again" icon="rotate-cw" onPress={onRetry} style={styles.flex} /> : null}
-          <Button label="Type it instead" variant="secondary" onPress={onTypeInstead} style={styles.flex} />
+          {onRetry ? <Button label="Try again" icon="rotate-cw" onPress={onRetry} style={styles.grow} /> : null}
+          <Button label="Type it instead" variant="secondary" onPress={onTypeInstead} style={styles.grow} />
         </View>
       }
     >
@@ -255,8 +255,8 @@ export function ScanErrorPanel({ message, onRetry, onPickAnother }: { message: s
       title="Let's try that again"
       actions={
         <View style={styles.row}>
-          {onRetry ? <Button label="Try again" icon="rotate-cw" onPress={onRetry} style={styles.flex} /> : null}
-          <Button label="Use another photo" icon="camera" variant={onRetry ? 'secondary' : 'primary'} onPress={onPickAnother} style={styles.flex} />
+          {onRetry ? <Button label="Try again" icon="rotate-cw" onPress={onRetry} style={styles.grow} /> : null}
+          <Button label="Use another photo" icon="camera" variant={onRetry ? 'secondary' : 'primary'} onPress={onPickAnother} style={styles.grow} />
         </View>
       }
     >
@@ -277,8 +277,8 @@ export function LoggedPanel({ meal, onViewLog, onScanAnother }: { meal: Meal; on
       title={`Added to ${MEAL_LABEL[meal.meal_type].toLowerCase()}`}
       actions={
         <View style={styles.row}>
-          <Button label="View meal log" iconRight="arrow-up-right" onPress={onViewLog} style={styles.flex} />
-          <Button label="Scan another" icon="camera" variant="secondary" onPress={onScanAnother} style={styles.flex} />
+          <Button label="View meal log" iconRight="arrow-up-right" onPress={onViewLog} style={styles.grow} />
+          <Button label="Scan another" icon="camera" variant="secondary" onPress={onScanAnother} style={styles.grow} />
         </View>
       }
     >
@@ -301,6 +301,8 @@ export function LoggedPanel({ meal, onViewLog, onScanAnother }: { meal: Meal; on
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
+  /** Buttons sharing a row: equal when both labels fit, otherwise the row wraps (no "Use another p…"). */
+  grow: { flexGrow: 1 },
   tile: { borderRadius: radii.sm, alignItems: 'center', justifyContent: 'center' },
   title: { marginTop: spacing.xs },
   eyebrow: { marginTop: spacing.lg },
