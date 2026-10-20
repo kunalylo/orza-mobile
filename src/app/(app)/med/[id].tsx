@@ -79,7 +79,8 @@ function Carousel({ med, width }: { med: MedicationClient; width: number }) {
           ))}
         </View>
       ) : null}
-      {page === 0 ? (
+      {/* An SOS medicine never rings — no "On alarm" badge on its photo. */}
+      {page === 0 && !med.as_needed ? (
         <View style={styles.onAlarm}>
           <Icon name="bell" size={11} color={colors.white} />
           <Text variant="caption" color={colors.white} style={styles.onAlarmText}>
@@ -186,7 +187,14 @@ export default function MedicineDetail() {
     setActive.mutate(
       { id: med.id, active: !med.active },
       {
-        onSuccess: (m) => toast.success(m.active ? `Reminders for ${m.name} are back on` : `Reminders for ${m.name} paused`),
+        onSuccess: (m) =>
+          toast.success(
+            m.as_needed
+              ? `${m.name} ${m.active ? 'is back on' : 'paused'}`
+              : m.active
+                ? `Reminders for ${m.name} are back on`
+                : `Reminders for ${m.name} paused`
+          ),
         onError: (e) => toast.error(errorMessage(e)),
       }
     );
@@ -391,7 +399,8 @@ export default function MedicineDetail() {
       <View style={styles.actions}>
         <Button label="Edit medicine" icon="edit-3" variant="primary" block onPress={() => router.push({ pathname: '/med/edit', params: { id: med.id } })} />
         <Button
-          label={med.active ? 'Pause reminders' : 'Resume reminders'}
+          // An SOS medicine has no reminders to pause.
+          label={med.as_needed ? (med.active ? 'Pause medicine' : 'Resume medicine') : med.active ? 'Pause reminders' : 'Resume reminders'}
           icon={med.active ? 'pause-circle' : 'play-circle'}
           variant="secondary"
           block

@@ -65,7 +65,8 @@ export default function Medicines() {
   const doses = (todayQ.data?.doses ?? []).filter((d) => matchesPerson(d.for_person, filter));
   const taken = doses.filter((d) => d.status === 'taken').length;
   const dueNow = doses.filter((d) => d.status === 'due').length;
-  const refillCount = medsList.filter(needsRefill).length;
+  // Follows the person filter: under "Mom" a refill note about Papa's medicine pointed at a card that isn't listed.
+  const refillCount = filteredMeds.filter(needsRefill).length;
   const noMeds = meds.isSuccess && medsList.length === 0;
   const year = Number(today.slice(0, 4));
 
@@ -178,7 +179,9 @@ export default function Medicines() {
                 />
               ) : null}
 
-              {todayQ.isPending ? (
+              {/* Wait for the medicine list too: an empty day answered first flashed "No doses scheduled today" before a
+                  member with no medicines saw the "No medicines yet" empty state. */}
+              {todayQ.isPending || (meds.isPending && doses.length === 0) ? (
                 <TimelineSkeleton />
               ) : todayQ.isError && !todayQ.data ? (
                 <ErrorPanel error={todayQ.error} onRetry={() => void todayQ.refetch()} retrying={todayQ.isFetching} />

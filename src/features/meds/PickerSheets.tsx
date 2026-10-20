@@ -172,6 +172,7 @@ export function DatePickerSheet({
   const total = daysInMonth(first);
   const cells: (string | null)[] = [...Array.from({ length: lead }, () => null), ...Array.from({ length: total }, (_, i) => addDaysISO(first, i))];
   while (cells.length % 7) cells.push(null);
+  const weeks = Array.from({ length: cells.length / 7 }, (_, w) => cells.slice(w * 7, w * 7 + 7));
   const canGoBack = !min || shiftMonth(first, -1) >= monthStart(min);
 
   return (
@@ -210,31 +211,37 @@ export function DatePickerSheet({
           </Text>
         ))}
       </View>
-      <View style={styles.calendar}>
-        {cells.map((date, i) =>
-          date ? (
-            <View key={date} style={styles.dayWrap}>
-              <PressableScale
-                haptic="none"
-                disabled={!!min && date < min}
-                onPress={() => {
-                  haptics.select();
-                  setDraft({ ...draft, selected: date });
-                }}
-                accessibilityRole="button"
-                accessibilityState={{ selected: draft.selected === date, disabled: !!min && date < min }}
-                accessibilityLabel={`${formatDateLong(date)}${date === today ? ', today' : ''}`}
-                style={[styles.dayCell, date === today && styles.dayToday, draft.selected === date && styles.cellOn, !!min && date < min && styles.cellDisabled]}
-              >
-                <Text variant="label" color={draft.selected === date ? colors.inverse : colors.ink}>
-                  {Number(date.slice(8))}
-                </Text>
-              </PressableScale>
-            </View>
-          ) : (
-            <View key={`blank-${i}`} style={styles.dayWrap} />
-          )
-        )}
+      {/* One row per week: seven `${100 / 7}%` cells add up to a hair over 100 % and Yoga wrapped the 7th, so every
+          date sat one column off (Tue 20 Oct under FR) and the SU column stayed empty. */}
+      <View>
+        {weeks.map((week, w) => (
+          <View key={`week-${w}`} style={styles.weekRow}>
+            {week.map((date, d) =>
+              date ? (
+                <View key={date} style={styles.dayWrap}>
+                  <PressableScale
+                    haptic="none"
+                    disabled={!!min && date < min}
+                    onPress={() => {
+                      haptics.select();
+                      setDraft({ ...draft, selected: date });
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: draft.selected === date, disabled: !!min && date < min }}
+                    accessibilityLabel={`${formatDateLong(date)}${date === today ? ', today' : ''}`}
+                    style={[styles.dayCell, date === today && styles.dayToday, draft.selected === date && styles.cellOn, !!min && date < min && styles.cellDisabled]}
+                  >
+                    <Text variant="label" color={draft.selected === date ? colors.inverse : colors.ink}>
+                      {Number(date.slice(8))}
+                    </Text>
+                  </PressableScale>
+                </View>
+              ) : (
+                <View key={`blank-${w}-${d}`} style={styles.dayWrap} />
+              )
+            )}
+          </View>
+        ))}
       </View>
       <View style={styles.quick}>
         <Button
@@ -272,8 +279,8 @@ const styles = StyleSheet.create({
   monthBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   week: { flexDirection: 'row', marginBottom: spacing.xs },
   weekDay: { flex: 1 },
-  calendar: { flexDirection: 'row', flexWrap: 'wrap' },
-  dayWrap: { width: `${100 / 7}%`, padding: 2 },
+  weekRow: { flexDirection: 'row' },
+  dayWrap: { flex: 1, padding: 2 },
   dayCell: { minHeight: 44, borderRadius: radii.sm, alignItems: 'center', justifyContent: 'center' },
   dayToday: { borderWidth: 1, borderColor: colors.cyan },
   quick: { flexDirection: 'row', justifyContent: 'center', marginTop: spacing.sm },

@@ -91,6 +91,24 @@ Safety gate SAFE again. Cases 22–30 below were reconstructed from the screensh
 | 34 | Pattern chips with the keyboard up (just typed the strength) | FIXED | the first tap on 0-0-1 / TDS only dismissed the keyboard (kbd 0, pattern unchanged — reproduced with the prop removed) — bug 19; the nested horizontal chip ScrollView now has `keyboardShouldPersistTaps="handled"` → one tap selects BD / 0-0-1 with the keyboard still up |
 | 35 | Manual: Dolo 650 mg TDS (8:00 am · 2:00 pm · 9:00 pm), After food, 3 days; Cetirizine 10 mg SOS; edit a row (rename Cet → Cetirizine, 10 mg); doctor Dr. Rao; prescription photo from the gallery (thumb + "kept with this prescription" note); for "Mom" → Create alarms (2) → loading → "2 medicines added · 1 of them will ring" | PASS | mr145–mr152. Server: Rx doctor Dr. Rao, media set, status applied, TDS/SOS frequency_text; Dolo times 08:00/14:00/21:00 after_food end 2026-10-22, for Mom; Cetirizine as_needed, times [], for Mom; both photo_ids = the Rx photo. "As written · TDS / SOS" on the rows (bugs 14/15 verified) |
 | 36 | Done → Add pill photo (Dolo) → Edit Dolo with the prescription stand-in + "Showing your prescription for now" → gallery pill box → Preparing… → "Photo added — alarms show it", stand-in replaced (server photo_ids = 1 new id) → Save changes → back on Done, Dolo shows its photo | PASS / FIXED (polish) | mr153–mr155. With the stand-in the grid said "Up to 7 photos" (the stand-in's slot), then "Up to 6" after — bug 18; now "Up to 6" throughout (`shownMax`) |
+| 37 | History after the manual Rx: "Dr. Rao · 20 Oct · 2 medicines · ALARMS CREATED" above Dr. Anjali Mehta → detail sheet (photo, both medicines with times / SOS, Delete / See medicines) | PASS | mr157, mr158 |
+| 38 | Delete prescription → "Delete this prescription? Medicines created from it keep their alarms." → Delete → gone from the list; server: prescription removed, Cetirizine/Dolo kept, the shared photo media kept | PASS | mr159, mr160 |
+| 39 | Mehta detail → See medicines → Medicines tab (Everyone / Me / Mom / Papa chips) | PASS | mr161 |
+| 40 | Today timeline with the Rx medicines: Metformin 6:30 pm MISSED, Glimepiride 9:00 pm due (Rx photo), Metformin 9:00 pm due, Amlodipine 10:00 pm upcoming ("Taken early"); Dolo's 9:00 pm not listed (added 9:31 pm — the server drops doses > 30 min before a medicine was created, by design) | PASS | mr162–mr165 |
+| 41 | Take Glimepiride 9:00 pm → "Taken at 9:37 pm" in the next frame (mr166, 0.4 s), toast, adherence 0 % → 33 %; server dose_log af36…:15:30Z taken | PASS | mr166, mr167 |
+| 42 | Person filter Mom: Today "No doses scheduled today — Nothing is scheduled today for this person", "Last 7 days · everyone", Mom's Cetirizine + Dolo | PASS / FIXED (polish) | mr168–mr170: "1 medicine needs a refill soon." showed under Mom about Papa's Metformin (not in the list) — bug 20; the note now counts the filtered medicines (gone under Mom, shown under Papa — mr176) |
+| 43 | SOS medicine detail (Cetirizine): "MEDICINE · FOR MOM", SOS + FOR MOM tags, "Only when needed (SOS) · no alarms", Started / Ongoing, no Today / History cards | PASS / FIXED (polish) | mr171: the photo carried an "On alarm" badge and the button said "Pause reminders" for a medicine that never rings — bug 21; badge hidden for SOS, button "Pause medicine" / "Resume medicine" (toast "Cetirizine paused") |
+| 44 | Delete medicine → "Delete Cetirizine? This deletes the medicine, its photos and its dose history." → Keep it (still there) → Delete again → Yes, delete → spinner → toast "Cetirizine deleted" → Medicines (Mom filter kept, only Dolo) | PASS | mr172–mr174; server: medication gone, its photo media deleted |
+| 45 | Offline: Prescriptions screen shows the cached history; Upload → photo → "Read prescription · 2 credits" → at once "You're offline — Can't reach ÖRZA right now…" with "Type the medicines instead" / "Try again" (no credits spent) | PASS | mr177–mr180 |
+| 46 | Back online → Try again (AI call 2) → "Reading your prescription…" pill with spinner + "Usually 10–30 seconds" (bug 12 verified) → review with the same 3 medicines | PASS | mr181, mr182 |
+| 47 | Back from an untouched review → no prompt, capture screen; the scan is listed as "NEEDS REVIEW" → detail sheet (Delete / Review & create alarms) → Review → untick a row → back → "Discard this review? … The scan stays under Your prescriptions" → Discard | PASS | mr183–mr186 |
+| 48 | Delete the unapplied scan → "This removes the scan and its photo." → Delete → gone (server: only the applied Rx left) | PASS | mr187 |
+| 49 | Manual: the auto-opened sheet has the keyboard up; add "Testmed" → remove it (trash) → empty note "Add each medicine from your prescription…" + "Create alarms" disabled | PASS | — |
+| 50 | Start alarms from → date sheet | FIXED | mr188: the calendar wrapped after 6 days — every date one column off (Tue 20 Oct under FR, 4 Oct under MO) and the SU column empty — bug 22. Seven `${100/7}%` cells sum to a hair over 100 % so Yoga wrapped the 7th; now one row per week with flex: 1 cells (PickerSheets.tsx, also the medicine start/end date pickers). mr189: 1 Oct under TH, 4 under SU, 20 under TU. Pick Thu 22 → Set date → "Thursday, 22 October" |
+| 51 | Start over with edits → "Discard this review? The medicines you typed haven't been saved." → Discard → capture screen | PASS | mr190 |
+| 52 | Pause reminders on Pantoprazole (opened via deep link orza://med/<id>) → spinner → toast "Reminders for Pantoprazole paused", PAUSED tag, "Resume reminders"; server active false → Resume → active true | PASS | mr191–mr193 |
+| 53 | Amlodipine 10:00 pm upcoming → "Taken early" → "Taken at 9:51 pm" at once, toast, adherence 2 of 4; server dose_log 16:30Z taken; the next-alarm card moves on to "8:00 am tomorrow · Dolo 650 mg + 2 more" | PASS | mr197–mr201 |
+| 54 | Cold start → Medicines tab: Today card shows the skeleton until both the doses and the medicine list are in | FIXED (polish) | case 2 noted a flash of "No doses scheduled today" before "No medicines yet" on an empty account — bug 23; the skeleton now also waits for the medicine list. mr200/mr201: no regression with medicines (the empty-account flash was not re-filmed) |
 
 ### Bugs (resume 2)
 
@@ -112,3 +130,28 @@ Safety gate SAFE again. Cases 22–30 below were reconstructed from the screensh
     member-facing limit at 6 (src/features/meds/PhotoGrid.tsx, src/app/(app)/med/edit.tsx).
 19. FIXED — Row editor pattern chips ignored the first tap while the keyboard was up (nested horizontal ScrollView
     without keyboardShouldPersistTaps) (RowEditorSheet).
+20. FIXED (polish) — Medicines tab: the refill note counted every medicine while the list was filtered to one person
+    (src/app/(app)/(tabs)/medicines.tsx).
+21. FIXED (polish) — SOS medicine detail: "On alarm" badge on the photo and "Pause reminders" for a medicine that never
+    rings; badge hidden, "Pause medicine" / "Resume medicine" + matching toast (src/app/(app)/med/[id].tsx).
+22. FIXED — Date picker (Rx "Start alarms from", medicine start / until dates): seven `${100 / 7}%` day cells summed to a
+    hair over 100 % so Yoga wrapped every 7th day — dates sat one weekday off and the SU column was empty (mr188). Now one
+    row per week with flex: 1 cells (src/features/meds/PickerSheets.tsx).
+23. FIXED (polish) — Medicines tab: Today card skeleton also waits for the medicine list, so an empty account no longer
+    flashes "No doses scheduled today" before the "No medicines yet" empty state (src/app/(app)/(tabs)/medicines.tsx).
+### Not changed (reported)
+
+- Backend: 7/30-day adherence and medicine history are rebuilt from the *current* schedule of *active* medicines
+  (`/api/meds/adherence` → `dosesBetween`). Moving Metformin from 17:00/17:15 to 18:30/21:00 made today's two taken
+  doses vanish (dose_logs …T11:30Z / …T11:45Z still "taken"; adherence then read "0 of 3", mr162/mr163); pausing or
+  deleting a medicine drops its past doses the same way.
+- Backend (by design, noted): doses more than 30 min before a medicine was created are not listed (Dolo added 9:31 pm →
+  no 9:00 pm dose today).
+- Other screens (not meds-rx): `MealComposer` meal-type chip row and the Reminders preset row are horizontal ScrollViews
+  without `keyboardShouldPersistTaps` (same first-tap-only-dismisses-the-keyboard pattern as bug 19, if a field is focused).
+- Minor, left: the edit form's photo grid still shows "On alarm" on an SOS medicine's first photo; a prescription photo
+  attached during manual entry can't be removed or replaced before Create alarms; "NEEDS REVIEW" sits inline while the
+  longer "ALARMS CREATED" wraps to its own line in the history list; "Discard this review? The medicines you typed…"
+  also shows when only the start date changed.
+- Emulator artefacts: `keyevent 111` (ESC) inside a sheet both hides the keyboard and asks "Discard changes?" (a real
+  back press only hides the keyboard); Gboard runs as a floating stylus toolbar that can cover the right edge of a sheet.
