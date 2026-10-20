@@ -1,14 +1,23 @@
 /** Health screen note: steps now count by themselves on Today (this phone, or the health store when it has more). */
 import { router } from 'expo-router';
+import { useSyncExternalStore } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import type { HealthPlatform } from '@/lib/health/types';
+import { getStepsState, subscribeStepsState } from '@/lib/steps/sync';
 import { colors, spacing } from '@/theme';
 import { Button, GlassCard, Icon, Text } from '@/ui';
 
 export function StepsAutoCard({ platform, connected }: { platform: HealthPlatform; connected: boolean }) {
-  const body =
-    platform === 'android'
+  // The phone's own counter as of the last steps read (null: not checked yet → the usual text).
+  const phoneAvailable = useSyncExternalStore(subscribeStepsState, () => getStepsState().access?.phoneAvailable ?? null);
+  const store = platform === 'ios' ? 'Apple Health' : 'Health Connect';
+  const noCounter = phoneAvailable === false && platform !== 'none';
+  const body = noCounter
+    ? connected
+      ? `This phone has no step counter, so Today counts your steps from ${store} (a watch or a fitness app writes them there) and saves them for you.`
+      : `This phone has no step counter. Connect ${store} above and Today counts your steps from it (a watch or a fitness app) — or log them on Today.`
+    : platform === 'android'
       ? connected
         ? 'Today counts your steps live with this phone’s step counter and Health Connect — whichever counted more (a watch, Samsung Health, Google Fit) — and saves them for you. No typing needed.'
         : 'Today counts your steps live with this phone’s step counter and saves them for you — no typing needed. Connect Health Connect above to include a watch or other fitness apps.'

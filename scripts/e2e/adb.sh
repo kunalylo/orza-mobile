@@ -35,9 +35,12 @@ wait_text() {
   while [ $i -lt "$s" ]; do _dump | grep -qF -- "$t" && return 0; sleep 1; i=$((i+1)); done
   echo "wait_text: '$t' not seen in ${s}s" >&2; return 1
 }
+# Metro through `adb reverse` (localhost:8081): loading the bundle over 10.0.2.2:8081 can fail with a chunked-encoding
+# ProtocolException (blank screen). The API still goes to 10.0.2.2:3100 (run the safety gate first).
 app_start() {
+  "$A" reverse tcp:8081 tcp:8081 >/dev/null
   "$A" shell am force-stop in.co.ylo.orza
-  "$A" shell am start -a android.intent.action.VIEW -d "exp+orza://expo-development-client/?url=http%3A%2F%2F10.0.2.2%3A8081" in.co.ylo.orza >/dev/null
+  "$A" shell am start -a android.intent.action.VIEW -d "exp+orza://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081" in.co.ylo.orza >/dev/null
 }
 app_logs() { "$A" logcat -d -s ReactNativeJS:V | tail -"${1:-40}"; }
 # PC-side paths must be Windows paths for adb.exe (MSYS path conversion is off for the device-side /sdcard paths).

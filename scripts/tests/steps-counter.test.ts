@@ -687,6 +687,32 @@ describe('save — one day against the server', () => {
     assert.equal(f.record(D)?.server, 4_000);
   });
 
+  test('typed LOWER today with nothing counting: the day is that number, and counting that starts later builds on it', async () => {
+    forgetServerObservations();
+    const f = fakeSync(ist(D, '12:00'), { [D]: 1_200 });
+    f.days.set(D, 900); // the sheet's POST
+    applyManualSteps(f.deps, f.userId, D, 900, D, null);
+    assert.equal(f.record(D)?.base, undefined, 'not frozen: nothing was counting');
+    assert.equal(f.record(D)?.sent, 900);
+    f.advance(H);
+    // Health Connect gets connected and has the whole day: its higher count is saved.
+    await saveDay(f.deps, f.userId, { date: D, steps: 5_000, source: 'health_connect', complete: false }, true);
+    assert.equal(f.days.get(D), 5_000);
+  });
+
+  test('typed today, then this phone starts counting mid-day: its steps add on top of the typed number', async () => {
+    forgetServerObservations();
+    const f = fakeSync(ist(D, '12:00'));
+    f.days.set(D, 900);
+    applyManualSteps(f.deps, f.userId, D, 900, D, null);
+    f.advance(H);
+    const partialFrom = f.now();
+    await saveDay(f.deps, f.userId, phoneDay(0, { partialFrom }), true);
+    f.advance(H);
+    await saveDay(f.deps, f.userId, phoneDay(700, { partialFrom }), true);
+    assert.equal(f.days.get(D), 1_600);
+  });
+
   test('offline: retried later (false); a refusal a retry won’t fix is not retried (true)', async () => {
     forgetServerObservations();
     const f = fakeSync(ist(D, '12:00'));

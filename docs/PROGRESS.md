@@ -389,3 +389,19 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   steps** workflow `orza-mobile-auto-steps` (run `wf_fc8a83eb-b97`): iOS HealthKit / CMPedometer, Android Health Connect / native step-counter
   sampler (`modules/orza-steps`), pure tested day math, Today card, auto-save via POST /api/track/steps (no backend change). D1 resumes after
   it (today-meals task now includes auto steps).
+- 2026-10-20: **Auto steps — review fixed + emulator test** (`bc9bf2b` build, WIP `a51733d`/`cbcc07d`, then this commit;
+  details `docs/notes/steps-fix-and-device-test.md`). 18 review findings (N1–N7 native, F1–F11 JS), all confirmed and
+  fixed: midnight samples exact with "Alarms & reminders" else an inexact chain whose worst case lands before midnight;
+  reboot decided by the boot clock, not BOOT_COUNT; runtime ACTION_SHUTDOWN receiver; unprotected QUICKBOOT only
+  re-arms; samples in `noBackupFilesDir` (never backed up / transferred) via AtomicFile; periodic spacing by App Standby
+  bucket (medicine alarms keep their quota); reads wait for the sensor flush; the server is read right before every
+  save (never Today's cache); the member's own number (website / another phone / the card's new "Edit") becomes the
+  day's base and counting adds on; permission flow never waits on saves; past days final only when read to their end
+  (7 days back); long-gap estimates not saved for today; boot order by BOOT_COUNT + wall clock re-anchored; mid-day
+  start on top of a typed count; sign-out race; Today offline + across midnight. New `save.ts` (I/O injected) +
+  `plan.ts`; manual saves serialised with the automatic queue. Checks: typecheck ✓, lint ✓, test:alarms 34/34 ✓,
+  test:steps 66/66 ✓. Native rebuild compiles (orza-steps Kotlin). Emulator Medium_Phone has NO step counter: no-sensor
+  state, typing fallback → local server, permission prompt / denied / blocked → Settings → granted, offline card, Health
+  note all checked (3 small fixes from it); the sampler itself needs the real-phone checklist in the notes. Dev note:
+  the 10.0.2.2 Metro blank screen recurred → `adb reverse` + `localhost:8081` (README, `adb.sh app_start`). Next: D1
+  resumes (today-meals …) and the real-phone steps checks.

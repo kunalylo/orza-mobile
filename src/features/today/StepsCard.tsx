@@ -104,9 +104,18 @@ export function StepsCard({
   const progress = target > 0 ? value / target : 0;
   const reached = target > 0 && value >= target;
   const pct = Math.round(Math.min(progress, 9.99) * 100);
-  const source = SOURCE[shown.source];
-  const sourceLabel =
-    shown.source === 'saved' ? (value > 0 ? (isToday ? 'Saved earlier today' : 'Saved for this day') : isToday ? 'Not counted yet' : 'No steps saved') : source.label;
+  // No automatic source on this phone (no step counter / web) and none reading today: the member logs steps.
+  const noCounter = !!access && !access.phoneAvailable && !live;
+  const store = steps.platform === 'ios' ? 'Apple Health' : 'Health Connect';
+  let source = SOURCE[shown.source];
+  let sourceLabel = source.label;
+  if (shown.source === 'saved') {
+    if (value > 0) sourceLabel = manual ? (isToday ? 'Logged today' : 'Logged for this day') : isToday ? 'Saved earlier today' : 'Saved for this day';
+    else {
+      sourceLabel = manual ? (isToday ? 'Not logged yet' : 'No steps logged') : isToday ? 'Not counted yet' : 'No steps saved';
+      source = { ...source, icon: isToday && !manual ? 'clock' : 'circle' };
+    }
+  }
 
   // A gentle tick when the live count crosses the goal while Today is open (not when switching days).
   const prev = useRef<{ date: string; value: number } | null>(null);
@@ -130,6 +139,13 @@ export function StepsCard({
   } else if (isToday && live?.estimated && shown.source === 'phone')
     status = `${toGo} · about ${formatNumber(live.estimated)} of these are estimated from hours the phone couldn’t check.`;
   else if (isToday && counting) status = `${toGo} · updates on its own`;
+  else if (isToday && noCounter && value === 0)
+    status =
+      steps.platform === 'none'
+        ? 'Log your steps here — the ÖRZA phone app counts them by itself.'
+        : steps.healthConnected
+          ? `This phone has no step counter, and ${store} has no steps for today yet — log them here.`
+          : `This phone has no step counter. Log your steps here, or connect ${store} to count them automatically.`;
   else if (isToday) status = value > 0 ? `${formatNumber(target - value)} to go` : 'A short walk after meals is a great place to start.';
   else status = value > 0 ? `${formatNumber(target - value)} short of the goal` : 'No steps for this day.';
 
@@ -199,7 +215,21 @@ export function StepsCard({
         </View>
       ) : null}
 
-      {manual && onLog ? <Button label="Log steps" variant="ghost" size="sm" icon="edit-3" onPress={() => onLog('log', value)} style={styles.log} /> : null}
+      {manual && onLog ? (
+        <View style={styles.actions}>
+          <Button label="Log steps" variant="ghost" size="sm" icon="edit-3" onPress={() => onLog('log', value)} />
+          {isToday && noCounter && !steps.healthConnected && steps.platform !== 'none' ? (
+            <Button
+              label={`Use ${store}`}
+              variant="ghost"
+              size="sm"
+              iconRight="arrow-up-right"
+              onPress={() => router.push('/health')}
+              accessibilityHint={`Counts your steps from ${store} instead`}
+            />
+          ) : null}
+        </View>
+      ) : null}
       {editable && onLog ? (
         <Button
           label={isToday ? 'Not right? Edit' : 'Edit'}
@@ -313,7 +343,7 @@ function StepsPermissionSheet({ visible, onClose, steps }: { visible: boolean; o
       )}
       {!steps.healthConnected && steps.platform !== 'none' ? (
         <Button
-          label={`Wear a watch? Connect ${store}`}
+          label={`Wear a watch? Use ${store}`}
           variant="ghost"
           size="sm"
           iconRight="arrow-up-right"
@@ -338,6 +368,7 @@ const styles = StyleSheet.create({
   status: { marginTop: spacing.md },
   cta: { gap: spacing.sm, marginTop: spacing.lg },
   log: { alignSelf: 'flex-start', marginTop: spacing.sm },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
   live: {
     flexDirection: 'row',
     alignItems: 'center',

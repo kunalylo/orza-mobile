@@ -24,6 +24,9 @@ web test server (`E:\aylo\orza-localtest`, port 3100): create `.env.local` with 
 (Android emulator; iOS simulator: `http://localhost:3100`), start Metro with `npx expo start --dev-client --clear`, and
 check the bundle carries the local origin before signing in. Android dev builds set `expo-build-properties`
 `android.networkInspector: false` (the dev-client network inspector corrupted Metro's chunked bundle → blank screen).
+If the blank screen still happens over `10.0.2.2:8081` (`ProtocolException: Expected leading [0-9a-fA-F] character`
+in logcat), load the bundle through adb instead: `adb reverse tcp:8081 tcp:8081` and open the dev client with
+`url=http://localhost:8081` (re-run `adb reverse` whenever adb reconnects; the API stays on `10.0.2.2:3100`).
 
 EAS: project `@kunal_ylo/orza`. Profiles in `eas.json`: `development` (dev client, internal APK), `development-simulator`,
 `preview` (internal APK), `production` (store; AAB on Android). `npx eas-cli@latest build --profile <name> --platform android|ios`.

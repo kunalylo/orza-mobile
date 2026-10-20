@@ -149,18 +149,19 @@ export async function saveDay(deps: SaveDeps, userId: string, day: DaySteps, isT
 }
 
 /**
- * The member typed the day's steps on this phone (the Edit / Log sheet) and the server took `steps`. On a past day,
- * with a count running today (`live`), or lower than what the day already had, it becomes the day's base: the
- * member's number, plus steps counted after it today (lower than the automatic count too — a bus ride counted as
- * walking). A count typed today with nothing counting is a plain save (counting that starts later adds on top of it).
+ * The member typed the day's steps on this phone (the Edit / Log sheet) and the server took `steps`. On a past day, or
+ * with a count running today (`live`), it becomes the day's base: the member's number, plus steps counted after it
+ * today (lower than the automatic count too — a bus ride counted as walking). Typed today with nothing counting, it is
+ * a plain save, lower too: counting that starts later builds on it (a phone counter starting mid-day adds on top — a
+ * START base; a health store's whole-day count replaces it once higher).
  */
 export function applyManualSteps(deps: SaveDeps, userId: string, date: string, steps: number, today: string, live: AutoCount | null) {
   const n = clampSteps(steps);
   const now = deps.now();
   observeServerSteps(userId, date, n, now);
-  if (date !== today || live || n < knownFloor(deps.getRecord(userId, date))) {
+  if (date !== today || live) {
     acceptEdit(deps, userId, date, n, live);
     return;
   }
-  deps.updateRecord(userId, date, { server: n, serverAt: now });
+  deps.updateRecord(userId, date, { base: undefined, sent: n, sentAt: now, sentSource: 'saved', server: n, serverAt: now });
 }
