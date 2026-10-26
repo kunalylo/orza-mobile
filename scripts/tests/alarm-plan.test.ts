@@ -266,6 +266,7 @@ describe('doses', () => {
     );
     assert.equal(s1[0].at, ist('2026-10-15', '08:12') + 100);
     assert.equal(s1[0].doses?.length, 2);
+    assert.match(s1[0].body, /snoozed from 8:00 am$/);
     // Snoozed 3 minutes apart: two re-rings, one per medicine.
     const apart = planAlarms({
       now,

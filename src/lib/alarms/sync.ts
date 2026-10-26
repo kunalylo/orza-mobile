@@ -267,8 +267,31 @@ export async function checkAlarmsOnForeground(): Promise<void> {
   if (isDirty() || Date.now() - (state.lastSyncAt ?? 0) > FOREGROUND_THROTTLE_MS) {
     requestAlarmSync('foreground', { delayMs: 800 });
   } else if (pendingDoseActions(userId).length) {
-    void flushDoseQueue({ userId, queryClient: foreground?.queryClient ?? null });
+    void flushDoseQueue({ userId, queryClient: foreground?.queryClient ?? null }).then((r) => {
+      if (r.kept > 0) retryQueuedActions(userId);
+    });
   }
+}
+
+/**
+ * Presses still queued after a send (offline, ÖRZA unreachable) are sent again every 30 s while the app is open: there
+ * is no network listener, so coming back online alone sent nothing — an alarm answered offline with the app left open
+ * stayed unknown to ÖRZA (and to the family on the website) until the app went to the background and back.
+ * Stops when the queue is empty, the app leaves the front or the member signs out (the next foreground sends them).
+ */
+const QUEUE_RETRY_MS = 30_000;
+let queueRetry: ReturnType<typeof setTimeout> | null = null;
+
+function retryQueuedActions(userId: string): void {
+  if (queueRetry || foreground?.user.id !== userId || AppState.currentState !== 'active') return;
+  queueRetry = setTimeout(() => {
+    queueRetry = null;
+    const app = foreground;
+    if (app?.user.id !== userId || AppState.currentState !== 'active' || !pendingDoseActions(userId).length) return;
+    void flushDoseQueue({ userId, queryClient: app.queryClient }).then((r) => {
+      if (r.kept > 0) retryQueuedActions(userId);
+    });
+  }, QUEUE_RETRY_MS);
 }
 
 /**
@@ -389,6 +412,8 @@ export function resetAlarmEngine(): void {
   lastStatusKey = null;
   lastTz = null;
   inAppSnoozes.clear();
+  if (queueRetry) clearTimeout(queueRetry);
+  queueRetry = null;
   dirty.all = false;
   dirty.lists = false;
   dirty.dates.clear();
@@ -454,7 +479,8 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
     const native = await alarmAdapter.takeNativeActions().catch((): NativeAlarmAction[] => []);
     if (stale()) return result({ ok: false, skipped: 'stale', scheduled: 0 });
     if (native.length) enqueueDoseActions(userId, openNativeActions(userId, native).map(fromNative));
-    await flushDoseQueue({ userId, queryClient });
+    const flushed = await flushDoseQueue({ userId, queryClient });
+    if (flushed.kept > 0) retryQueuedActions(userId);
 
     // 2. Can this phone ring alarms at all? A status that can't be read right now changes nothing: the alarms and the
     //    last declaration stay (taking it for "not allowed" would cancel every alarm).

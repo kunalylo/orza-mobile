@@ -9,7 +9,7 @@
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
 import { useMedications, useMedsTimezone } from '@/features/meds/api';
 import { MedPhoto } from '@/features/meds/MedPhoto';
@@ -107,6 +107,9 @@ function FullCard({ browserCount = 0 }: { browserCount?: number }) {
   const tz = useMedsTimezone();
   const test = useTestAlarm();
   const [asking, setAsking] = useState(false);
+  // No layout transition with Reduce Motion: Reanimated then leaves the rows where they were when the header above
+  // grows (the tag "On" → "On · check" wraps the title) and they overlap the description.
+  const reduceMotion = useReducedMotion();
   const { status, engine, native } = s;
   const nextDose = engine.next.find((n) => n.ring);
   const nextOther = engine.next.find((n) => !n.ring);
@@ -149,7 +152,7 @@ function FullCard({ browserCount = 0 }: { browserCount?: number }) {
       />
 
       {s.supported && status ? (
-        <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.checks}>
+        <Animated.View layout={reduceMotion ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.checks}>
           {/* Next alarm */}
           {s.ready ? (
             nextDose ? (

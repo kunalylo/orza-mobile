@@ -4,7 +4,7 @@
  */
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
 import { MedPhoto } from '@/features/meds/MedPhoto';
 import { clockIn, formatTime12, SNOOZE_MINUTES, statusDetail, TIMING_INSTRUCTION } from '@/features/meds/shared';
@@ -14,6 +14,15 @@ import { Button, Icon, PressableScale, Text, type IconName } from '@/ui';
 
 import type { HandledDose } from './api';
 import { PhotoCarousel } from './PhotoCarousel';
+
+/**
+ * The cards' layout transition — none with Reduce Motion: Reanimated then leaves a card where it was when the one above
+ * it leaves (the second medicine of a two-medicine alarm stayed at the bottom, over "Already handled").
+ */
+function useCardLayout() {
+  const reduceMotion = useReducedMotion();
+  return reduceMotion ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1);
+}
 
 /** "Take 1 tablet" when the dose reads as an amount, else "Take now". */
 function takeLabel(dose: string): string {
@@ -74,11 +83,12 @@ export function AlarmDoseCard({
 }) {
   const busy = !!pending;
   const timing = TIMING_INSTRUCTION[dose.timing];
+  const layout = useCardLayout();
   return (
     <Animated.View
       entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}
       exiting={FadeOut.duration(180)}
-      layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
+      layout={layout}
       style={[styles.card, primary && styles.cardPrimary]}
     >
       <PhotoCarousel
@@ -175,11 +185,12 @@ export function HandledDoseRow({ dose, tz }: { dose: HandledDose; tz: string }) 
   const kind = dose.gone ? 'gone' : dose.status === 'taken' ? 'taken' : dose.status === 'skipped' ? 'skipped' : 'snoozed';
   const meta = DONE_META[kind];
   const detail = dose.gone ? 'No longer on its schedule' : statusDetail(dose, tz);
+  const layout = useCardLayout();
   return (
     <Animated.View
       entering={FadeIn.duration(220)}
       exiting={FadeOut.duration(160)}
-      layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
+      layout={layout}
       style={styles.done}
       accessible
       accessibilityLabel={`${dose.name}${dose.strength ? ` ${dose.strength}` : ''}: ${detail}`}

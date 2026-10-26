@@ -314,7 +314,8 @@ const alarmPath = (scheduledFor: string, medId?: string) =>
 /** The re-ring of snoozed doses of one scheduled time. */
 function snoozeItem(key: string, at: number, scheduledFor: string, doses: AlarmDose[], meds: Map<string, PlanMedication>): AlarmPlanItem {
   const item = doseItem(key, at, doses, meds, alarmPath(scheduledFor, doses.length === 1 ? doses[0].medId : undefined));
-  if (doses.length === 1) item.body = `${item.body} · snoozed from ${time12(doses[0].localTime)}`;
+  // Every dose of one re-ring has the same scheduled time: say it's the snoozed alarm (a group's body lists the names).
+  if (doses.length) item.body = `${item.body} · snoozed from ${time12(doses[0].localTime)}`;
   return item;
 }
 

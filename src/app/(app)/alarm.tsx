@@ -15,7 +15,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, LinearTransition, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, LinearTransition, useReducedMotion, ZoomIn } from 'react-native-reanimated';
 
 import { AlarmDoseCard, HandledDoseRow } from '@/features/alarm/AlarmDoseCard';
 import { AlarmGlow } from '@/features/alarm/AlarmGlow';
@@ -94,6 +94,10 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
   const { raisedByAlarm, dismiss, silence, close, leave } = useAlarmRinging({ at, test: null, ringing });
   const [takingAll, setTakingAll] = useState(false);
   const buzzed = useRef(false);
+  // With Reduce Motion, Reanimated leaves a view with a layout transition where it was when its siblings change size —
+  // no layout transitions then (the rows just move).
+  const reduceMotion = useReducedMotion();
+  const layout = reduceMotion ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1);
 
   // The medicine from the link first, then by time and name; this session's actions applied on top.
   const sorted = [...(q.data?.doses ?? [])].sort((a, b) => a.scheduled_for.localeCompare(b.scheduled_for) || a.name.localeCompare(b.name));
@@ -172,7 +176,7 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
         <View style={styles.iconDisc}>
           <Icon name="wifi-off" size={26} color={colors.heroText} />
         </View>
-        <Text variant="h2" tone="inverse" align="center" style={styles.gapLg} accessibilityRole="header">
+        <Text variant="h2" tone="inverse" align="center" style={styles.heading} accessibilityRole="header">
           We couldn&apos;t load this alarm
         </Text>
         <Text variant="small" tone="heroMuted" align="center" style={styles.message}>
@@ -203,7 +207,7 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
             <Icon name="check" size={36} color="#7EE2B8" />
           </EnergyRing>
         </Animated.View>
-        <Text variant="h1" tone="inverse" align="center" style={styles.gapLg} accessibilityRole="header">
+        <Text variant="h1" tone="inverse" align="center" style={styles.heading} accessibilityRole="header">
           {title}
         </Text>
         <Text variant="callout" tone="heroMuted" align="center" style={styles.message}>
@@ -245,7 +249,7 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
         {offline ? <OfflineNote /> : null}
 
         {several ? (
-          <Animated.View entering={FadeInDown.delay(80).springify().damping(18).stiffness(100).mass(1)} layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}>
+          <Animated.View entering={FadeInDown.delay(80).springify().damping(18).stiffness(100).mass(1)} layout={layout}>
             <Button
               label={`Take all ${open.length}`}
               icon="check-circle"
@@ -261,7 +265,7 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
           </Animated.View>
         ) : null}
 
-        <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.cards}>
+        <Animated.View layout={layout} style={styles.cards}>
           {open.map((d, i) => (
             <AlarmDoseCard
               key={doseKey(d)}
@@ -279,7 +283,7 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
         </Animated.View>
 
         {closed.length ? (
-          <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.doneSection}>
+          <Animated.View layout={layout} style={styles.doneSection}>
             <Text variant="eyebrow" tone="heroSubtle">
               Already handled
             </Text>
@@ -385,7 +389,7 @@ function TestAlarm({ test, ringing }: { test: string; ringing: boolean }) {
               <Icon name="check" size={36} color="#7EE2B8" />
             </EnergyRing>
           </Animated.View>
-          <Text variant="h1" tone="inverse" align="center" style={styles.gapLg} accessibilityRole="header">
+          <Text variant="h1" tone="inverse" align="center" style={styles.heading} accessibilityRole="header">
             Your alarms are ready
           </Text>
           <Text variant="callout" tone="heroMuted" align="center" style={styles.message}>
@@ -436,9 +440,13 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.heroGlassBorder,
   },
-  gapSm: { marginTop: spacing.sm },
+  // Buttons default to alignSelf flex-start: centre them like the rest of the column.
+  gapSm: { marginTop: spacing.sm, alignSelf: 'center' },
   gapLg: { marginTop: spacing.xl },
-  gapXl: { marginTop: spacing.xxl, minWidth: 200 },
+  gapXl: { marginTop: spacing.xxl, minWidth: 200, alignSelf: 'center' },
+  // Full width: a shrink-wrapped centred heading (negative letterSpacing) was measured one line tall on Android and its
+  // wrapped last word cut off ("Your alarms are" without "ready").
+  heading: { marginTop: spacing.xl, alignSelf: 'stretch' },
   message: { marginTop: spacing.sm, maxWidth: 320 },
   rowCenter: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xl },
   top: { marginTop: spacing.lg, marginBottom: spacing.xl },

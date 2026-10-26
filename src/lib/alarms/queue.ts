@@ -8,6 +8,10 @@
  *   medicine changed — `isStaleDoseError` — or the action is invalid), and after 72 h.
  * - A snooze that couldn't be sent before its 10 minutes were up is dropped: the phone already re-rang it, and sending
  *   it late would make the server start a fresh snooze (and the phone ring again later).
+ * - A snooze sent later than it was pressed asks only for the minutes still left (the server starts the snooze when it
+ *   receives it and can't take the press time): otherwise a Snooze pressed with the app asleep and synced 8 min later
+ *   would re-ring 18 min after the press instead of 10 (the plan follows the server's `snooze_until`). At least 5 min —
+ *   the server's minimum.
  * - A snooze / skip is checked against ÖRZA first (`GET /api/meds/doses?at=`): it is dropped when the dose was taken or
  *   skipped meanwhile (the server would overwrite that — a taken dose turning "snoozed" rings again and invites a second
  *   dose), or when ÖRZA's log is clearly newer than the press (`pendingWins`).
@@ -31,6 +35,15 @@ import { isoOf, type PendingDoseAction } from './types';
 const QUEUE_FILE = 'orza-alarm-queue.json';
 const MAX_AGE_MS = 72 * 3_600_000;
 const MAX_ENTRIES = 200;
+const MIN_SNOOZE_MINUTES = 5;
+const MAX_SNOOZE_MINUTES = 60;
+
+/** Minutes of a queued snooze still to run at `now` (to the nearest whole minute, within the server's 5–60). */
+export function remainingSnoozeMinutes(a: Pick<PendingDoseAction, 'snoozeMinutes' | 'createdAt'>, now: number): number {
+  const total = a.snoozeMinutes ?? DEFAULT_SNOOZE_MINUTES;
+  const left = Number.isFinite(a.createdAt) ? Math.round((a.createdAt + total * 60_000 - now) / 60_000) : total;
+  return Math.min(MAX_SNOOZE_MINUTES, Math.max(MIN_SNOOZE_MINUTES, Math.min(total, left)));
+}
 
 interface QueueFile {
   version: 1;
@@ -170,7 +183,8 @@ async function doFlush({ userId, queryClient }: { userId: string; queryClient?: 
           continue;
         }
       }
-      const log = await medsApi.dose({ medication_id: a.medId, scheduled_for: a.scheduledFor }, a.action, a.snoozeMinutes ?? DEFAULT_SNOOZE_MINUTES);
+      const minutes = a.action === 'snooze' ? remainingSnoozeMinutes(a, Date.now()) : (a.snoozeMinutes ?? DEFAULT_SNOOZE_MINUTES);
+      const log = await medsApi.dose({ medication_id: a.medId, scheduled_for: a.scheduledFor }, a.action, minutes);
       noteSavedDoseLog(userId, log);
       done.add(a);
       result.sent++;

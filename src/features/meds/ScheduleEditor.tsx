@@ -4,7 +4,7 @@
  */
 import { useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
 import { haptics } from '@/lib/haptics';
 import { colors, fonts, radii, spacing } from '@/theme';
@@ -68,6 +68,8 @@ export function ScheduleEditor({ value, onChange, today, error }: { value: Sched
   const d = value;
   const set = (patch: Partial<ScheduleDraft>) => onChange({ ...d, ...patch });
   const [timeIndex, setTimeIndex] = useState<number | null>(null); // -1 = adding a new time
+  // With Reduce Motion a layout transition left "Add time" drawn on its new row but touchable at the old spot.
+  const reduceMotion = useReducedMotion();
   const [datePicker, setDatePicker] = useState<'start' | 'end' | null>(null);
   const activeQuick = activeQuickPattern(d);
   const preview = scheduleFromDraft(d);
@@ -125,7 +127,7 @@ export function ScheduleEditor({ value, onChange, today, error }: { value: Sched
           <Text variant="label" style={styles.label}>
             Alarm times
           </Text>
-          <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.chips}>
+          <Animated.View layout={reduceMotion ? undefined : LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.chips}>
             {d.times.map((t, i) => (
               <Animated.View key={`${i}-${t}`} entering={FadeIn.springify()} exiting={FadeOut} style={styles.timePill}>
                 <PressableScale haptic="soft" onPress={() => setTimeIndex(i)} accessibilityRole="button" accessibilityLabel={`Alarm time ${i + 1}: ${formatTime12(t)}. Change`} style={styles.timeBtn}>

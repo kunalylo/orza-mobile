@@ -4,7 +4,7 @@
  */
 import { useRef, useState } from 'react';
 import { FlatList, StyleSheet, View, type AccessibilityActionEvent } from 'react-native';
-import Animated, { LinearTransition } from 'react-native-reanimated';
+import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
 import { MedPhoto } from '@/features/meds/MedPhoto';
 import { haptics } from '@/lib/haptics';
@@ -27,6 +27,8 @@ export function PhotoCarousel({
 }) {
   const [width, setWidth] = useState(0);
   const [index, setIndex] = useState(0);
+  // No layout transition with Reduce Motion (Reanimated would leave the dots where they were).
+  const reduceMotion = useReducedMotion();
   const listRef = useRef<FlatList<string>>(null);
   const count = urls.length;
   const height = width ? Math.round(width / aspect) : 0;
@@ -109,7 +111,7 @@ export function PhotoCarousel({
       {count > 1 ? (
         <View style={styles.dots} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           {urls.map((u, i) => (
-            <Animated.View key={`${i}:${u}`} layout={LinearTransition.springify().damping(18).stiffness(100).mass(1)} style={[styles.dot, i === index && styles.dotOn]} />
+            <Animated.View key={`${i}:${u}`} layout={reduceMotion ? undefined : LinearTransition.springify().damping(18).stiffness(100).mass(1)} style={[styles.dot, i === index && styles.dotOn]} />
           ))}
         </View>
       ) : null}
