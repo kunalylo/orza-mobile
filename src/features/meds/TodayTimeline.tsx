@@ -5,7 +5,7 @@
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 
 import { colors, fonts, radii, spacing } from '@/theme';
 import { Button, Icon, IconButton, PressableScale, Skeleton, Tag, Text } from '@/ui';
@@ -125,31 +125,53 @@ function statusTag(dose: DoseItem, tz: string): string {
   return statusDetail(dose, tz);
 }
 
-export function DoseRow({ dose, tz, pending, onAct, linkToMedicine = true }: { dose: DoseItem; tz: string; pending?: DoseAction; onAct: (d: DoseItem, a: DoseAction) => void; linkToMedicine?: boolean }) {
+/**
+ * One dose. `showTime` (the medicine's own page, no time rail beside it): the heading is the dose's time, not the
+ * medicine's name — two "Zinc 50 mg" rows, one "Taken", one "Upcoming", didn't say which was 11:05 am and which 11:00 pm.
+ */
+export function DoseRow({
+  dose,
+  tz,
+  pending,
+  onAct,
+  linkToMedicine = true,
+  showTime = false,
+}: {
+  dose: DoseItem;
+  tz: string;
+  pending?: DoseAction;
+  onAct: (d: DoseItem, a: DoseAction) => void;
+  linkToMedicine?: boolean;
+  showTime?: boolean;
+}) {
   const meta = STATUS_META[dose.status];
   const done = dose.status === 'taken' || dose.status === 'skipped';
   const due = dose.status === 'due';
   const title = medicineTitle(dose);
+  const heading = showTime ? formatTime12(dose.local_time) : title;
 
   const info = (
     <View style={styles.rowTop}>
       <View>
         <MedPhoto url={dose.photo_urls[0]} size={72} accessibilityLabel={`Photo of ${title}`} />
         {dose.status === 'taken' ? (
-          <View style={styles.check}>
+          <Animated.View entering={ZoomIn.springify().damping(14).stiffness(180)} style={styles.check}>
             <Icon name="check" size={13} color={colors.white} />
-          </View>
+          </Animated.View>
         ) : null}
       </View>
       <View style={styles.flex}>
-        <Text variant="title" numberOfLines={2} style={dose.status === 'skipped' ? styles.strike : undefined}>
-          {title}
+        <Text variant="title" numberOfLines={2} style={[showTime && styles.tabular, dose.status === 'skipped' && styles.strike]}>
+          {heading}
         </Text>
         <Text variant="small" tone="muted" numberOfLines={1}>
           {dose.dose}
         </Text>
         <View style={styles.tags}>
-          <Tag label={statusTag(dose, tz)} tone={meta.tone} dot />
+          {/* Re-mounts (fades in) when the status changes; see the row's note on why the row itself doesn't animate. */}
+          <Animated.View key={dose.status} entering={FadeIn.duration(220)} style={styles.tagWrap}>
+            <Tag label={statusTag(dose, tz)} tone={meta.tone} dot />
+          </Animated.View>
           {dose.timing !== 'any' ? <Tag label={TIMING_LABEL[dose.timing]} tone="warning" /> : null}
           {dose.for_person ? <Tag label={`For ${dose.for_person}`} tone="violet" /> : null}
         </View>
@@ -157,8 +179,10 @@ export function DoseRow({ dose, tz, pending, onAct, linkToMedicine = true }: { d
     </View>
   );
 
+  // No `layout` transition on the row: its parents (the time group, the Today card) and everything below re-lay out at
+  // once, so a row springing from its old, taller size overlapped the next group for half a second after Take.
   return (
-    <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={[styles.row, due && styles.rowDue, done && styles.rowDone]}>
+    <View style={[styles.row, due && styles.rowDue, done && styles.rowDone]}>
       {linkToMedicine ? (
         <PressableScale
           haptic="soft"
@@ -192,7 +216,7 @@ export function DoseRow({ dose, tz, pending, onAct, linkToMedicine = true }: { d
           }
         />
       )}
-    </Animated.View>
+    </View>
   );
 }
 
@@ -276,7 +300,9 @@ const styles = StyleSheet.create({
   rowTop: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
   gapTop: { marginTop: spacing.sm },
   strike: { textDecorationLine: 'line-through', color: colors.muted },
+  tabular: { fontVariant: ['tabular-nums'] },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.sm },
+  tagWrap: { maxWidth: '100%' },
   check: {
     position: 'absolute',
     right: -4,

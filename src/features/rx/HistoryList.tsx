@@ -273,7 +273,9 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
   },
-  meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, marginTop: 4 },
+  // Caption above the status tag on every row: inline, the short "Needs review" fit beside it but "Alarms created" wrapped,
+  // so rows in the same list looked different.
+  meta: { alignItems: 'flex-start', gap: 6, marginTop: 4 },
   photo: { borderRadius: radii.md, overflow: 'hidden', backgroundColor: colors.canvas2 },
   facts: { marginTop: spacing.lg, gap: spacing.md, alignItems: 'flex-start' },
   fact: { gap: 2 },

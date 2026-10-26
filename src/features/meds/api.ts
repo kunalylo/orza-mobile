@@ -164,6 +164,17 @@ function refreshDoses(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: medsKeys.adherenceAll() }, { cancelRefetch: false });
 }
 
+/**
+ * A medicine that no longer rings (now SOS, paused or deleted) has no doses today. Drop them from the cached lists at
+ * once: until the refetch landed (a few seconds on a slow network) its old doses — Take / "Taken early" buttons
+ * included — stayed on the medicine's page and the Medicines tab right under the "updated" toast.
+ */
+function dropDoses(qc: QueryClient, medId: string) {
+  qc.setQueriesData<TodayResponse>({ queryKey: medsKeys.todayAll() }, (old) =>
+    old && old.doses.some((d) => d.medication_id === medId) ? { ...old, doses: old.doses.filter((d) => d.medication_id !== medId) } : old
+  );
+}
+
 /* ───────────────────────────── Mutations ───────────────────────────── */
 
 /** Create (no id) or update a medicine. */
@@ -179,6 +190,7 @@ export function useSaveMedication() {
         if (!before?.some((m) => m.id !== med.id && m.active !== false && !m.as_needed)) promptAlarmPermission('first-medicine');
       }
       putMedication(qc, med);
+      if (med.as_needed || med.active === false) dropDoses(qc, med.id);
       refreshDoses(qc);
       emitOwn({ type: 'meds-changed', medId: med.id });
     },
@@ -192,6 +204,7 @@ export function useSetMedicationActive() {
     mutationFn: (v: { id: string; active: boolean }) => medsApi.update(v.id, { active: v.active }),
     onSuccess: (med) => {
       putMedication(qc, med);
+      if (med.active === false) dropDoses(qc, med.id);
       refreshDoses(qc);
       emitOwn({ type: 'meds-changed', medId: med.id });
     },
@@ -205,6 +218,7 @@ export function useDeleteMedication() {
     onSuccess: (id) => {
       qc.setQueryData<MedicationClient[]>(medsKeys.list(), (list) => list?.filter((m) => m.id !== id));
       qc.removeQueries({ queryKey: medsKeys.detail(id) });
+      dropDoses(qc, id);
       refreshDoses(qc);
       emitOwn({ type: 'meds-changed', medId: id });
     },

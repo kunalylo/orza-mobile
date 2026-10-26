@@ -70,6 +70,7 @@ export function PhotoGrid({
   onAdd,
   onRemove,
   onMakePrimary,
+  ringsOnAlarm = true,
 }: {
   items: PhotoItem[];
   max: number;
@@ -80,6 +81,8 @@ export function PhotoGrid({
   onAdd: (source: PhotoSource) => void;
   onRemove: (id: string) => void;
   onMakePrimary?: (id: string) => void;
+  /** False for an SOS medicine: it never rings, so the first photo is just its main photo. */
+  ringsOnAlarm?: boolean;
 }) {
   const full = items.length >= max;
 
@@ -89,11 +92,11 @@ export function PhotoGrid({
         <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.grid} accessibilityLabel={`${label} photos`}>
           {items.map((p, i) => (
             <Animated.View key={p.id} entering={ZoomIn.springify().damping(16).stiffness(100).mass(1)} exiting={FadeOut} layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.tile}>
-              <MedPhoto url={p.url} fill radius={radii.sm} accessibilityLabel={`${label} photo ${i + 1}${i === 0 ? ' (shown on alarms)' : ''}`} />
+              <MedPhoto url={p.url} fill radius={radii.sm} accessibilityLabel={`${label} photo ${i + 1}${i === 0 ? (ringsOnAlarm ? ' (shown on alarms)' : ' (main photo)') : ''}`} />
               {i === 0 ? (
                 <View style={styles.badge}>
                   <Text variant="caption" color={colors.white} style={styles.badgeText}>
-                    On alarm
+                    {ringsOnAlarm ? 'On alarm' : 'Main photo'}
                   </Text>
                 </View>
               ) : onMakePrimary ? (
@@ -103,7 +106,7 @@ export function PhotoGrid({
                   size={30}
                   iconSize={14}
                   disabled={busy}
-                  accessibilityLabel={`Show photo ${i + 1} on alarms`}
+                  accessibilityLabel={ringsOnAlarm ? `Show photo ${i + 1} on alarms` : `Make photo ${i + 1} the main photo`}
                   onPress={() => onMakePrimary(p.id)}
                   style={styles.star}
                 />

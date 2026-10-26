@@ -89,7 +89,8 @@ export default function PrescriptionReview() {
   const [lastEditing, setLastEditing] = useState<Editing | null>(null);
   const [datePicker, setDatePicker] = useState(false);
   const [preview, setPreview] = useState(false);
-  const [attaching, setAttaching] = useState(false);
+  // Which button's photo is being prepared — the spinner belongs on that one (it sat on Camera for a gallery pick).
+  const [attaching, setAttaching] = useState<PhotoSource | null>(null);
   const [formError, setFormError] = useState<{ field: string; message: string } | null>(null);
 
   if (editing && editing !== lastEditing) setLastEditing(editing);
@@ -111,13 +112,19 @@ export default function PrescriptionReview() {
     return () => clearTimeout(t);
   }, [id]);
 
-  usePreventRemove(!finishedId && (edited || applying), ({ data }) => {
+  // Typing from scratch, ask only while something is actually entered: a photo added and removed again, or a medicine
+  // added and deleted, left nothing to lose. A scan keeps the sticky flag (its rows start filled in).
+  const dirty = manual ? list.length > 0 || doctor.trim() !== '' || forPerson.trim() !== '' || !!photo || startDate !== today : edited;
+
+  usePreventRemove(!finishedId && (dirty || applying), ({ data }) => {
     if (applying) return; // stay until the request finishes
     haptics.warning();
     Alert.alert(
       'Discard this review?',
       manual
-        ? "The medicines you typed haven't been saved."
+        ? list.length
+          ? "The medicines you typed haven't been saved."
+          : "What you've entered here hasn't been saved."
         : 'Your changes aren’t saved. The scan stays under “Your prescriptions” so you can come back to it.',
       [
         { text: 'Keep editing', style: 'cancel' },
@@ -152,7 +159,7 @@ export default function PrescriptionReview() {
   async function attach(source: PhotoSource) {
     if (attaching) return;
     try {
-      const picked = await pickRxPhoto(source, () => setAttaching(true));
+      const picked = await pickRxPhoto(source, () => setAttaching(source));
       if (picked) {
         setPhoto(picked.dataUrl);
         setEdited(true);
@@ -161,7 +168,7 @@ export default function PrescriptionReview() {
     } catch (e) {
       toast.error(e instanceof PhotoError ? e.message : "We couldn't read that photo. Please try another.");
     } finally {
-      setAttaching(false);
+      setAttaching(null);
     }
   }
 
@@ -335,14 +342,32 @@ export default function PrescriptionReview() {
                             Prescription photo (optional)
                           </Text>
                           <View style={styles.attachRow}>
-                            <Button label="Camera" icon="camera" size="sm" variant="secondary" loading={attaching} disabled={attaching || !!manualId} onPress={() => void attach('camera')} />
-                            <Button label="Gallery" icon="image" size="sm" variant="secondary" disabled={attaching || !!manualId} onPress={() => void attach('library')} />
+                            <Button label="Camera" icon="camera" size="sm" variant="secondary" loading={attaching === 'camera'} disabled={!!attaching || !!manualId} onPress={() => void attach('camera')} />
+                            <Button label="Gallery" icon="image" size="sm" variant="secondary" loading={attaching === 'library'} disabled={!!attaching || !!manualId} onPress={() => void attach('library')} />
                           </View>
                         </View>
                       ) : (
-                        <Text variant="caption" tone="muted">
-                          Your photo is kept with this prescription and shown on the alarms until you add pill photos.
-                        </Text>
+                        <View style={styles.attachedNote}>
+                          <Text variant="caption" tone="muted">
+                            Your photo is kept with this prescription and shown on the alarms until you add pill photos.
+                          </Text>
+                          {!manualId && !applying ? (
+                            // A wrong photo picked here could only be dropped with "Start over" (losing the typed rows).
+                            <Button
+                              label="Remove photo"
+                              icon="x"
+                              size="sm"
+                              variant="ghost"
+                              onPress={() => {
+                                haptics.soft();
+                                setPhoto(null);
+                                setEdited(true);
+                              }}
+                              accessibilityLabel="Remove the prescription photo"
+                              style={styles.removePhoto}
+                            />
+                          ) : null}
+                        </View>
                       )}
                     </View>
                   )}
@@ -598,5 +623,7 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
     ...shadows.floating,
   },
+  attachedNote: { gap: spacing.xs },
+  removePhoto: { alignSelf: 'flex-start', marginLeft: -spacing.sm },
   previewBox: { borderRadius: radii.md, overflow: 'hidden', backgroundColor: colors.canvas2 },
 });

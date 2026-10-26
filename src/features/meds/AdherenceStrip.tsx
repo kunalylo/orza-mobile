@@ -70,7 +70,7 @@ export function AdherenceStrip({ data, today }: { data: AdherenceResponse; today
               <Text variant="small" weight="semibold" tone="ink">
                 {overall.taken}
               </Text>{' '}
-              of {overall.total} doses taken in the last 7 days
+              of {overall.total} {overall.total === 1 ? 'dose' : 'doses'} taken in the last 7 days
             </Text>
           ) : (
             <Text variant="small" tone="muted">

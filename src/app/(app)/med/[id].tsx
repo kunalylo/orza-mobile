@@ -68,7 +68,7 @@ function Carousel({ med, width }: { med: MedicationClient; width: number }) {
       >
         {photos.map((url, i) => (
           <View key={url} style={{ width, height }}>
-            <MedPhoto url={url} fill radius={0} accessibilityLabel={`${med.name} photo ${i + 1} of ${photos.length}${i === 0 ? ', shown on alarms' : ''}`} />
+            <MedPhoto url={url} fill radius={0} accessibilityLabel={`${med.name} photo ${i + 1} of ${photos.length}${i === 0 && !med.as_needed ? ', shown on alarms' : ''}`} />
           </View>
         ))}
       </ScrollView>
@@ -130,7 +130,7 @@ function HistoryBlock({ title, t }: { title: string; t?: AdherenceMedicine }) {
         size={52}
         stroke={6}
         palette={pct != null && pct >= 90 ? 'success' : 'energy'}
-        accessibilityLabel={`${title}: ${t.taken} of ${t.total} doses taken`}
+        accessibilityLabel={`${title}: ${t.taken} of ${t.total} dose${t.total === 1 ? '' : 's'} taken`}
       >
         <Text variant="caption" weight="semibold">
           {pct != null ? `${pct}%` : '–'}
@@ -139,7 +139,7 @@ function HistoryBlock({ title, t }: { title: string; t?: AdherenceMedicine }) {
       <View style={styles.flex}>
         <Text variant="label">{title}</Text>
         <Text variant="small" tone="muted">
-          {t.total ? `${t.taken} of ${t.total} doses taken` : 'Nothing due yet.'}
+          {t.total ? `${t.taken} of ${t.total} dose${t.total === 1 ? '' : 's'} taken` : 'Nothing due yet.'}
         </Text>
         {extra ? (
           <Text variant="caption" tone={t.missed ? 'error' : 'subtle'}>
@@ -358,7 +358,7 @@ export default function MedicineDetail() {
             </Text>
             <View style={styles.gapMd}>
               {myDoses.map((d) => (
-                <DoseRow key={doseKey(d)} dose={d} tz={tz} pending={pendingFor(d)} onAct={(x, a) => void act(x, a)} linkToMedicine={false} />
+                <DoseRow key={doseKey(d)} dose={d} tz={tz} pending={pendingFor(d)} onAct={(x, a) => void act(x, a)} linkToMedicine={false} showTime />
               ))}
             </View>
           </GlassCard>

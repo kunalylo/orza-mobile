@@ -96,7 +96,7 @@ function stockPatch(draft: Draft, seed: Draft, live: MedStock | undefined): Medi
 
 const isInt = (s: string, min: number, max: number) => s !== '' && Number.isInteger(Number(s)) && Number(s) >= min && Number(s) <= max;
 
-function Section({ title, icon, children, delay = 0 }: { title: string; icon?: 'bell' | 'mci:pill' | 'calendar' | 'package' | 'user'; children: ReactNode; delay?: number }) {
+function Section({ title, icon, children, delay = 0 }: { title: string; icon?: 'bell' | 'image' | 'mci:pill' | 'calendar' | 'package' | 'user'; children: ReactNode; delay?: number }) {
   return (
     <Animated.View entering={FadeInDown.delay(delay).springify().damping(18).stiffness(100).mass(1)}>
       <GlassCard padding={spacing.lg} style={styles.section}>
@@ -203,7 +203,7 @@ export default function EditMedicine() {
         const firstPhoto = !current.photo_ids.length || current.uses_prescription_photo;
         for (const image of images) await photos.add.mutateAsync({ id: current.id, image });
         const added = images.length === 1 ? 'Photo added' : `${images.length} photos added`;
-        toast.success(firstPhoto ? `${added} — alarms show ${images.length === 1 ? 'it' : 'the first one'}` : added);
+        toast.success(firstPhoto && !draft.schedule.as_needed ? `${added} — alarms show ${images.length === 1 ? 'it' : 'the first one'}` : added);
       } else {
         setNewPhotos((p) => [...p, ...images.map((url, i) => ({ id: `new-${Date.now()}-${i}`, url }))].slice(0, MAX_PHOTOS_ON_CREATE));
         haptics.success();
@@ -243,7 +243,7 @@ export default function EditMedicine() {
     setPhotoBusy(true);
     try {
       await photos.makePrimary.mutateAsync({ id: current.id, mediaId: pid });
-      toast.success('Alarms will show this photo');
+      toast.success(draft.schedule.as_needed ? 'Main photo updated' : 'Alarms will show this photo');
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
@@ -405,9 +405,11 @@ export default function EditMedicine() {
       />
 
       {/* Photos */}
-      <Section title="Photos" icon="bell">
+      <Section title="Photos" icon={draft.schedule.as_needed ? 'image' : 'bell'}>
         <Text variant="small" tone="muted" style={styles.lead}>
-          Alarms and notifications show the first photo — handy when strips look alike or someone else gives the medicine.
+          {draft.schedule.as_needed
+            ? 'The first photo shows on the medicine — handy when strips look alike or someone else gives it.'
+            : 'Alarms and notifications show the first photo — handy when strips look alike or someone else gives the medicine.'}
         </Text>
         {editing && current?.uses_prescription_photo ? (
           <View style={styles.rxNote}>
@@ -426,6 +428,7 @@ export default function EditMedicine() {
           onAdd={(s) => void addPhotos(s)}
           onRemove={(pid) => void removePhoto(pid)}
           onMakePrimary={(pid) => void makePrimary(pid)}
+          ringsOnAlarm={!draft.schedule.as_needed}
         />
         <FieldError message={errors.photos} />
       </Section>

@@ -147,11 +147,66 @@ Safety gate SAFE again. Cases 22–30 below were reconstructed from the screensh
   deleting a medicine drops its past doses the same way.
 - Backend (by design, noted): doses more than 30 min before a medicine was created are not listed (Dolo added 9:31 pm →
   no 9:00 pm dose today).
-- Other screens (not meds-rx): `MealComposer` meal-type chip row and the Reminders preset row are horizontal ScrollViews
-  without `keyboardShouldPersistTaps` (same first-tap-only-dismisses-the-keyboard pattern as bug 19, if a field is focused).
-- Minor, left: the edit form's photo grid still shows "On alarm" on an SOS medicine's first photo; a prescription photo
-  attached during manual entry can't be removed or replaced before Create alarms; "NEEDS REVIEW" sits inline while the
-  longer "ALARMS CREATED" wraps to its own line in the history list; "Discard this review? The medicines you typed…"
-  also shows when only the start date changed.
+- Other screens (not meds-rx): the Reminders preset row is a horizontal ScrollView without `keyboardShouldPersistTaps`
+  (same first-tap-only-dismisses-the-keyboard pattern as bug 19, if a field is focused). `MealComposer`'s chip row got
+  the prop in the today-meals step (54a847c).
+- Minor, left at the time — all fixed in resume 3 (bugs 27, 28, 30, 31): the edit form's photo grid showed "On alarm"
+  on an SOS medicine's first photo; a prescription photo attached during manual entry couldn't be removed before Create
+  alarms; "NEEDS REVIEW" sat inline while "ALARMS CREATED" wrapped in the history list; "Discard this review? The
+  medicines you typed…" also showed when only the start date changed.
 - Emulator artefacts: `keyevent 111` (ESC) inside a sheet both hides the keyboard and asks "Discard changes?" (a real
   back press only hides the keyboard); Gboard runs as a floating stylus toolbar that can cover the right edge of a sheet.
+
+## Resume 3 (2026-10-26 — after the usage-limit pause)
+
+Safety gate SAFE. The meds-rx run had already committed (ec91ccc); the today-meals and snap steps landed on top
+(54a847c touched `Sheet.tsx` (ToastHost inside the sheet's Modal), `Toast.tsx`, `ProgressBar.tsx`). This pass: a
+regression check of meds-rx on HEAD 255bfa5, the "minor, left" items, and the empty-account flash (bug 23) on film.
+Screenshots `mr3NN`.
+
+| # | Case | Result | Evidence / notes |
+|---|------|--------|------------------|
+| 55 | Regression on HEAD: Medicines tab → Take the MISSED 8:00 am Glimepiride → "Taken at 11:02 am" at once, toast, 1 of 6; server dose_log …T02:30Z taken | PASS / FIXED | mr301–mr304. mr303 (0.4 s after Take): the row was still at its old height and the Pantoprazole row overlapped the 6:30 pm group — bug 24. Retest Pantoprazole (mr306a–c burst): no overlap, check badge zooms in; server …T02:30Z taken |
+| 56 | Today tab "Next doses" card: Take on the due Zinc row → row leaves, 3 of 8 · 38 %, "+2 more today", rows re-flow without overlap (burst) | PASS | mr319, mr320 strip; server Zinc …T05:35Z taken |
+| 57 | Add medicine on HEAD: Zinc 50 mg, 1-0-0 → time sheet 11:05 am, Add time → 11:00 pm (sorted pills, summary), Add & set alarms → toast "Zinc added — alarms are set. Add a photo…", Today "1 DUE NOW", 2 of 8 | PASS | mr311–mr318 |
+| 58 | After the today-meals change (ToastHost inside the Sheet's Modal): Rx manual entry → keyboard up on the auto-opened sheet (bug 16), Cetirizine + SOS → Add medicine → `dumpsys window`: one app window (bug 17 stays fixed), screen responsive; empty name → inline "Add the medicine's name." | PASS | mr322–mr326 |
+| 59 | Start over → "Discard this review? The medicines you typed haven't been saved." → Discard → capture screen | PASS | mr327 |
+| 60 | Prescription history list | FIXED (polish) | bug 31: tag now always under "18 Oct · 3 medicines" (mr328) |
+| 61 | Manual entry: wrong prescription photo (thali) from the gallery | FIXED (polish) | mr330/mr331: no way to drop it except Start over (bug 28) → "Remove photo" under the note; the Camera button showed the spinner for a Gallery pick (bug 29) → spinner on Gallery (mr335 burst) |
+| 62 | Manual entry: back after adding and removing the photo (nothing entered) | FIXED (polish) | mr336: "Discard this review? The medicines you typed haven't been saved." with no medicines — bug 30. Now: nothing entered → leaves without a prompt; photo / doctor / date only → "What you've entered here hasn't been saved." |
+| 63 | Medicine detail Today card with two doses of one medicine | FIXED (polish) | mr338: both rows read "Zinc 50 mg" (one Taken, one Upcoming) — no time anywhere — bug 25; rows now headed "11:05 am" / "11:00 pm" (mr339). "1 of 1 doses taken" → "1 of 1 dose taken" (bug 32) |
+| 64 | Edit Zinc → From gallery (multi-picker, Done) → Preparing… → photo with "On alarm" → SOS chip → Photos card follows: image icon, "The first photo shows on the medicine…", badge "Main photo" | FIXED (polish) | mr340–mr346 (bug 27, was "minor, left") |
+| 65 | Save as SOS → "Zinc updated" → detail SOS tag + "Only when needed (SOS) · no alarms" | FIXED | mr347: the Today card with 11:05 / 11:00 pm doses ("Taken early") stayed under the toast until the refetch (mr348 ~3 s later) — bug 26. Then 1-0-1 → Save → Today 9:00 pm; Pause reminders → burst mr350: Today card gone in the toast frame, PAUSED tag, Resume reminders. Server: as_needed true, times [] |
+| 66 | Delete Zinc → "Delete Zinc? This deletes the medicine, its photos and its dose history. It can't be undone." → Yes, delete → "Zinc deleted", back to the previous screen; server: medication, its photo media and dose_logs gone | PASS | mr351, mr352 |
+| 67 | Empty account (qa1) cold start → Today → Medicines: Today card skeleton, then "No medicines yet" — no "No doses scheduled today" flash (bug 23 on film) | PASS | mr360 strip (frames 3–5 skeleton, 6 empty state). Signed out / in through Settings; back on qa4 afterwards (mr362) |
+
+### Bugs (resume 3)
+
+24. FIXED — Today timeline: after Take the dose row sprang (`LinearTransition`) from its old, taller size while its time
+    group, the Today card and the groups below re-laid out at once → for ~0.5 s the row overlapped the next time group
+    (mr303). The row no longer animates its layout; the status tag fades in when the status changes and the check badge
+    zooms in (src/features/meds/TodayTimeline.tsx). The Today tab card (MedsCard) animates every row and was fine (mr320).
+25. FIXED (polish) — Medicine detail "Today": rows were headed with the medicine's name, so two doses of one medicine
+    gave two identical "Zinc 50 mg" rows with no time. `DoseRow showTime` heads them "11:05 am" / "11:00 pm".
+26. FIXED — Switching a medicine to SOS (or pausing / deleting it) left its today doses — Take / "Taken early" buttons
+    included — on the medicine page and the Medicines tab for seconds under the toast. `dropDoses` removes a non-ringing
+    medicine's doses from the cached today lists at once (src/features/meds/api.ts); the server agrees (today = active,
+    non-SOS medicines).
+27. FIXED (polish) — Edit form of an SOS medicine: "On alarm" badge, "Show photo N on alarms", bell header, alarm lead
+    text and toasts ("Photo added — alarms show it", "Alarms will show this photo") for a medicine that never rings →
+    "Main photo" etc. (PhotoGrid `ringsOnAlarm`, med/edit.tsx); detail carousel a11y label too (med/[id].tsx).
+28. FIXED (polish) — Rx manual entry: "Remove photo" for a prescription photo attached by mistake (rx/review.tsx).
+29. FIXED (polish) — Rx manual entry: the spinner showed on Camera while a Gallery photo was prepared.
+30. FIXED (polish) — Rx manual entry: the leave prompt is derived from what's entered (rows, doctor, person, photo,
+    start date) instead of a sticky "edited" flag; wording without rows "What you've entered here hasn't been saved."
+31. FIXED (polish) — Rx history rows: the status tag always sits under the date line (src/features/rx/HistoryList.tsx).
+32. FIXED (polish) — "1 of 1 doses taken" (detail history, adherence strip) pluralised.
+
+### Notes (resume 3)
+
+- `uiautomator dump` can't get an idle screen on the tab screens (the tab bar's Snap halo animates forever — reported
+  under snap); those cases were driven by screenshots + coordinates. Stack screens (edit, rx, detail) dump fine.
+- Dev-only: a Fast Refresh of rx/review.tsx re-runs the manual-entry auto-open effect (the "New medicine" sheet pops up
+  again) and can reset its state — not a release-build issue.
+- Left (minor): the PhotoGrid "Preparing…" tile is briefly shorter than square while the grid's layout transition runs
+  (mr343); Settings → Sign out spins ~6 s on the emulator before the welcome screen (settings area).
