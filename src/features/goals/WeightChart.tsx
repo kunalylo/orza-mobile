@@ -150,7 +150,9 @@ export function WeightChart({ points: kgPoints, target: targetKg, imperial = fal
       .runOnJS(true)
       .activeOffsetX([-6, 6])
       .failOffsetY([-14, 14])
-      .onBegin((e) => select(e.x))
+      // Select once the drag is really horizontal (onStart), not on touch-down (onBegin): a vertical page scroll that
+      // happens to start on the chart must not move the selection (and tick a haptic).
+      .onStart((e) => select(e.x))
       .onUpdate((e) => select(e.x)),
     Gesture.Tap()
       .runOnJS(true)

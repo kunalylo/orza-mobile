@@ -147,7 +147,7 @@ export const TARGET_FIELDS: { key: TargetKey; label: string; unit: string; min: 
   { key: 'protein_g', label: 'Protein', unit: 'g', min: 20, max: 400 },
   { key: 'carbs_g', label: 'Carbs', unit: 'g', min: 20, max: 900 },
   { key: 'fat_g', label: 'Fat', unit: 'g', min: 10, max: 300 },
-  { key: 'fiber_g', label: 'Fiber', unit: 'g', min: 5, max: 100 },
+  { key: 'fiber_g', label: 'Fibre', unit: 'g', min: 5, max: 100 },
   { key: 'water_glasses', label: 'Water', unit: 'glasses', min: 1, max: 30 },
   { key: 'steps', label: 'Steps', unit: 'steps', min: 1000, max: 50000 },
 ];

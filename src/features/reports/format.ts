@@ -49,8 +49,8 @@ export function rangeLabel(start: string, end: string) {
 export const MEAL_LABELS: Record<string, string> = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' };
 
 /** Short friendly line under the day score (never a judgment of food). */
-export function scoreMood(r: Pick<DailyReport, 'score' | 'meals' | 'tracking'>) {
-  if (!r.meals.length && !r.tracking.water_glasses && !r.tracking.steps) return 'Nothing logged yet';
+export function scoreMood(r: Pick<DailyReport, 'score' | 'meals' | 'tracking'> & { is_today?: boolean }) {
+  if (!r.meals.length && !r.tracking.water_glasses && !r.tracking.steps) return r.is_today === false ? 'Nothing logged that day' : 'Nothing logged yet';
   if (r.score >= 80) return 'Beautifully balanced';
   if (r.score >= 60) return 'Nicely on track';
   if (r.score >= 35) return 'Building momentum';
@@ -85,8 +85,14 @@ export function weeklyCsv(w: WeeklyReport, imperial = false): string {
   ]);
   const a = w.averages;
   const t = w.targets;
+  // The average row holds averages in every column (not the last weigh-in / the number of logged days).
+  const weights = w.days.map((d) => d.weight_kg).filter((v): v is number => v != null);
+  const avgWeight = weights.length ? kgToUnit(weights.reduce((s, v) => s + v, 0) / weights.length, imperial) : '';
+  const loggedDays = w.days.filter((d) => d.meals_count > 0);
+  const avgMeals = loggedDays.length ? Math.round((loggedDays.reduce((s, d) => s + d.meals_count, 0) / loggedDays.length) * 10) / 10 : '';
+  const avgScore = loggedDays.length ? Math.round(loggedDays.reduce((s, d) => s + d.score, 0) / loggedDays.length) : '';
   rows.push([]);
-  rows.push(['Average (logged days)', '', a.calories, a.protein_g, a.carbs_g, a.fat_g, a.fiber_g, a.water_glasses, a.steps, w.weight ? kgToUnit(w.weight.last, imperial) : '', w.logged_days, '']);
+  rows.push(['Average (logged days)', '', a.calories, a.protein_g, a.carbs_g, a.fat_g, a.fiber_g, a.water_glasses, a.steps, avgWeight, avgMeals, avgScore]);
   rows.push(['Daily target', '', t.calories, t.protein_g, t.carbs_g, t.fat_g, t.fiber_g, t.water_glasses, t.steps, '', '', '']);
   rows.push([]);
   rows.push(['Days within ±10% of calorie target', '', w.adherence]);

@@ -122,7 +122,9 @@ export default function PasswordSettings() {
             <View style={styles.doneIcon}>
               <Icon name="check" size={28} color={colors.success} />
             </View>
-            <Text variant="h3" align="center">
+            {/* Stretched: shrink-wrapped in the centred card, Android measures the Playfair heading a hair narrower than
+                it draws it, and "set" wrapped onto a clipped second line (same class as EmptyState / alarm B2). */}
+            <Text variant="h3" align="center" style={styles.doneTitle}>
               You’re all set
             </Text>
             <Text variant="callout" tone="muted" align="center">
@@ -265,6 +267,7 @@ const styles = StyleSheet.create({
   },
   footerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   done: { alignItems: 'center', gap: spacing.md },
+  doneTitle: { alignSelf: 'stretch' },
   doneIcon: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.successBg },
   doneBtn: { marginTop: spacing.sm, alignSelf: 'stretch' },
 });

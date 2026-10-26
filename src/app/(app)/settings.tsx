@@ -11,6 +11,7 @@ import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useAccountSync } from '@/features/settings/api';
 import { DIET_OPTIONS, formatNumber, labelOf } from '@/features/settings/options';
 import { Avatar, Note, SettingsGroup, SettingsRow, TINTS, initialOf } from '@/features/settings/parts';
+import { ApiError, errorMessage } from '@/lib/api';
 import { useAuth, useSignedInUser } from '@/lib/auth';
 import { APP_VERSION, WEB_URL } from '@/lib/config';
 import { haptics } from '@/lib/haptics';
@@ -142,8 +143,12 @@ export default function Settings() {
               toast.success('Signed out on every device');
             } catch (e) {
               haptics.error();
-              const msg = e instanceof Error && e.message ? e.message : "We couldn't reach ÖRZA.";
-              setSignOutError(`${msg} You're still signed in — try again when you're online.`);
+              // Offline / timeout: one short sentence (the shared network message already ends in "try again").
+              setSignOutError(
+                e instanceof ApiError && e.status === 0
+                  ? "Can't reach ÖRZA right now, so nothing was signed out. You're still signed in — try again when you're online."
+                  : `${errorMessage(e, "We couldn't sign you out everywhere.")} You're still signed in.`
+              );
               setSigningOut(null);
             }
           },

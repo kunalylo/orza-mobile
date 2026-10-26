@@ -79,6 +79,13 @@ export function CalorieChart({ days, target, today, bestDate }: { days: WeeklyDa
   const scaleMax = Math.max(peak * 1.14, target * 1.25, 1);
   const yOf = (v: number) => base - Math.max(0, Math.min(1, v / scaleMax)) * plotH;
   const within = (v: number) => target > 0 && Math.abs(v - target) / target <= 0.1;
+  // A day's value sits 6 px above its bar; when the dashed target line would run through it (a bar just under the
+  // target), lift it above the line instead.
+  const labelY = (v: number) => {
+    const y = Math.max(11, yOf(v) - 6);
+    const lineY = yOf(target);
+    return target > 0 && y - 9 <= lineY + 2 && y + 2 >= lineY - 2 ? Math.max(11, lineY - 5) : y;
+  };
 
   const gap = width < 340 ? 6 : 10;
   const slot = width > 0 ? (width - gap * 6) / 7 : 0;
@@ -137,7 +144,7 @@ export function CalorieChart({ days, target, today, bestDate }: { days: WeeklyDa
                 <SvgText
                   key={`v${d.date}`}
                   x={i * (slot + gap) + slot / 2}
-                  y={Math.max(11, yOf(d.calories) - 6)}
+                  y={labelY(d.calories)}
                   fontSize={slot < 40 ? 9 : 10}
                   fontFamily={fonts.mono}
                   fill={colors.ink}

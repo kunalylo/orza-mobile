@@ -84,7 +84,9 @@ function DeleteAccountSheet({ visible, onClose }: { visible: boolean; onClose: (
         label={`Type ${DELETE_WORD} to confirm`}
         value={typed}
         onChangeText={(v) => {
-          setTyped(v);
+          // Shown and compared in capitals: `autoCapitalize` is only a keyboard hint (a hardware keyboard or a
+          // keyboard with auto-caps off types "delete", and the button then stayed disabled with no reason given).
+          setTyped(v.toUpperCase());
           if (error) setError(null);
         }}
         autoCapitalize="characters"

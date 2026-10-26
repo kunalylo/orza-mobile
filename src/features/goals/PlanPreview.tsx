@@ -12,7 +12,7 @@ import { formatLongDate, formatNumber, formatPace, type GoalPlan } from './math'
 export function PlanPreview({
   plan,
   blocker,
-  missing,
+  needs,
   goal,
   imperial,
   currentTargets,
@@ -20,8 +20,8 @@ export function PlanPreview({
 }: {
   plan: GoalPlan | null;
   blocker: string | null;
-  /** Inputs still needed ("current weight", "age" …). */
-  missing: string[];
+  /** What still stops a plan ("Add your target weight", "Check your age" …), or null. */
+  needs: string | null;
   goal: GoalType;
   imperial: boolean;
   currentTargets: Targets;
@@ -122,7 +122,7 @@ export function PlanPreview({
               Your plan will appear here as you type.
             </Text>
             <Text variant="small" tone="heroSubtle" style={styles.emptyBody}>
-              {missing.length ? `Add your ${missing.join(', ').replace(/, ([^,]*)$/, ' and $1')} to see daily calories, macros and an estimated date.` : 'Almost there.'}
+              {needs ? `${needs} to see daily calories, macros and an estimated date.` : 'Almost there.'}
             </Text>
           </View>
         )}

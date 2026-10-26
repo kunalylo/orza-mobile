@@ -41,6 +41,8 @@ import type { Goal, GoalCalculateResponse } from './types';
 
 const valid = (n: number, lo: number, hi: number) => Number.isFinite(n) && n >= lo && n <= hi;
 const digits = (t: string, max = 6) => t.replace(/[^0-9.,]/g, '').slice(0, max);
+/** ["height", "age"] → "height and age" */
+const listJoin = (items: string[]) => items.join(', ').replace(/, ([^,]*)$/, ' and $1');
 
 type FieldKey = 'current' | 'target' | 'height' | 'age';
 const SERVER_FIELD: Record<string, FieldKey> = { current_weight_kg: 'current', target_weight_kg: 'target', height_cm: 'height', age: 'age' };
@@ -153,12 +155,25 @@ export function GoalCalculator({
   }, [ready, profile, h, a, sex, activity, cur, goal, tgt, rate, today]);
 
   const blocker = inputError || plan?.blocker || null;
-  const missing = [!curOk && 'current weight', goal !== 'maintain' && !tgtOk && 'target weight', !hOk && 'height', !aOk && 'age'].filter(Boolean) as string[];
+  // What still stops a plan: fields left empty ("Add your …") and fields typed but out of range ("check your …").
+  const needs = (() => {
+    const fields: [string, boolean, boolean][] = [
+      ['current weight', curOk, current.trim() !== ''],
+      ['target weight', goal === 'maintain' || tgtOk, target.trim() !== ''],
+      ['height', hOk, heightTyped || (imperial && !heightEdited && !!profile.height_cm)],
+      ['age', aOk, age.trim() !== ''],
+    ];
+    const empty = fields.filter(([, ok, typed]) => !ok && !typed).map(([n]) => n);
+    const invalid = fields.filter(([, ok, typed]) => !ok && typed).map(([n]) => n);
+    const parts = [empty.length ? `add your ${listJoin(empty)}` : '', invalid.length ? `check your ${listJoin(invalid)}` : ''].filter(Boolean);
+    const text = parts.join(' and ');
+    return text ? text.charAt(0).toUpperCase() + text.slice(1) : null;
+  })();
 
   const submit = () => {
     if (!plan || blocker) {
       haptics.warning();
-      toast.error(blocker || `Add your ${missing.join(', ')} to see your plan.`);
+      toast.error(blocker || `${needs ?? 'Fill in the details'} to see your plan.`);
       return;
     }
     setServerErrors({});
@@ -417,7 +432,7 @@ export function GoalCalculator({
       <PlanPreview
         plan={plan}
         blocker={blocker}
-        missing={missing}
+        needs={needs}
         goal={goal}
         imperial={imperial}
         currentTargets={currentTargets}

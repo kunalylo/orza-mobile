@@ -223,7 +223,12 @@ export default function MemorySettings() {
                   if (addError) setAddError(null);
                 }}
                 onSubmitEditing={() => void add()}
+                // Wraps (and grows) instead of one scrolling line: a note can run to 200 characters, and Android wraps
+                // a long placeholder of a single-line field onto a clipped second line. Enter still adds the note.
+                multiline
                 submitBehavior="submit"
+                textAlignVertical="center"
+                inputStyle={styles.addInput}
                 returnKeyType="done"
                 placeholder={full ? 'Memory is full — forget something first' : "e.g. I don't eat onion or garlic on Tuesdays"}
                 editable={!full}
@@ -279,6 +284,7 @@ const styles = StyleSheet.create({
   addTitle: { marginBottom: spacing.sm, marginLeft: spacing.xs },
   addRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   addBtn: { marginTop: 3 },
+  addInput: { maxHeight: 132 },
   clear: { marginTop: spacing.lg, alignSelf: 'center' },
   note: { marginTop: spacing.xxl },
 });

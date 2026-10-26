@@ -86,7 +86,7 @@ export function TransactionHistory({ transactions }: { transactions: CreditTrans
                     key={tx.id}
                     style={[styles.row, i > 0 && styles.rowBorder]}
                     accessible
-                    accessibilityLabel={`${transactionLabel(tx.reason)}. ${plus ? 'Added' : 'Used'} ${Math.abs(tx.amount)} credits. Balance ${formatNumber(tx.balance_after)}. ${formatDateTime(tx.created_at)}`}
+                    accessibilityLabel={`${transactionLabel(tx.reason)}. ${plus ? 'Added' : 'Used'} ${Math.abs(tx.amount)} ${Math.abs(tx.amount) === 1 ? 'credit' : 'credits'}. Balance ${formatNumber(tx.balance_after)}. ${formatDateTime(tx.created_at)}`}
                   >
                     <View style={[styles.icon, { backgroundColor: ic.bg }]}>
                       <Icon name={ic.icon} size={15} color={ic.fg} />

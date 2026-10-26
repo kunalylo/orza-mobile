@@ -2,7 +2,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 
 import { haptics } from '@/lib/haptics';
 import { colors, diagonal, gradients, gutter, isIOS, radii, spacing } from '@/theme';
@@ -248,11 +248,11 @@ export function SaveBar({
 }) {
   return (
     <View style={styles.saveBar}>
-      <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}>
-        <Text variant="caption" tone={dirty ? 'energy' : 'subtle'} align="center" accessibilityLiveRegion="polite" style={styles.saveNote} numberOfLines={2}>
-          {dirty ? 'You have unsaved changes.' : idleNote ?? 'Everything is saved.'}
-        </Text>
-      </Animated.View>
+      {/* A plain Text, no layout transition: the note changes between one and two lines when a save lands, and an
+          animated frame (Android, Reduce Motion) kept the old one-line height — the second line ran under the button. */}
+      <Text variant="caption" tone={dirty ? 'energy' : 'subtle'} align="center" accessibilityLiveRegion="polite" style={styles.saveNote} numberOfLines={2}>
+        {dirty ? 'You have unsaved changes.' : idleNote ?? 'Everything is saved.'}
+      </Text>
       <View style={styles.saveRow}>
         {dirty ? (
           <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)}>
