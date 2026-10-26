@@ -33,6 +33,7 @@ Feature code: `src/app/(app)/(tabs)/snap.tsx`, `src/features/snap/**`, `src/lib/
 | 21 | Bug 7/8 retest: camera really blocked (`pm revoke` + user-fixed) → Take photo → no dialog flash, "Open Settings" panel → App info → Permissions → Camera → Allow only while using the app → back → panel gone, page back at the top with tips (toast "Camera access is on — tap Take photo." — 3 s, gone before the slow screenshot) | FIXED | sn117/118 → sn119–121 → sn124 |
 | 22 | Retake (camera) from "Photo ready" → cancel the camera → the earlier photo stays, no error | PASS | sn131 → sn132 |
 | 23 | Android stops ÖRZA while the camera is open (`am kill` with the camera in front, like a low-memory kill on a 2–3 GB phone) → take the photo → ÖRZA restarts on Today and the photo is gone | OPEN (JS recovery added, not verifiable here) | sn125. Bug 10 |
+| 24 | Resume check 2026-10-26 on HEAD 54a847c (after the meds-rx / today-meals commits; no snap files changed since cbf6e5e): safety gate SAFE, `npm run typecheck` + `npx expo lint` clean, Snap → Choose from gallery → thali → "PHOTO READY" with the Analyse photo · 2 credits button drawn (gradient + label, bug 1 stays fixed), 91 credits; no AI call | PASS | r04 picker, r05 photo ready. The dev element inspector had been left open by an earlier session ("Tap something to inspect it") and `uiautomator dump` cannot get an idle screen (endless tab-bar halo), so this check used screenshots |
 
 ## Bugs
 
