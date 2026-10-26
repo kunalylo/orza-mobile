@@ -1,7 +1,7 @@
 /** Reports API calls + React Query hooks (daily and weekly). */
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api } from '@/lib/api';
+import { api, retryWhileUnreachable } from '@/lib/api';
 
 import type { DailyReport, WeeklyReport } from './types';
 
@@ -22,6 +22,8 @@ export function useDailyReport(date: string) {
     placeholderData: keepPreviousData,
     // Meals, water and steps are logged on other screens — always revalidate when the report is opened.
     staleTime: 0,
+    // Offline: the error card clears itself once ÖRZA can be reached again (no network listener — see lib/api).
+    refetchInterval: retryWhileUnreachable,
   });
 }
 
@@ -32,6 +34,7 @@ export function useWeeklyReport(end: string, enabled: boolean) {
     queryFn: ({ signal }) => fetchWeekly(end, signal),
     placeholderData: keepPreviousData,
     staleTime: 0,
+    refetchInterval: retryWhileUnreachable,
     enabled,
   });
 }

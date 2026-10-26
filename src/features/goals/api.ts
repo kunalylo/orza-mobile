@@ -1,7 +1,7 @@
 /** Goals API calls + React Query hooks (goal, weigh-ins, targets). */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api } from '@/lib/api';
+import { api, retryWhileUnreachable } from '@/lib/api';
 
 import type { GoalCalculateRequest, GoalCalculateResponse, GoalsActiveResponse, TrackWeightResponse, WeightPoint } from './types';
 
@@ -21,6 +21,8 @@ export function useGoalsActive() {
     queryFn: ({ signal }) => api.get<GoalsActiveResponse>('/goals/active', { signal }),
     // Weigh-ins are also logged from Today — revalidate whenever the screen opens.
     staleTime: 0,
+    // Offline: the error card clears itself once ÖRZA can be reached again (no network listener — see lib/api).
+    refetchInterval: retryWhileUnreachable,
   });
 }
 

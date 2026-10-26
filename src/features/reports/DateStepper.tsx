@@ -29,7 +29,9 @@ export function DateStepper({
   const center = (
     <View style={styles.center}>
       <View style={styles.labelRow}>
-        <Text variant="title" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.label}>
+        {/* No adjustsFontSizeToFit: on Android it laid the shrink-wrapped Playfair label out on two lines and clipped the
+            second, so "Wed, 21 Oct" read "Wed, 21". The longest label ("29 Dec 2025 – 4 Jan 2026") fits a phone pill. */}
+        <Text variant="title" numberOfLines={1} style={styles.label}>
           {label}
         </Text>
         {onPressLabel ? <Icon name="chevron-down" size={15} color={colors.muted} /> : null}
@@ -103,6 +105,8 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.6 },
   center: { alignItems: 'center', justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.xs },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '100%' },
+  // No negative letter spacing (the `title` variant's −0.1): Android measured the shrink-wrapped Playfair label a hair
+  // narrower than it draws it, so the month wrapped onto a hidden second line and "Fri, 23 Oct" read "Fri, 23".
   label: { fontFamily: 'PlayfairDisplay_600SemiBold', flexShrink: 1 },
   sub: { fontSize: 10, marginTop: 1 },
 });

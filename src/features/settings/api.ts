@@ -7,7 +7,7 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 import { emitAlarmDataChanged } from '@/lib/alarms/events';
-import { ApiError, api, validationField } from '@/lib/api';
+import { ApiError, api, retryWhileUnreachable, validationField } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { Preferences, PublicUser, Targets } from '@/lib/types';
 
@@ -53,6 +53,8 @@ export function useAccountSync() {
       return res.user.id;
     },
     staleTime: 15_000,
+    // Offline: the "showing what's saved on this phone" note clears itself once ÖRZA can be reached again.
+    refetchInterval: retryWhileUnreachable,
   });
 }
 

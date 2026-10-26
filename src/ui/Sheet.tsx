@@ -22,6 +22,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { colors, gutter, isIOS, motion, radii, shadows, spacing } from '@/theme';
 
 import { IconButton } from './IconButton';
+import { ScrollRevealContext } from './scrollReveal';
 import { holdSheetKeyboard } from './sheetKeyboard';
 import { Text } from './Text';
 import { ToastHost } from './Toast';
@@ -193,68 +194,71 @@ function SheetModal({
   return (
     <LayoutAnimationConfig skipExiting>
       <Modal visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={requestClose} onShow={onShow}>
-        <GestureHandlerRootView style={styles.fill}>
-          <Animated.View style={[styles.backdrop, backdropStyle]}>
-            <Pressable
-              style={styles.fill}
-              onPress={requestClose}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-              accessible={closable}
-              importantForAccessibility={closable ? 'auto' : 'no-hide-descendants'}
-            />
-          </Animated.View>
+        {/* The screen under the sheet must not try to scroll the sheet's fields into its own view (scrollReveal.ts). */}
+        <ScrollRevealContext.Provider value={null}>
+          <GestureHandlerRootView style={styles.fill}>
+            <Animated.View style={[styles.backdrop, backdropStyle]}>
+              <Pressable
+                style={styles.fill}
+                onPress={requestClose}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                accessible={closable}
+                importantForAccessibility={closable ? 'auto' : 'no-hide-descendants'}
+              />
+            </Animated.View>
 
-          <Animated.View
-            style={[styles.sheet, { maxHeight: limit, paddingBottom: bottomPad }, full && { height: limit }, sheetStyle]}
-            onLayout={(e) => setSheetHeight(e.nativeEvent.layout.height)}
-            accessibilityViewIsModal
-            accessibilityLabel={accessibilityLabel ?? title}
-          >
-            <GestureDetector gesture={pan}>
-              <View style={styles.top}>
-                <View style={styles.handle} />
-                {(title || eyebrow || showClose) && (
-                  <View style={styles.header}>
-                    <View style={styles.headerText}>
-                      {eyebrow ? (
-                        <Text variant="eyebrow" tone="muted">
-                          {eyebrow}
-                        </Text>
-                      ) : null}
-                      {title ? (
-                        <Text variant="h3" accessibilityRole="header" numberOfLines={2}>
-                          {title}
-                        </Text>
+            <Animated.View
+              style={[styles.sheet, { maxHeight: limit, paddingBottom: bottomPad }, full && { height: limit }, sheetStyle]}
+              onLayout={(e) => setSheetHeight(e.nativeEvent.layout.height)}
+              accessibilityViewIsModal
+              accessibilityLabel={accessibilityLabel ?? title}
+            >
+              <GestureDetector gesture={pan}>
+                <View style={styles.top}>
+                  <View style={styles.handle} />
+                  {(title || eyebrow || showClose) && (
+                    <View style={styles.header}>
+                      <View style={styles.headerText}>
+                        {eyebrow ? (
+                          <Text variant="eyebrow" tone="muted">
+                            {eyebrow}
+                          </Text>
+                        ) : null}
+                        {title ? (
+                          <Text variant="h3" accessibilityRole="header" numberOfLines={2}>
+                            {title}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {showClose ? (
+                        <IconButton icon="x" accessibilityLabel="Close" size={36} iconSize={18} onPress={requestClose} disabled={!closable} />
                       ) : null}
                     </View>
-                    {showClose ? (
-                      <IconButton icon="x" accessibilityLabel="Close" size={36} iconSize={18} onPress={requestClose} disabled={!closable} />
-                    ) : null}
-                  </View>
-                )}
-              </View>
-            </GestureDetector>
+                  )}
+                </View>
+              </GestureDetector>
 
-            {scroll ? (
-              <ScrollView
-                style={full ? styles.fill : undefined}
-                contentContainerStyle={styles.body}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode={isIOS ? 'interactive' : 'on-drag'}
-                showsVerticalScrollIndicator={false}
-              >
-                {children}
-              </ScrollView>
-            ) : (
-              <View style={[styles.bodyStatic, full && styles.fill]}>{children}</View>
-            )}
+              {scroll ? (
+                <ScrollView
+                  style={full ? styles.fill : undefined}
+                  contentContainerStyle={styles.body}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode={isIOS ? 'interactive' : 'on-drag'}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {children}
+                </ScrollView>
+              ) : (
+                <View style={[styles.bodyStatic, full && styles.fill]}>{children}</View>
+              )}
 
-            {footer ? <View style={styles.footer}>{footer}</View> : null}
-          </Animated.View>
-          {/* Toasts raised while the sheet is open draw in this window, above the backdrop (see Toast.tsx). */}
-          <ToastHost active={visible} />
-        </GestureHandlerRootView>
+              {footer ? <View style={styles.footer}>{footer}</View> : null}
+            </Animated.View>
+            {/* Toasts raised while the sheet is open draw in this window, above the backdrop (see Toast.tsx). */}
+            <ToastHost active={visible} />
+          </GestureHandlerRootView>
+        </ScrollRevealContext.Provider>
       </Modal>
     </LayoutAnimationConfig>
   );

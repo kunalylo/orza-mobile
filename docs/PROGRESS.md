@@ -431,3 +431,19 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   chat header clipping, app links in replies, keyboard after New chat from the sheet, mic never re-asked after a Settings reset
   (src/lib/voice.ts), recipe prompt multiline, Recipes over-scroll after delete + scroll-back on failure, Rebalance result reveal,
   floor wording, history chevron. Backend note: rebalance floor (BMR) above the usual target means trims are always 0.
+- 2026-10-27: D1 coach DONE (`9772c06`): 31 cases — 21 pass, 10 fixed (chat sheet/mic, markdown, recipes prompt/scroll/offline/delete,
+  rebalance validation + reveal + wording). Backend for the next web batch: Rebalance floor = max(1200, BMR) makes maxCut 0 when BMR >
+  target (every plan walks-only) and the "never below {floor}" sentence contradicts day targets — web src/lib/compensation.ts +
+  RebalancePlanView.tsx. Also earlier: onboarding lb wording, dose acted_at/snooze_until, adherence history vs edited schedules.
+- 2026-10-27: **Client note for D3 (iOS release): Apple review is strict — audit every permission and requirement before submitting.**
+  Checklist to do in D3: purpose strings specific + just-in-time requests + app fully usable when denied (camera, photos, microphone,
+  speech, motion, HealthKit share/update, calendar full/write-only, notifications); HealthKit 5.1.3 (no ads/iCloud, privacy policy,
+  visible HealthKit UI, entitlement only for used types); time-sensitive notification entitlement (no critical alerts); background modes
+  only as used; PrivacyInfo.xcprivacy required-reason APIs (app.json ios.privacyManifests) + App Store Connect privacy labels; in-app
+  account deletion (exists); 3.1.1 — no prices / external purchase links for credits in the iOS app; 1.4.1 medical/AI disclaimers
+  (prescription scan, dosing); demo account + review notes; Play equivalents (Data safety, exact-alarm/full-screen-intent/health/activity
+  declarations).
+- 2026-10-27: D1 progress-account DONE: 36 cases — 21 pass, 15 fixed, 16 bugs (goal planner hints, weight-chart scroll, report labels/CSV
+  averages/day label, credits pill + labels, memory note field, SaveBar note, password card/keyboard reveal, sign-out-everywhere copy, delete
+  field caps, auto-retry of Credits/Goals/Reports/Settings once back online). Shared UI: `Screen`/`TextField` now scroll a focused field +
+  its error above a footer (`ui/scrollReveal.ts`). Web follow-up: weekly CSV "Average (logged days)" row in src/components/reports/format.ts.

@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import type { ReactElement, ReactNode } from 'react';
+import { useCallback, useMemo, useRef, type ReactElement, type ReactNode, type RefObject } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -15,6 +15,7 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { colors, gutter, layout } from '@/theme';
 
+import { ScrollRevealContext, type ScrollReveal } from './scrollReveal';
 import { useSheetOwnsKeyboard } from './sheetKeyboard';
 import { useKeyboardHeight } from './useKeyboardHeight';
 
@@ -126,8 +127,48 @@ export function Screen({
   const bottom = tabBar ? tabSpace : footer ? 0 : bottomInset + 16;
   const pad: ViewStyle = padded ? { paddingHorizontal: gutter } : {};
 
+  // Forms: scroll a focused field fully into view (scrollReveal.ts) — when it is focused, when its error changes and
+  // when the keyboard shrinks the page. Only ever scrolls down, and only as far as needed.
+  const reveals = Boolean(scroll && keyboard);
+  const scrollRef = useRef<ScrollView>(null);
+  const innerRef = useRef<View>(null);
+  const offset = useRef(0);
+  const viewport = useRef(0);
+  const active = useRef<View | null>(null);
+  const revealActive = useCallback(() => {
+    const sv = scrollRef.current;
+    const target = active.current;
+    const inner = innerRef.current;
+    if (!sv || !target || !inner || viewport.current <= 0) return;
+    target.measureLayout(
+      inner,
+      (_x, y, _w, h) => {
+        const margin = 12;
+        // The field's bottom (plus a little air) at the bottom edge — or its top at the top edge when it is taller.
+        const want = Math.min(y - margin, y + h + margin - viewport.current);
+        if (want > offset.current + 1) sv.scrollTo({ y: want, animated: true });
+      },
+      () => undefined
+    );
+  }, []);
+  const reveal = useMemo<ScrollReveal>(
+    () => ({
+      focus: (target) => {
+        active.current = target;
+        requestAnimationFrame(revealActive);
+      },
+      blur: (target) => {
+        if (active.current === target) active.current = null;
+      },
+    }),
+    [revealActive]
+  );
+
   const body = scroll ? (
     <ScrollView
+      ref={scrollRef}
+      // The prop's type predates React 19's nullable `useRef(null)`.
+      innerViewRef={innerRef as RefObject<View>}
       style={styles.flex}
       contentContainerStyle={[styles.grow, pad, { paddingBottom: bottom }, contentContainerStyle]}
       keyboardShouldPersistTaps="handled"
@@ -135,8 +176,21 @@ export function Screen({
       showsVerticalScrollIndicator={false}
       refreshControl={refreshControl}
       contentInsetAdjustmentBehavior="never"
+      scrollEventThrottle={reveals ? 32 : undefined}
+      onScroll={reveals ? (e) => (offset.current = e.nativeEvent.contentOffset.y) : undefined}
+      onLayout={
+        reveals
+          ? (e) => {
+              const h = e.nativeEvent.layout.height;
+              const shrank = h < viewport.current;
+              viewport.current = h;
+              // The keyboard came up (KeyboardAvoidingView padding): bring the focused field back above the footer.
+              if (shrank && active.current) requestAnimationFrame(revealActive);
+            }
+          : undefined
+      }
     >
-      {children}
+      {reveals ? <ScrollRevealContext.Provider value={reveal}>{children}</ScrollRevealContext.Provider> : children}
     </ScrollView>
   ) : (
     <View style={[styles.flex, pad, { paddingBottom: bottom }, contentContainerStyle]}>{children}</View>

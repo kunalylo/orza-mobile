@@ -1,10 +1,11 @@
-import { useState, type Ref } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import { Pressable, StyleSheet, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 
 import { haptics } from '@/lib/haptics';
 import { colors, fonts, radii } from '@/theme';
 
 import { Icon, type IconName } from './Icon';
+import { useScrollReveal } from './scrollReveal';
 import { Text } from './Text';
 
 export interface TextFieldProps extends Omit<TextInputProps, 'style'> {
@@ -27,9 +28,19 @@ export function TextField({ label, error, hint, icon, secure, suffix, containerS
   const [focused, setFocused] = useState(false);
   const [hidden, setHidden] = useState(true);
   const invalid = !!error;
+  const wrap = useRef<View>(null);
+  const reveal = useScrollReveal();
+
+  // On a form screen, keep the whole field (with its error line) in view while it is focused — also when an error
+  // appears under the already-focused field (see scrollReveal.ts).
+  useEffect(() => {
+    if (!reveal) return;
+    if (focused) reveal.focus(wrap.current);
+    else reveal.blur(wrap.current);
+  }, [reveal, focused, error, hint]);
 
   return (
-    <View style={containerStyle}>
+    <View ref={wrap} collapsable={false} style={containerStyle}>
       {label ? (
         <Text variant="label" tone="text" style={styles.label} nativeID={rest.nativeID ? `${rest.nativeID}-label` : undefined}>
           {label}

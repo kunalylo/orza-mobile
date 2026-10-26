@@ -1,7 +1,7 @@
 /** Credits API calls + React Query hooks (balance, history, "Request more credits"). */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api } from '@/lib/api';
+import { api, retryWhileUnreachable } from '@/lib/api';
 
 import type { BalanceResponse, CreditRequestResponse, CreditRequestsResponse, TransactionsResponse } from './types';
 
@@ -17,6 +17,8 @@ export function useCreditBalance() {
     queryKey: creditKeys.balance,
     queryFn: ({ signal }) => api.get<BalanceResponse>('/credits/balance', { signal }),
     staleTime: 0,
+    // Offline: the error card clears itself once ÖRZA can be reached again (no network listener — see lib/api).
+    refetchInterval: retryWhileUnreachable,
   });
 }
 
@@ -25,6 +27,7 @@ export function useCreditTransactions() {
     queryKey: creditKeys.transactions,
     queryFn: ({ signal }) => api.get<TransactionsResponse>('/credits/transactions', { signal }),
     staleTime: 0,
+    refetchInterval: retryWhileUnreachable,
   });
 }
 
