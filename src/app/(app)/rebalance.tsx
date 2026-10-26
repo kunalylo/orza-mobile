@@ -26,10 +26,17 @@ export default function Rebalance() {
   const [refreshing, setRefreshing] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const resultY = useRef(0);
+  /** A new plan should be brought into view as soon as its section has a position. */
+  const revealPending = useRef(false);
 
   const plans = q.data?.plans ?? [];
   const plan = result?.plan;
   const n = plan?.days.length ?? 0;
+
+  function revealResult() {
+    revealPending.current = false;
+    scrollRef.current?.scrollTo({ y: Math.max(0, resultY.current - spacing.md), animated: !reduce });
+  }
 
   function onCreated(res: RebalanceCreateResponse) {
     setResult(res);
@@ -37,8 +44,12 @@ export default function Rebalance() {
     haptics.success();
     if (res.notice) toast.info(res.notice, 6000);
     else toast.success('Your rebalance plan is ready.');
-    // Wait a frame for the result to lay out, then bring it into view.
-    setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, resultY.current - spacing.md), animated: !reduce }), 120);
+    // The first plan's section lays out later than a fixed delay (scrolling to y 0 sent the member back to the top of
+    // the form): reveal it from its own onLayout. A section already on screen (a 2nd plan) keeps its y — reveal now.
+    revealPending.current = true;
+    setTimeout(() => {
+      if (revealPending.current && resultY.current > 0) revealResult();
+    }, 120);
   }
 
   async function onRefresh() {
@@ -83,6 +94,7 @@ export default function Rebalance() {
             style={styles.section}
             onLayout={(e) => {
               resultY.current = e.nativeEvent.layout.y;
+              if (revealPending.current) revealResult();
             }}
           >
             <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18).stiffness(100).mass(1)}>

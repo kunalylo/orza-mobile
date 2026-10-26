@@ -100,7 +100,9 @@ export function RebalanceForm({
               if (errors.occasion) setErrors((x) => ({ ...x, occasion: undefined }));
             }}
             maxLength={80}
-            placeholder="e.g. Office farewell, Anniversary dinner"
+            // Short on purpose: Android wraps a single-line field's longer placeholder onto a clipped second line
+            // (on a 360 dp phone the old "e.g. Office farewell, Anniversary dinner" did).
+            placeholder="e.g. Office farewell"
             accessibilityLabel="Occasion"
             returnKeyType="next"
           />

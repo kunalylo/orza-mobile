@@ -221,7 +221,11 @@ export function PlanView({ plan, matched, showMessage = true }: { plan: Rebalanc
 
       {s && s.released_kcal > 0 ? (
         <Text variant="small" tone="muted" style={styles.released}>
-          Trims stay within a gentle range (never below {formatNumber(s.floor_calories)} kcal a day) and walks stay comfortable, so the last ~
+          {/* When the usual target already sits at (or under) the safe floor there is nothing to trim — "never below
+              1,696 kcal" next to days of 1,680 read as a contradiction. */}
+          {s.floor_calories >= s.usual_calories
+            ? `Your usual ${formatNumber(s.usual_calories)} kcal already sits at your body's safe floor, so ÖRZA doesn't trim meals, and walks stay comfortable — the last ~`
+            : `Trims stay within a gentle range (never below ${formatNumber(s.floor_calories)} kcal a day) and walks stay comfortable, so the last ~`}
           {formatNumber(s.released_kcal)} kcal is simply left to even out naturally over the week.
         </Text>
       ) : null}

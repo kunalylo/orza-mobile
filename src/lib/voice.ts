@@ -163,7 +163,10 @@ async function ensurePermission(mod: SpeechModule): Promise<Permission> {
   let p = await mod.getPermissionsAsync();
   if (p.granted) return 'granted';
   if (p.restricted) return 'restricted';
-  if (p.canAskAgain) {
+  // Android: a status check's `canAskAgain` is only what the LAST request ended with (Expo persists "blocked"), so it
+  // stays false after the member reset the permission in Settings ("Ask every time") — and we'd show "Open Settings"
+  // forever without ever asking. Asking is harmless: when it really is blocked, Android answers at once, no dialog.
+  if (p.canAskAgain || Platform.OS === 'android') {
     p = await mod.requestPermissionsAsync();
     if (p.granted) return 'granted';
     if (p.restricted) return 'restricted';

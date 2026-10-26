@@ -421,3 +421,13 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   our step-counter sampler = fallback without Play services; (2) two-way sync — keep reading Health Connect / Apple Health (highest source
   per day, no double counting) and add an opt-in "Share my steps with Health Connect" write (WRITE_STEPS, own data origin; HC priority dedupes);
   (3) real-device test on a USB-connected Android phone (the emulator has no step sensor) — ask the user to connect one.
+- 2026-10-26: D1 alarms DONE (`bfb35ea`): 24 cases — 16 pass, 7 fixed, 1 blocked (first-run permission sheet). Verified on the emulator:
+  photo alarm foreground / screen-off + keyguard, grouped doses, snooze re-ring, Skip/Take from notification, quiet hours, reminders,
+  process killed, reboot, offline action retry. For wrap-up: (native) ~6 s from alarm to notification when the process is dead (app cold
+  start); BOOT_COMPLETED arrives ~65 s after boot → add a direct-boot-aware LOCKED_BOOT_COMPLETED path. (backend, needs push OK)
+  POST /api/meds/doses should accept acted_at + absolute snooze_until for queued offline actions. Efficiency: remaining areas switch
+  system animations off (Reduce Motion) so uiautomator can read screens.
+- 2026-10-26: D1 coach DONE: 31 cases (Ask ÖRZA, Recipes, Rebalance) — 10 bugs fixed in JS (B1–B10, see docs/notes/D1-coach.md):
+  chat header clipping, app links in replies, keyboard after New chat from the sheet, mic never re-asked after a Settings reset
+  (src/lib/voice.ts), recipe prompt multiline, Recipes over-scroll after delete + scroll-back on failure, Rebalance result reveal,
+  floor wording, history chevron. Backend note: rebalance floor (BMR) above the usual target means trims are always 0.

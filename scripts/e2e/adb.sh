@@ -18,7 +18,7 @@ shot() { "$A" exec-out screencap -p > "$E2E_OUT/$1.png" && echo "$E2E_OUT/$1.png
 # and a stale file would show the previous screen.
 _dump() { "$A" shell rm -f /sdcard/ui.xml; "$A" shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; "$A" shell cat /sdcard/ui.xml 2>/dev/null; }
 ui() {
-  _dump | tr '>' '\n' | grep -oE '(text|content-desc)="[^"]+"[^/]*bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"' |
+  _dump | tr '>' '\n' | grep -oE '(text|content-desc)="[^"]+"[^>]*bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"' |
     sed -E 's/^(text|content-desc)="([^"]+)".*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]"/\2|\3 \4 \5 \6/' |
     awk -F'|' '{ split($2,b," "); printf "%s  @ %d,%d\n", $1, (b[1]+b[3])/2, (b[2]+b[4])/2 }'
 }

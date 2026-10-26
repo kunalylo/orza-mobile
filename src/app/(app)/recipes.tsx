@@ -38,6 +38,18 @@ export default function Recipes() {
   const lastRequest = useRef<GenerateRequest>({});
   const scrollRef = useRef<ScrollView>(null);
   const resultY = useRef(0);
+  const scrollY = useRef(0);
+  const viewportH = useRef(0);
+
+  // Android leaves the scroll offset past the end when the content shrinks (a recipe deleted on its detail screen
+  // closes the result card and empties the list) — the screen came back mostly blank until touched. Clamp it.
+  function clampScroll(contentH: number) {
+    const max = Math.max(0, contentH - viewportH.current);
+    if (viewportH.current > 0 && scrollY.current > max + 1) {
+      scrollY.current = max;
+      scrollRef.current?.scrollTo({ y: max, animated: false });
+    }
+  }
 
   const recipes = q.data?.recipes ?? [];
   const saved = recipes.filter((r) => r.saved);
@@ -72,6 +84,9 @@ export default function Recipes() {
     } catch (e) {
       haptics.error();
       const info = aiErrorInfo(e);
+      // The view had scrolled down to the "cooking" card, which is gone now: back to the studio, where a field error
+      // shows and "Generate recipe" can be tapped again.
+      requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: !reduce }));
       if (info.field && GENERATOR_FIELDS.has(info.field)) setErrors({ [info.field]: info.message });
       else toast.error(info.message, info.needsCredits ? 6000 : undefined);
       if (info.needsCredits) void refresh();
@@ -156,6 +171,14 @@ export default function Recipes() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
+        onScroll={(e) => {
+          scrollY.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={64}
+        onLayout={(e) => {
+          viewportH.current = e.nativeEvent.layout.height;
+        }}
+        onContentSizeChange={(_, h) => clampScroll(h)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.coral} colors={[colors.coral]} />}
       >
         <ScreenHeader

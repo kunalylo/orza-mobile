@@ -1,6 +1,6 @@
 /** Past rebalance plans — tap to expand and revisit, delete with a native confirm. */
 import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { formatNumber } from '@/features/chat/format';
@@ -60,7 +60,19 @@ function PlanRow({ plan, highlighted, onDelete, deleting }: { plan: RebalancePla
             {range} · created {createdLabel(plan.created_at)}
           </Text>
         </PressableScale>
-        <Chevron open={open} />
+        {/* The chevron looks like the toggle, so it is one too (the row itself is the accessible button). */}
+        <Pressable
+          onPress={() => {
+            haptics.select();
+            setOpen((o) => !o);
+          }}
+          hitSlop={10}
+          style={styles.chevron}
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+        >
+          <Chevron open={open} />
+        </Pressable>
         <IconButton icon="trash-2" variant="plain" size={40} iconSize={16} color={colors.subtle} accessibilityLabel={`Delete the ${plan.occasion} plan`} onPress={onDelete} disabled={deleting} />
       </View>
       {open ? (
@@ -147,6 +159,7 @@ const styles = StyleSheet.create({
   rowMain: { flex: 1, paddingVertical: spacing.lg, paddingLeft: spacing.lg, paddingRight: spacing.sm },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   shrink: { flexShrink: 1 },
+  chevron: { paddingVertical: spacing.md, paddingHorizontal: 4 },
   sub: { marginTop: 4 },
   panel: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairlineStrong },
   ate: { marginBottom: spacing.lg },

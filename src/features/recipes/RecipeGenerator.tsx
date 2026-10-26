@@ -101,6 +101,12 @@ export function RecipeGenerator({
         placeholder="e.g. high-protein veg dinner under 500 kcal"
         maxLength={300}
         autoCorrect
+        // Wraps (and grows) instead of one scrolling line: a request can run to 300 characters, and Android wraps a
+        // long placeholder of a single-line field onto a clipped second line anyway. The "go" key still generates.
+        multiline
+        submitBehavior="blurAndSubmit"
+        textAlignVertical="center"
+        inputStyle={styles.promptInput}
         returnKeyType="go"
         onSubmitEditing={submit}
         error={errors.prompt}
@@ -266,6 +272,7 @@ const styles = StyleSheet.create({
   title: { marginTop: spacing.sm },
   lead: { marginTop: 6 },
   prompt: { marginTop: spacing.lg },
+  promptInput: { maxHeight: 132 },
   tryRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
   tryLabel: { fontSize: 10 },
   chipScroll: { flexGrow: 0, marginRight: -spacing.xl },
