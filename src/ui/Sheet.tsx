@@ -58,6 +58,11 @@ export interface SheetProps {
    * while it already counts as focused — so the sheet waits for the Modal's `onShow` and re-focuses if no keyboard came.
    */
   initialFocus?: RefObject<TextInput | null>;
+  /**
+   * Called once the sheet has finished closing and is unmounted — e.g. to focus a field on the screen below (a field
+   * focused while the sheet's Modal window still has focus gets no keyboard on Android, and closing dismisses it).
+   */
+  onClosed?: () => void;
 }
 
 export function Sheet(props: SheetProps) {
@@ -65,6 +70,15 @@ export function Sheet(props: SheetProps) {
   // Mount as soon as it should show; unmount only after the exit animation (onHidden).
   if (props.visible && !mounted) setMounted(true);
   const onHidden = useCallback(() => setMounted(false), []);
+  const onClosedRef = useRef(props.onClosed);
+  useEffect(() => {
+    onClosedRef.current = props.onClosed;
+  });
+  const wasMounted = useRef(mounted);
+  useEffect(() => {
+    if (wasMounted.current && !mounted) onClosedRef.current?.();
+    wasMounted.current = mounted;
+  }, [mounted]);
   if (!mounted) return null;
   return <SheetModal {...props} onHidden={onHidden} />;
 }

@@ -88,12 +88,38 @@ export default function AskOrza() {
     );
   };
 
-  function newChat() {
+  /** Composer focused with the keyboard up. Android: retry (blur + focus) while no keyboard came, as Sheet does. */
+  const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (focusTimer.current) clearTimeout(focusTimer.current);
+    },
+    [],
+  );
+  function focusComposer() {
+    if (focusTimer.current) clearTimeout(focusTimer.current);
+    let tries = 0;
+    const attempt = () => {
+      focusTimer.current = null;
+      const input = chat.inputRef.current;
+      if (!input || (tries > 0 && Keyboard.isVisible())) return;
+      if (tries > 0 && input.isFocused()) input.blur();
+      input.focus();
+      tries += 1;
+      if (Platform.OS === 'android' && tries < 4) focusTimer.current = setTimeout(attempt, 300);
+    };
+    attempt();
+  }
+
+  /** From the conversations sheet the composer is focused once the sheet is gone (`onClosed`). */
+  const focusAfterSheet = useRef(false);
+  function newChat(fromSheet = false) {
     haptics.tap();
     setSheetOpen(false);
     setShowJump(false);
     chat.startNew();
-    requestAnimationFrame(() => chat.inputRef.current?.focus());
+    if (fromSheet) focusAfterSheet.current = true;
+    else requestAnimationFrame(focusComposer);
   }
 
   const header = (
@@ -105,7 +131,7 @@ export default function AskOrza() {
         </View>
         <View style={styles.headerText}>
           <View style={styles.titleRow}>
-            <Text variant="title" accessibilityRole="header">
+            <Text variant="title" accessibilityRole="header" style={styles.title}>
               Ask ÖRZA
             </Text>
             <View style={styles.online} />
@@ -116,7 +142,7 @@ export default function AskOrza() {
         </View>
       </View>
       <IconButton icon="message-square" accessibilityLabel="Your conversations" onPress={() => setSheetOpen(true)} size={40} />
-      <IconButton icon="edit" accessibilityLabel="New chat" onPress={newChat} size={40} />
+      <IconButton icon="edit" accessibilityLabel="New chat" onPress={() => newChat()} size={40} />
     </View>
   );
 
@@ -221,7 +247,12 @@ export default function AskOrza() {
           setShowJump(false);
           chat.openSession(id);
         }}
-        onNew={newChat}
+        onNew={() => newChat(true)}
+        onClosed={() => {
+          if (!focusAfterSheet.current) return;
+          focusAfterSheet.current = false;
+          focusComposer();
+        }}
         onDelete={(s) => confirmDeleteSession(s, () => void chat.removeSession(s))}
       />
     </Screen>
@@ -246,6 +277,9 @@ const styles = StyleSheet.create({
   avatarOrb: { margin: -10 },
   headerText: { flex: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // No negative letter spacing: Android measures a shrink-wrapped title with it a hair narrower than it draws, so
+  // "ÖRZA" wrapped onto a clipped second line and the header read just "Ask".
+  title: { letterSpacing: 0 },
   online: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.success },
   skeleton: { flex: 1, gap: spacing.lg, paddingHorizontal: gutter, paddingTop: spacing.xl },
   right: { alignSelf: 'flex-end' },

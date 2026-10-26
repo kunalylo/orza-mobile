@@ -1,7 +1,8 @@
 /**
  * Tiny, safe renderer for ÖRZA's replies — React Native <Text> nodes only, never HTML.
  * Paragraphs, line breaks, "- " / "• " bullets, "1. " lists, "# headings" (as bold), **bold**, *italic*, `code`
- * and [links](https://…) (https only, opened in the in-app browser; app paths show as plain text).
+ * and [links](https://…) (https opens in the in-app browser; the website's app paths like /dashboard/compensation open
+ * the matching screen — see ./links; anything else shows as plain text).
  */
 import * as WebBrowser from 'expo-web-browser';
 import { Fragment, useMemo, type ReactNode } from 'react';
@@ -9,6 +10,8 @@ import { Text as RNText, StyleSheet, View } from 'react-native';
 
 import { colors, fonts } from '@/theme';
 import { Text } from '@/ui';
+
+import { appLinkFor, openAppLink } from './links';
 
 type Block = { kind: 'p'; lines: string[] } | { kind: 'ul'; items: string[] } | { kind: 'ol'; items: string[]; start: number };
 
@@ -72,8 +75,15 @@ function renderInline(text: string, keyPrefix: string, allowLinks = true): React
       );
     } else if (m[2] != null && m[3] != null) {
       const url = allowLinks ? safeHttps(m[3]) : null;
+      const appLink = allowLinks && !url ? appLinkFor(m[3]) : null;
       const label = renderInline(m[2], k, false);
-      if (!url) out.push(<Fragment key={k}>{label}</Fragment>);
+      if (appLink)
+        out.push(
+          <RNText key={k} style={styles.link} accessibilityRole="link" onPress={() => openAppLink(appLink)}>
+            {label}
+          </RNText>,
+        );
+      else if (!url) out.push(<Fragment key={k}>{label}</Fragment>);
       else
         out.push(
           <RNText

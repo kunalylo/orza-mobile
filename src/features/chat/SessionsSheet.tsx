@@ -22,6 +22,8 @@ export interface SessionsSheetProps {
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (s: ChatSession) => void;
+  /** The sheet has finished closing (see Sheet `onClosed`). */
+  onClosed?: () => void;
 }
 
 export function confirmDeleteSession(s: ChatSession, onConfirm: () => void) {
@@ -37,7 +39,7 @@ export function confirmDeleteSession(s: ChatSession, onConfirm: () => void) {
   );
 }
 
-export function SessionsSheet({ visible, onClose, sessions, loading, error, onRetry, activeId, memoryCount, onSelect, onNew, onDelete }: SessionsSheetProps) {
+export function SessionsSheet({ visible, onClose, sessions, loading, error, onRetry, activeId, memoryCount, onSelect, onNew, onDelete, onClosed }: SessionsSheetProps) {
   const reduce = useReducedMotion();
 
   let body;
@@ -116,6 +118,7 @@ export function SessionsSheet({ visible, onClose, sessions, loading, error, onRe
     <Sheet
       visible={visible}
       onClose={onClose}
+      onClosed={onClosed}
       eyebrow="Ask ÖRZA"
       title="Conversations"
       full
