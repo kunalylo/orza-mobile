@@ -24,6 +24,7 @@ import { colors, gutter, isIOS, motion, radii, shadows, spacing } from '@/theme'
 import { IconButton } from './IconButton';
 import { holdSheetKeyboard } from './sheetKeyboard';
 import { Text } from './Text';
+import { ToastHost } from './Toast';
 import { useKeyboardHeight } from './useKeyboardHeight';
 
 export interface SheetProps {
@@ -237,6 +238,8 @@ function SheetModal({
 
             {footer ? <View style={styles.footer}>{footer}</View> : null}
           </Animated.View>
+          {/* Toasts raised while the sheet is open draw in this window, above the backdrop (see Toast.tsx). */}
+          <ToastHost active={visible} />
         </GestureHandlerRootView>
       </Modal>
     </LayoutAnimationConfig>

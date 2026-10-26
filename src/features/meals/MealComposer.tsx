@@ -196,9 +196,12 @@ export function MealComposer({
   const costHint =
     aiStatus == null
       ? null
-      : aiStatus.ai_enabled
-        ? `AI estimate · ${cost} credit${cost === 1 ? '' : 's'} · ${formatNumber(user.credits)} left`
-        : "Free · ÖRZA's built-in Indian food list";
+      : !aiStatus.ai_enabled
+        ? "Free · ÖRZA's built-in Indian food list"
+        : user.credits < cost
+          ? // The server then logs it free with the built-in list (and says so) — "1 credit · 0 left" read like a dead end.
+            "No AI credits left · logs free with ÖRZA's built-in food list"
+          : `AI estimate · ${cost} credit${cost === 1 ? '' : 's'} · ${formatNumber(user.credits)} left`;
 
   return (
     <GlassCard tone="strong" glow padding={spacing.lg + 2}>

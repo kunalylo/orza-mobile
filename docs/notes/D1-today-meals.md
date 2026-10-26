@@ -132,3 +132,61 @@ text` / `keyevent` leave touch mode — a test artefact, not an app bug.
 Emulator note: after the restart the weight sheet's keyboard comes up ~0.8 s after the tap (initialFocus, bug 12) —
 the no-keyboard sheets seen first in this run (p04–p09) were in the memory-starved process noted above.
 Checks: `npm run typecheck`, `npx expo lint`, `npm run test:steps` (66 pass). Safety gate SAFE after each Metro restart.
+
+## Resumed run 3 (2026-10-26 09:55, after the usage-limit pause; today-meals committed in f790ff2)
+
+Since f790ff2 the snap (cbf6e5e) and meds-rx (ec91ccc) runs changed shared UI used here: Sheet (`LayoutAnimationConfig
+skipExiting`), Button (`key={variant}`), Chip/Tag, EmptyState, GlassCard (`hero` tone), tabs layout (snap photo recovery).
+This run: regression pass of the today-meals flows over those changes, a new calendar day (6 days after the last meal →
+streak reset), the Undo case left BLOCKED, and the Today medicines card now that qa4 has medicines (meds-rx run).
+Safety gate SAFE at resume (09:55). Screenshots `qNN`. Emulator found on the full-screen dose alarm (qa4's 8:00 am Rx
+doses) with the RN element inspector left on and Metro unreachable (adb reverse dropped) → app_start.
+
+| # | Case | Result | Evidence / notes |
+|---|------|--------|------------------|
+| 37 | Today on a new day (26 Oct, last meals 19/20 Oct): "Good morning, QA.", "Log a meal to start a streak", week strip Tue 20–Mon 26 (warm bar on 20), 1,680 left, macros 0/101·0/202·0/52·0/25, insight "Good morning — a protein-rich breakfast…", empty meals card | PASS | q03–q07 |
+| 38 | Medicines card with qa4's Rx medicines (from the meds-rx run): "Next doses · 0 of 6 taken today", Glimepiride / Pantoprazole 8:00 am MISSED + Take, Metformin 6:30 pm, "+3 more today" | PASS | q05 |
+| 39 | Water: glass row layout (target 10) | FIXED | q06: 10 glasses at a fixed 30 dp broke 9 + 1 — the 10th glass alone on a second line — bug 18; q11 one row; q13 12 glasses → 6 + 6. While re-testing fast taps the glass grid reflowing (1 row ↔ 2) moved the −/+ buttons under the finger (q14: 3 "−" taps → only 2 landed) — bug 18b; q17 −/+ beside the count |
+| 40 | Water: fast taps across the reflow — 5 "+" (9 → 14, one row → two) then 6 "−" (→ 8) | PASS | q20 "14 of 10", 7 + 7, server 14; q21 8, server `water_glasses: 8` — every tap landed |
+| 41 | Weight sheet after the Sheet change (skipExiting): opens focused with the keyboard (`mInputShown=true`), "73.45" → Save weight → toast "Weight saved — 73.5 kg", tile 73.5 "Logged today", server `weight_kg: 73.5` (one decimal, same as the web), screen below intact | PASS | q23–q25. Gboard showed its floating toolbar instead of the full keyboard: adb `input text` comes from a virtual hardware keyboard — test artefact |
+| 42 | Steps typing fallback after the Sheet change: Log steps → keyboard up → 3200 + IME ✓ → toast "3,200 steps saved", card 3,200 · 46 % · "Logged today" · "3,800 to go", server `steps: 3200` | PASS | q26, q27 |
+| 43 | Food list after the Sheet change: "paneer" → Paneer Tikka (Breakfast preselected at 10:08), Snack + Restaurant, servings typed "1.5" → "Add 1½ × Paneer Tikka" tapped with the field focused | PASS | q30–q34: ≈644 kcal live, spinner, sheet closes cleanly, toast "Added 1½ × Paneer Tikka to snack", totals 644 / 1,036 left; server: snack, "Paneer Tikka (restaurant)" 1.5 plate 225 g 644 kcal |
+| 44 | Custom item: blank → name + kcal highlighted, "Give this item a name · Calories: 0–5000"; Masala oats 180 kcal / 6 g P → added to breakfast | FIXED | q36: the "Please check the highlighted fields." toast was drawn by the root host UNDER the sheet's dim backdrop — greyed, looked disabled (every sheet's error / info toasts: food list, weight / steps save errors, steps permission notes) — bug 19; q40 fixed (crisp, above the backdrop) |
+| 45 | Toast hand-over when a sheet closes (screen recordings, 6 fps) | PASS (after 2 fixes) | rec9: first version — toast vanished ~0.3 s when the sheet unmounted, then reappeared; rec10 (after a Fast Refresh): toast gone for good (module counter reset → two hosts with one id); rec11 after both fixes: zooms in above the open sheet, stays put while the backdrop fades, fades up after 3 s |
+| 46 | Edit meal after the shared-UI changes: Snack chip + quantity typed "2" (Masala oats) → Save changes tapped at once | PASS | q49–q52: 360 kcal / P 12 g live, spinner, back on Meals; server snack, 2 serving 360 kcal. (The ~4 s save is the local Next dev server compiling `/api/meals/[id]` on first hit: "PATCH … 200 in 4342ms") |
+| 47 | Delete: trash → "Delete this meal? 1 item · 85 kcal…" → Delete; swipe left → dialog → Android back keeps it → swipe → Delete | PASS | q53–q57, server rows gone, "3 meals · 1,089 kcal" |
+| 48 | Logged card + Undo (was BLOCKED) — without an AI call: qa4's credits set to 0 on the stopped local server (DB backup in the scratchpad), so `/api/meals/text` charges nothing and logs with the built-in parser | PASS / FIXED (polish) | q60: with 0 credits the hint still read "AI estimate · 1 credit · 0 left" — a dead end, although the server logs it free — bug 20; now "No AI credits left · logs free with ÖRZA's built-in food list". q61 pending (spinner, inputs disabled); q62 "Logged to breakfast · BUILT-IN FOOD LIST · 3 items · 630 kcal" (Roti 2 piece 220, Toor Dal 1 katori 150, Steamed Rice 1 bowl 260), the server's notice, Adjust portions / Undo, card scrolled into view, totals "39 kcal over" + "Plan a gentle rebalance"; Undo → toast "Undone — that meal was removed", card gone, totals back to 1,089, server row gone (q64). No OpenAI call, credits restored to 91 afterwards (server restarted, safety gate SAFE) |
+| 49 | Today macro bars / ring after a tab round trip (cold start → Meals → Today) | FIXED | q67 (Fat bar an empty track at 55 / 52 g), rp15 / ru2 (all four bars empty), ru3 (Fibre empty) — ~1 run in 3, although debug logs showed every spring finishing at the right width — bug 21. After the fix 6 / 6 cold-start round trips keep every bar and the ring (rv1–rv6, rw_all); value changes still spring (rec14) |
+| 50 | Today pull to refresh after all changes | PASS | q65 spinner, q66 settled; values unchanged, bars and ring kept (rec12) |
+
+18. FIXED — Water card (src/features/today/WaterCard.tsx): glasses were a fixed 30 dp in a wrapping row, so the common
+    targets broke badly — 10 glasses (qa4's target) as 9 + 1, the 10th glass alone on a second line (q06). The row now
+    measures itself: one row whenever the glasses fit at ≥ 24 dp, else evenly filled rows (12 → 6 + 6, 14 → 7 + 7).
+    18b: with the grid reflowing (one row ↔ two as the count passes what fits) the −/+ buttons sat UNDER the glasses
+    and jumped away from a thumb tapping fast (3 "−" taps → 2 landed, q14). −/+ now sit beside the count, above the
+    glasses; "N to go · 250 ml each" below them.
+19. FIXED — Toasts raised while a sheet is open (src/ui/Toast.tsx, src/ui/Sheet.tsx): the root ToastHost drew them
+    under the sheet's Modal window — behind the dim backdrop, greyed and looking disabled ("Please check the
+    highlighted fields." on the custom item, q36), or hidden behind a tall sheet. Each open Sheet now mounts a
+    ToastHost in its own window and only the newest mounted host draws; a sheet that starts closing hands its toasts
+    back at once (`active={visible}`), and a toast that moves between hosts keeps its place and remaining time
+    without springing in again. Host ids come from `useId` (a module counter restarted on Fast Refresh and gave two
+    hosts one id → no toast at all, rec10).
+20. FIXED (polish) — Meals composer with 0 AI credits said "AI estimate · 1 credit · 0 left" — reads like a dead end,
+    but the server then logs the text free with the built-in food list. Now "No AI credits left · logs free with
+    ÖRZA's built-in food list" (src/features/meals/MealComposer.tsx). The web composer has the same wording.
+21. FIXED — Progress bars / energy ring losing their value (src/ui/ProgressBar.tsx, src/ui/EnergyRing.tsx; used by
+    Today's EnergyCard, Meals' DailySummary, the meal editor ring, reports, goals…): the fill width / arc offset lived
+    only in a Reanimated animated style / animated prop. On Android (Fabric, Reanimated 4.5.1) a settled value was
+    sometimes reverted to the first frame (empty) after the tab navigator re-rendered (Today → Meals → Today), although
+    the spring's completion callback reported the right value — the same symptom as case 36's empty edit-meal ring.
+    Now only the motion is Reanimated's: when the spring / sweep finishes the component swaps to a plain View width /
+    plain Circle offset that React owns (a new element, nothing of the animated one carries over); a new value
+    animates from where it was. Reduce-motion renders static directly.
+
+Data changed on the local server in this run (qa4): today's meals Paneer Tikka (snack 644), Masala oats ×2 (snack
+360), Chai ×2 + Poha (breakfast), water 8, steps 3,200, weight 73.5 kg; credits 91 → 0 → 91 (set in the stopped
+server's JSON DB for case 48, restored; backup `orza-db.backup-before-credits0.json` in the scratchpad). The dev
+client's floating "Tools button" (dev menu) was switched off — it covered the Today header.
+
+Checks: `npm run typecheck` ✓, `npx expo lint` ✓. Safety gate SAFE at resume and after each local-server restart.

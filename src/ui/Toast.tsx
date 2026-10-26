@@ -2,10 +2,15 @@
  * Toasts: `toast.success("Saved")`, `toast.error(message)`, `toast.info(...)` from anywhere (also outside React).
  * Rendered by <ToastHost /> at the root: glass pills under the status bar that spring in, stack (max 3),
  * dismiss on tap or after a few seconds, buzz a matching haptic and are announced by screen readers.
+ *
+ * Every open Sheet mounts its own <ToastHost /> inside its Modal window, and only the newest mounted host draws the
+ * toasts: from the root host a toast sat UNDER the sheet's dim backdrop (greyed out, "Please check the highlighted
+ * fields." looked disabled) or behind a tall sheet. A toast that moves to another host (a sheet opens or closes) keeps
+ * its place and its remaining time, without springing in again.
  */
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, View } from 'react-native';
-import Animated, { FadeOutUp, LinearTransition, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeOutUp, LayoutAnimationConfig, LinearTransition, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { haptics } from '@/lib/haptics';
@@ -21,11 +26,17 @@ interface ToastItem {
   kind: ToastKind;
   message: string;
   duration: number;
+  /** When it goes away (ms epoch); pushed back while held. Shared by every host that draws it. */
+  expiresAt: number;
 }
 
 let items: ToastItem[] = [];
 let seq = 0;
 const listeners = new Set<() => void>();
+/** Mounted hosts, oldest first; the last one draws. */
+let hosts: string[] = [];
+/** Toasts already drawn by some host: drawn again elsewhere without the entering spring. */
+const drawn = new Set<number>();
 
 function emit() {
   for (const l of listeners) l();
@@ -42,8 +53,17 @@ function dismiss(id: number) {
   const next = items.filter((t) => t.id !== id);
   if (next.length !== items.length) {
     items = next;
+    drawn.delete(id);
     emit();
   }
+}
+
+const topHost = () => hosts[hosts.length - 1];
+
+/** Let go after a press-and-hold: the full time again. */
+function restartTimer(id: number) {
+  const t = items.find((x) => x.id === id);
+  if (t) t.expiresAt = Date.now() + t.duration;
 }
 
 function show(kind: ToastKind, message: string, duration?: number) {
@@ -52,7 +72,8 @@ function show(kind: ToastKind, message: string, duration?: number) {
   // Same message already showing (double tap, repeated network error) — don't stack duplicates.
   if (items.some((t) => t.message === text && t.kind === kind)) return;
   const id = ++seq;
-  items = [...items.slice(-2), { id, kind, message: text, duration: duration ?? (kind === 'error' ? 4500 : 3000) }];
+  const ms = duration ?? (kind === 'error' ? 4500 : 3000);
+  items = [...items.slice(-2), { id, kind, message: text, duration: ms, expiresAt: Date.now() + ms }];
   emit();
   if (kind === 'success') haptics.success();
   else if (kind === 'error') haptics.error();
@@ -74,16 +95,25 @@ const look: Record<ToastKind, { icon: IconName; color: string; bg: string }> = {
 
 function ToastRow({ item }: { item: ToastItem }) {
   const [hold, setHold] = useState(false);
+  // Read once per mount: a toast handed over from another host appears in place.
+  const [springIn] = useState(() => !drawn.has(item.id));
+  useEffect(() => {
+    drawn.add(item.id);
+  }, [item.id]);
   useEffect(() => {
     if (hold) return;
-    const timer = setTimeout(() => dismiss(item.id), item.duration);
+    const timer = setTimeout(() => dismiss(item.id), Math.max(0, item.expiresAt - Date.now()));
     return () => clearTimeout(timer);
-  }, [item.id, item.duration, hold]);
+  }, [item, hold]);
+  const release = () => {
+    restartTimer(item.id);
+    setHold(false);
+  };
 
   const l = look[item.kind];
   return (
     <Animated.View
-      entering={ZoomIn.springify().damping(16).stiffness(220).mass(1)}
+      entering={springIn ? ZoomIn.springify().damping(16).stiffness(220).mass(1) : undefined}
       exiting={FadeOutUp.duration(180)}
       layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
       style={styles.row}
@@ -91,7 +121,7 @@ function ToastRow({ item }: { item: ToastItem }) {
       <Pressable
         onPress={() => dismiss(item.id)}
         onPressIn={() => setHold(true)}
-        onPressOut={() => setHold(false)}
+        onPressOut={release}
         accessibilityRole="alert"
         accessibilityHint="Tap to dismiss"
         style={styles.toast}
@@ -107,16 +137,33 @@ function ToastRow({ item }: { item: ToastItem }) {
   );
 }
 
-/** Mount once near the root (inside SafeAreaProvider). */
-export function ToastHost() {
+/** Mount once near the root (inside SafeAreaProvider); Sheet mounts one inside each open sheet's Modal. */
+export function ToastHost({ active = true }: { active?: boolean }) {
   const insets = useSafeAreaInsets();
+  const id = useId();
+  // `active={false}` (a sheet that started closing) hands its toasts back right away, in the same render as the host
+  // below picks them up — waiting for the Modal to unmount left a visible gap with no toast.
+  useEffect(() => {
+    if (!active) return;
+    hosts = [...hosts, id];
+    emit();
+    return () => {
+      hosts = hosts.filter((h) => h !== id);
+      emit();
+    };
+  }, [id, active]);
   const list = useSyncExternalStore(subscribe, () => items, () => items);
-  if (!list.length) return null;
+  const top = useSyncExternalStore(subscribe, topHost, topHost);
+  // Rendered even with no toasts, so the last one to go still fades out (see skipExiting below).
+  if (top !== id) return null;
   return (
     <View pointerEvents="box-none" style={[styles.host, { top: insets.top + 8 }]}>
-      {list.map((t) => (
-        <ToastRow key={t.id} item={t} />
-      ))}
+      {/* A host that hands over drops its rows at once (no fade-out here while the next host shows them). */}
+      <LayoutAnimationConfig skipExiting>
+        {list.map((t) => (
+          <ToastRow key={t.id} item={t} />
+        ))}
+      </LayoutAnimationConfig>
     </View>
   );
 }
