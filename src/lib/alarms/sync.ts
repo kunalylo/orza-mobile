@@ -116,6 +116,8 @@ export interface AlarmSyncState {
   scheduled: number;
   /** Medicine alarms (doses + snoozes) among them. */
   doseAlarms: number;
+  /** Reminder notifications among them (the rest of the non-medicine ones are refill alerts). */
+  reminderAlarms: number;
   /** The next alarms on the phone (empty when nothing is scheduled). */
   next: UpcomingAlarm[];
   /** Every alarm before this instant is scheduled (epoch ms). */
@@ -139,6 +141,7 @@ const INITIAL_STATE: AlarmSyncState = {
   lastSyncAt: null,
   scheduled: 0,
   doseAlarms: 0,
+  reminderAlarms: 0,
   next: [],
   coveredUntil: null,
   quietDoses: [],
@@ -534,7 +537,7 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
       lastScheduled = null;
       lastStatusKey = statusKey;
       saveAlarmCache({ ...cache, scheduled: undefined });
-      setState({ scheduled: 0, doseAlarms: 0, next: [], coveredUntil: null, lastSyncAt: now });
+      setState({ scheduled: 0, doseAlarms: 0, reminderAlarms: 0, next: [], coveredUntil: null, lastSyncAt: now });
       await declare(false, opts.reason, stale);
       return result({ ok: true, skipped: 'no-permission', scheduled: 0, offline: data.offline });
     }
@@ -584,6 +587,10 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
     setState({
       scheduled,
       doseAlarms: Math.min(scheduled, items.filter((i) => i.ring).length),
+      reminderAlarms: Math.min(
+        Math.max(0, scheduled - items.filter((i) => i.ring).length),
+        items.filter((i) => i.kind === 'reminder').length
+      ),
       next: scheduled > 0 ? upcomingOf(items) : [],
       coveredUntil: plan.coveredUntil,
       lastSyncAt: now,

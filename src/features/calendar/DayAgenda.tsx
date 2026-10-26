@@ -121,6 +121,7 @@ export function DayAgenda({
   events,
   tz,
   loading,
+  unavailable = false,
   externalConnected,
 }: {
   date: string;
@@ -128,6 +129,8 @@ export function DayAgenda({
   events: CalendarEvent[];
   tz: string;
   loading: boolean;
+  /** The month didn't load (offline / server error): say so instead of "A clear day" for a day we know nothing about. */
+  unavailable?: boolean;
   externalConnected: boolean;
 }) {
   const reduceMotion = useReducedMotion();
@@ -170,6 +173,16 @@ export function DayAgenda({
               </View>
             </View>
           ))
+        ) : unavailable && events.length === 0 ? (
+          <View style={styles.empty}>
+            <Icon name="wifi-off" size={24} color={colors.subtle} />
+            <Text variant="title" align="center">
+              This day hasn&apos;t loaded
+            </Text>
+            <Text variant="small" tone="muted" align="center">
+              Its doses, reminders and meals appear once the month loads — use Try again above.
+            </Text>
+          </View>
         ) : events.length === 0 ? (
           <View style={styles.empty}>
             <Icon name="mci:calendar-blank-outline" size={26} color={colors.subtle} />

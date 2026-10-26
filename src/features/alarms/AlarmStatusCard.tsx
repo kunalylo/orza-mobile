@@ -113,7 +113,15 @@ function FullCard({ browserCount = 0 }: { browserCount?: number }) {
   const { status, engine, native } = s;
   const nextDose = engine.next.find((n) => n.ring);
   const nextOther = engine.next.find((n) => !n.ring);
-  const reminders = Math.max(0, engine.scheduled - engine.doseAlarms);
+  // What else is set besides medicine alarms — refill alerts are not reminders (a phone with no reminders on said
+  // "27 medicine alarms and 2 reminders" because of two refill alerts).
+  const reminders = Math.max(0, engine.reminderAlarms ?? 0);
+  const refills = Math.max(0, engine.scheduled - engine.doseAlarms - reminders);
+  const setOnPhone = joinCounts([
+    count(engine.doseAlarms, 'medicine alarm'),
+    count(reminders, 'reminder'),
+    count(refills, 'refill alert'),
+  ]);
 
   const allow = async () => {
     setAsking(true);
@@ -166,8 +174,7 @@ function FullCard({ browserCount = 0 }: { browserCount?: number }) {
                     {namesText(nextDose.labels)}
                   </Text>
                   <Text variant="caption" tone="muted">
-                    {engine.doseAlarms} medicine alarm{engine.doseAlarms === 1 ? '' : 's'}
-                    {reminders ? ` and ${reminders} reminder${reminders === 1 ? '' : 's'}` : ''} set on this phone
+                    {`${setOnPhone} set on this phone`}
                   </Text>
                 </View>
               </View>
@@ -458,3 +465,15 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg },
   compactRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 44 },
 });
+
+/** "3 medicine alarms" — empty for 0 (except medicine alarms, which are always named). */
+function count(n: number, noun: string): string {
+  if (!n && noun !== 'medicine alarm') return '';
+  return `${n} ${noun}${n === 1 ? '' : 's'}`;
+}
+
+/** ["a", "b", "c"] → "a, b and c". */
+function joinCounts(parts: string[]): string {
+  const p = parts.filter(Boolean);
+  return p.length > 1 ? `${p.slice(0, -1).join(', ')} and ${p[p.length - 1]}` : (p[0] ?? '');
+}

@@ -3,6 +3,7 @@
  * on iPhone. Permissions are declared in app.json (`android.permission.health.READ_*`); the library's config plugin adds
  * the permissions-rationale intent filter + activity alias Health Connect requires.
  */
+import Constants from 'expo-constants';
 import { Linking, Platform } from 'react-native';
 import type {
   AggregateResult,
@@ -19,6 +20,10 @@ import { HealthNotAuthorizedError, type HealthBridge, type HealthMetric } from '
 const PROVIDER = 'com.google.android.apps.healthdata';
 const STORE_URL = `market://details?id=${PROVIDER}&url=healthconnect%3A%2F%2Fonboarding`;
 const STORE_WEB_URL = `https://play.google.com/store/apps/details?id=${PROVIDER}`;
+/** Opens one app's Health Connect permissions: the platform action (Android 14+) and the Health Connect app's (9–13). */
+const MANAGE_ACTION_PLATFORM = 'android.health.connect.action.MANAGE_HEALTH_PERMISSIONS';
+const MANAGE_ACTION_APK = 'androidx.health.ACTION_MANAGE_HEALTH_PERMISSIONS';
+const APP_PACKAGE = Constants.expoConfig?.android?.package ?? 'in.co.ylo.orza';
 
 /** Health Connect record type → the ÖRZA metric it feeds. */
 const RECORDS = {
@@ -254,6 +259,17 @@ export const healthBridge: HealthBridge = {
   },
 
   async openManage() {
+    // ÖRZA's own page in Health Connect (the per-type read switches). After two "Don't allow"s Android stops showing
+    // the permission sheet, so this page is the only way back in — the Health Connect home would leave people to find
+    // App permissions › ÖRZA themselves.
+    try {
+      await Linking.sendIntent(Number(Platform.Version) >= 34 ? MANAGE_ACTION_PLATFORM : MANAGE_ACTION_APK, [
+        { key: 'android.intent.extra.PACKAGE_NAME', value: APP_PACKAGE },
+      ]);
+      return;
+    } catch {
+      // Older Health Connect without the per-app page — fall through to its home screen.
+    }
     try {
       (await healthConnect()).openHealthConnectSettings();
     } catch {

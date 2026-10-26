@@ -132,9 +132,12 @@ export default function HealthSync() {
               eyebrow="Trends"
               title="No health data yet"
               body={
-                health.connected
-                  ? `Your first sync from ${health.name} is on its way — pull down to check again.`
-                  : `Connect ${health.name} above and your steps, sleep, heart rate and weight will show up here.`
+                !health.connected
+                  ? `Connect ${health.name} above and your steps, sleep, heart rate and weight will show up here.`
+                  : health.record.lastEmpty && !health.syncing
+                    ? // The sync ran and the phone had nothing to send — "on its way" would never come true.
+                      `${health.name} had nothing to share for the last 30 days. Once your watch or a fitness app saves data there, it shows up here after the next sync.`
+                    : `Your first sync from ${health.name} is on its way — pull down to check again.`
               }
             />
           </GlassCard>
@@ -178,6 +181,7 @@ export default function HealthSync() {
                   { value: '30', label: '30 days' },
                   { value: '90', label: '90 days' },
                 ]}
+                style={styles.range}
               />
             </View>
 
@@ -292,6 +296,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginTop: spacing.sm,
   },
+  // Segmented's segments are flex: 1 (basis 0): without a width the track shrinks to its padding and hides both labels.
+  range: { width: 184 },
   staleBanner: {
     flexDirection: 'row',
     alignItems: 'center',

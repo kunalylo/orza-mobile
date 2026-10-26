@@ -13,7 +13,7 @@ export { Backdrop, Screen, useTabBarSpace, type BackdropVariant, type ScreenProp
 export { ScreenHeader, goBackOrHome, type ScreenHeaderProps } from './ScreenHeader';
 export { SectionHeader, type SectionHeaderProps } from './SectionHeader';
 export { Segmented, type SegmentedOption, type SegmentedProps } from './Segmented';
-export { Sheet, type SheetProps } from './Sheet';
+export { Sheet, useSheetScroll, type SheetProps, type SheetScroll } from './Sheet';
 export { useSheetOwnsKeyboard } from './sheetKeyboard';
 export { Skeleton, SkeletonText, type SkeletonProps } from './Skeleton';
 export { Text, type TextProps, type TextTone } from './Text';

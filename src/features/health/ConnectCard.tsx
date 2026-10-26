@@ -3,8 +3,8 @@
  * checking → unsupported / install Health Connect → connect → connected (sync now, manage, disconnect, errors).
  */
 import * as WebBrowser from 'expo-web-browser';
-import type { ReactNode } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Alert, AppState, StyleSheet, View, type AppStateStatus } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
 import { WEB_URL } from '@/lib/config';
@@ -120,12 +120,33 @@ function InstallState({ health }: { health: Health }) {
 
 function ConnectState({ health }: { health: Health }) {
   const reduce = useReducedMotion();
+  // After a "Don't allow" (and for good after the second one, when Android stops showing the sheet), offer ÖRZA's own
+  // Health Connect page, and connect by itself when the person comes back having allowed something there.
+  const [denied, setDenied] = useState(false);
+  const busy = useRef(false);
+  const { platform } = health;
 
-  async function connect() {
+  // Back from Health Connect with something allowed: connect without asking again (the sheet would only reappear for
+  // the types still off, or not at all).
+  useOnReturnWithAccess(denied, health, () => void connect({ onlyIfGranted: true }));
+
+  async function connect(opts?: { onlyIfGranted?: boolean }) {
+    if (busy.current) return;
+    busy.current = true;
+    try {
+      await runConnect(opts);
+    } finally {
+      busy.current = false;
+    }
+  }
+
+  async function runConnect(opts?: { onlyIfGranted?: boolean }) {
     haptics.firm();
-    const r = await health.connect();
+    const r = await health.connect(opts);
     if (r.status === 'denied') {
+      if (opts?.onlyIfGranted) return;
       haptics.warning();
+      setDenied(true);
       toast.info(
         health.platform === 'android'
           ? 'No permissions were allowed. Allow at least one type in Health Connect to start syncing.'
@@ -176,9 +197,16 @@ function ConnectState({ health }: { health: Health }) {
         onPress={() => void connect()}
         accessibilityHint={`Opens ${health.name} to choose what ÖRZA can read`}
       />
-      <Text variant="caption" tone="subtle" align="center">
-        You choose exactly what to share on the next screen, and you can stop syncing any time.
-      </Text>
+      {denied && platform === 'android' ? (
+        <AllowInHealthConnect health={health}>
+          ÖRZA can’t read anything yet. If Health Connect doesn’t ask again, open it › App permissions › ÖRZA and switch on what
+          ÖRZA may read — syncing starts as soon as you come back.
+        </AllowInHealthConnect>
+      ) : (
+        <Text variant="caption" tone="subtle" align="center">
+          You choose exactly what to share on the next screen, and you can stop syncing any time.
+        </Text>
+      )}
     </View>
   );
 }
@@ -194,14 +222,31 @@ function ConnectedState({ health }: { health: Health }) {
       haptics.error();
       toast.error(r.message);
     } else if (r.status === 'synced' || r.status === 'empty') {
-      announce(r, name);
+      announce(r, name, false);
     }
   }
 
+  // Reconnect after access was switched off. Health Connect won't show its sheet at all while any type ÖRZA asks for was
+  // refused twice ("App has at least one USER_FIXED permission, finishing!") — then the way back is ÖRZA's page in
+  // Health Connect, and the sync re-runs by itself when the person returns with something allowed.
+  const [blocked, setBlocked] = useState(false);
+  useOnReturnWithAccess(!!record.needsReconnect, health, () => void syncNow());
+
   async function reconnect() {
+    haptics.firm();
     const r = await health.connect();
-    if (r.status === 'connected') announce(r.outcome, name);
-    else if (r.status === 'error') toast.error(r.message);
+    if (r.status === 'connected') {
+      setBlocked(false);
+      announce(r.outcome, name);
+    } else if (r.status === 'denied') {
+      haptics.warning();
+      setBlocked(true);
+      if (platform === 'android') toast.info('Health Connect didn’t allow anything. Switch ÖRZA back on there to keep syncing.');
+      else toast.info('Nothing was shared. You can allow ÖRZA any time from the Health app.');
+    } else if (r.status === 'error') {
+      haptics.error();
+      toast.error(r.message);
+    }
   }
 
   function disconnect() {
@@ -282,6 +327,12 @@ function ConnectedState({ health }: { health: Health }) {
         )}
         <Button label="Manage access" variant="ghost" icon="sliders" onPress={() => void health.openManage()} style={styles.flex} />
       </View>
+      {blocked && record.needsReconnect && platform === 'android' ? (
+        <AllowInHealthConnect health={health}>
+          Health Connect isn’t asking again. Open it › App permissions › ÖRZA and switch on what ÖRZA may read — the sync
+          runs again as soon as you come back.
+        </AllowInHealthConnect>
+      ) : null}
       <Button label="Stop syncing" variant="ghost" icon="x-circle" onPress={disconnect} accessibilityHint={`Stops reading ${name} on this phone`} />
     </View>
   );
@@ -289,13 +340,52 @@ function ConnectedState({ health }: { health: Health }) {
 
 /* ───────────────────────────── bits ───────────────────────────── */
 
-function announce(outcome: Awaited<ReturnType<Health['syncNow']>>, name: string) {
+/**
+ * While `enabled`, runs `onAccess` each time the app comes back to the front (from Health Connect's settings) and ÖRZA
+ * can read at least one type. Android only — HealthKit never tells an app what was refused.
+ */
+function useOnReturnWithAccess(enabled: boolean, health: Health, onAccess: () => void) {
+  const latest = useRef(onAccess);
+  useEffect(() => {
+    latest.current = onAccess;
+  });
+  const { hasAccess, platform } = health;
+  useEffect(() => {
+    if (!enabled || platform !== 'android') return undefined;
+    const sub = AppState.addEventListener('change', (s: AppStateStatus) => {
+      if (s !== 'active') return;
+      void hasAccess().then((ok) => {
+        if (ok) latest.current();
+      });
+    });
+    return () => sub.remove();
+  }, [enabled, platform, hasAccess]);
+}
+
+/** "Allow ÖRZA in Health Connect" note + a button to its settings — for when Health Connect won't show its sheet. */
+function AllowInHealthConnect({ health, children }: { health: Health; children: ReactNode }) {
+  const reduce = useReducedMotion();
+  return (
+    <Animated.View entering={reduce ? undefined : FadeIn} style={[styles.banner, styles.bannerInfo]} accessibilityRole="alert">
+      <Icon name="info" size={16} color={colors.cyan700} />
+      <View style={[styles.flex, styles.gapSm]}>
+        <Text variant="caption" tone="text">
+          {children}
+        </Text>
+        <Button label="Open Health Connect" size="sm" variant="secondary" icon="external-link" onPress={() => void health.openManage()} />
+      </View>
+    </Animated.View>
+  );
+}
+
+function announce(outcome: Awaited<ReturnType<Health['syncNow']>>, name: string, justConnected = true) {
   if (outcome.status === 'synced') {
     haptics.success();
     toast.success(`Synced ${outcome.daysSent} ${outcome.daysSent === 1 ? 'day' : 'days'} from ${name}`);
   } else if (outcome.status === 'empty') {
     haptics.warning();
-    toast.info(`Connected — ${name} has no data for the last 30 days yet`);
+    // "Connected —" only right after connecting; a later Sync now just reports what it found.
+    toast.info(justConnected ? `Connected — ${name} has no data for the last 30 days yet` : `${name} still has no data for the last 30 days`);
   } else if (outcome.status === 'error') {
     haptics.error();
     toast.error(outcome.message);
@@ -319,6 +409,7 @@ function IconDisc({ icon, tone, small }: { icon: IconName; tone: 'energy' | 'suc
 
 const styles = StyleSheet.create({
   gap: { gap: spacing.md },
+  gapSm: { gap: spacing.sm },
   flex: { flex: 1 },
   connectHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs + 2 },

@@ -285,6 +285,20 @@ export function BarChart({ points, tone = 'energy', format, label, reference, un
                       strokeWidth={1}
                       strokeDasharray="4 4"
                     />
+                    {/* A light halo under the label: the tallest bars reach the target line and ran through the text. */}
+                    <SvgText
+                      x={width - M.right}
+                      y={y(reference.value) - 4}
+                      fontSize={9.5}
+                      fontFamily={fonts.mono}
+                      fill={colors.white}
+                      stroke={colors.white}
+                      strokeWidth={3.5}
+                      strokeLinejoin="round"
+                      textAnchor="end"
+                    >
+                      {reference.label}
+                    </SvgText>
                     <SvgText x={width - M.right} y={y(reference.value) - 4} fontSize={9.5} fontFamily={fonts.mono} fill={colors.muted} textAnchor="end">
                       {reference.label}
                     </SvgText>

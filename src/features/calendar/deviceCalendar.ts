@@ -22,6 +22,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import { onDoseEvent } from '@/features/meds/events';
+import { ApiError, errorMessage } from '@/lib/api';
 import { WEB_URL } from '@/lib/config';
 
 import type { CalendarEvent } from './types';
@@ -44,15 +45,52 @@ export const phoneCalendarSupported = Platform.OS === 'ios' || Platform.OS === '
 
 /* ───────────────────────────── Stale flag ───────────────────────────── */
 
-let stale = false;
+/**
+ * Kept in a marker file as well as in memory: Android often ends the app in the background, and a flag that lived
+ * only in memory was lost with it — the next Calendar visit (within 6 h of the last sync) then left a deleted
+ * reminder / medicine ringing from the phone calendar.
+ */
+const STALE_FILE = 'orza-phone-calendar.stale';
+let stale: boolean | null = null; // null: not read from disk yet
+
+function staleFile(): File | null {
+  try {
+    return new File(Paths.document, STALE_FILE);
+  } catch {
+    return null; // web preview — memory only
+  }
+}
+
+function setStale(value: boolean) {
+  if (stale === value) return;
+  stale = value;
+  try {
+    const f = staleFile();
+    if (!f) return;
+    if (value && !f.exists) f.create();
+    else if (!value && f.exists) f.delete();
+  } catch {
+    // Storage unavailable: the in-memory flag still covers this run.
+  }
+}
+
 /** Called after reminder / medicine changes so the next calendar visit re-syncs the phone calendar. */
 export function markPhoneCalendarStale() {
-  stale = true;
+  setStale(true);
 }
-export const isPhoneCalendarStale = () => stale;
+export function isPhoneCalendarStale(): boolean {
+  if (stale === null) {
+    try {
+      stale = !!staleFile()?.exists;
+    } catch {
+      stale = false;
+    }
+  }
+  return stale;
+}
 // Any dose taken / skipped or medicine change makes the phone copy out of date.
 onDoseEvent(() => {
-  stale = true;
+  setStale(true);
 });
 
 /* ───────────────────────────── One write at a time ───────────────────────────── */
@@ -84,6 +122,8 @@ export class PhoneCalendarError extends Error {
 
 export function phoneCalendarMessage(e: unknown): string {
   if (e instanceof PhoneCalendarError) return e.message;
+  // Fetching the doses / reminders failed (offline, server down) — not the phone's calendar.
+  if (e instanceof ApiError) return errorMessage(e);
   return "Your phone's calendar didn't accept the changes. Please try again.";
 }
 
@@ -433,11 +473,11 @@ export interface PhoneSyncOptions {
 export function syncPhoneCalendar(opts: PhoneSyncOptions): Promise<PhoneSyncResult> {
   return serialized(async () => {
     // Cleared before loading, so a dose / reminder change made while this sync runs marks the copy stale again.
-    stale = false;
+    setStale(false);
     try {
       return await runSync(opts);
     } catch (e) {
-      stale = true;
+      setStale(true);
       throw e;
     }
   });
@@ -549,7 +589,7 @@ const CLEAR_WAIT_MS = 4000;
 export async function clearPhoneCalendar(): Promise<void> {
   if (!phoneCalendarSupported) return;
   const work = serialized(async () => {
-    stale = false;
+    setStale(false);
     const [link, map] = await Promise.all([readStoredLink(), readMap()]);
     if ((link || map) && (await getPhonePermission()) === 'granted') {
       const calendar = (link && (await getCalendarById(link.calendarId))) || (map && (await getCalendarById(map.calendarId)));

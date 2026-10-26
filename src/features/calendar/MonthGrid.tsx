@@ -118,8 +118,18 @@ const styles = StyleSheet.create({
   weekRow: { flexDirection: 'row' },
   weekday: { flex: 1, paddingBottom: spacing.sm },
   cell: { flex: 1, alignItems: 'center', paddingVertical: 4, minHeight: 50 },
-  num: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  today: { borderWidth: 1.5, borderColor: colors.coral, backgroundColor: colors.energyBg },
+  // Always bordered (transparent): a plain day's circle has no background or border, so Fabric flattens it away, and
+  // when a tap fills it the re-created view drew a square (no corner radius) on Android.
+  num: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  today: { borderColor: colors.coral, backgroundColor: colors.energyBg },
   selected: { backgroundColor: colors.ink, borderColor: colors.ink },
   outside: { opacity: 0.45 },
   dots: { flexDirection: 'row', gap: 3, height: 6, marginTop: 3, alignItems: 'center' },

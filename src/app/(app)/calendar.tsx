@@ -113,7 +113,7 @@ export default function CalendarScreen() {
             <IconButton icon="chevron-left" variant="glass" size={40} accessibilityLabel="Previous month" onPress={() => go(-1)} haptic="select" />
             <View style={styles.monthTitle}>
               <Text variant="eyebrow" tone="subtle" numberOfLines={1}>
-                {loadedRange ? `${doseCount} doses · ${reminderCount} reminders` : 'Loading month'}
+                {loadedRange ? `${doseCount} doses · ${reminderCount} reminders` : eventsQ.isError ? 'Month not loaded' : 'Loading month'}
               </Text>
               <Text variant="h2" accessibilityRole="header" accessibilityLiveRegion="polite" numberOfLines={1}>
                 {formatMonth(month)}
@@ -187,6 +187,7 @@ export default function CalendarScreen() {
           events={byDate.get(selected) ?? []}
           tz={eventsTz}
           loading={!loadedRange && !eventsQ.isError}
+          unavailable={!loadedRange && eventsQ.isError}
           externalConnected={external.connected}
         />
       </Animated.View>

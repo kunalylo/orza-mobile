@@ -3,8 +3,8 @@
  * weekdays, channels (App / WhatsApp / Calendar), on/off and delete — the website's ReminderSheet, adapted to touch.
  * Time pickers open as nested sheets rendered inside this sheet's tree (so they present over it on iOS).
  */
-import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useRef, useState, type ReactNode } from 'react';
+import { StyleSheet, View, type LayoutChangeEvent, type ScrollView } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
 import { TimePickerSheet } from '@/features/meds/PickerSheets';
@@ -12,7 +12,7 @@ import { formatTime12 } from '@/features/meds/shared';
 import { ApiError, errorMessage, validationField } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
 import { colors, radii, spacing } from '@/theme';
-import { Button, Chip, Icon, PressableScale, Sheet, Text, TextField, toast } from '@/ui';
+import { Button, Chip, Icon, PressableScale, Sheet, Text, TextField, toast, useSheetScroll } from '@/ui';
 
 import { useDeleteReminder, useSaveReminder } from './api';
 import { ConfirmStrip, SwitchRow } from './parts';
@@ -88,6 +88,13 @@ export function ReminderSheet({ visible, reminder, onClose, whatsappAvailable, w
   const [repeat, setRepeat] = useState(DEFAULT_REPEAT);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [picker, setPicker] = useState<PickerTarget>(null);
+  // Where the fields that can fail validation sit in the sheet's content, to scroll the first error into view: with
+  // the sheet scrolled to Save, a missing title was flagged far above, out of sight.
+  const scrollRef = useRef<ScrollView>(null);
+  const sectionY = useRef<Partial<Record<'title' | 'times' | 'channels', number>>>({});
+  const placeSection = (key: 'title' | 'times' | 'channels', e: LayoutChangeEvent) => {
+    sectionY.current[key] = e.nativeEvent.layout.y;
+  };
 
   // Re-seed the form each time the sheet opens (state adjusted during render, no effect).
   const [seen, setSeen] = useState<{ visible: boolean; id: string | null }>({ visible, id: reminder?.id ?? null });
@@ -157,6 +164,9 @@ export function ReminderSheet({ visible, reminder, onClose, whatsappAvailable, w
     else if (valid.length !== draft.times.length) e.times = 'Fix or remove the empty time.';
     if (!draft.channels.push && !(whatsappAvailable && draft.channels.whatsapp) && !draft.channels.calendar) e.channels = 'Pick at least one way to be reminded.';
     setErrors(e);
+    const first = e.title ? 'title' : e.times ? 'times' : e.channels ? 'channels' : null;
+    const y = first ? sectionY.current[first] : undefined;
+    if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing.md), animated: !reduceMotion });
     return !e.title && !e.times && !e.channels;
   };
 
@@ -236,6 +246,7 @@ export function ReminderSheet({ visible, reminder, onClose, whatsappAvailable, w
       dismissible={!busy}
       eyebrow={reminder ? KIND_LABEL[reminder.kind] + ' reminder' : 'Reminders'}
       title={reminder ? 'Edit reminder' : 'New reminder'}
+      scrollRef={scrollRef}
       footer={<Button label={reminder ? 'Save changes' : 'Add reminder'} variant="energy" size="lg" block loading={save.isPending} disabled={del.isPending} onPress={submit} icon="check" />}
     >
       <Text variant="small" tone="muted">
@@ -252,19 +263,21 @@ export function ReminderSheet({ visible, reminder, onClose, whatsappAvailable, w
         ))}
       </View>
 
-      <TextField
-        label="Title"
-        value={draft.title}
-        onChangeText={(t) => {
-          set({ title: t });
-          if (errors.title) setErrors((e) => ({ ...e, title: null }));
-        }}
-        error={errors.title}
-        placeholder={KIND_DEFAULT_TITLE[draft.kind]}
-        maxLength={80}
-        returnKeyType="next"
-        containerStyle={styles.field}
-      />
+      <View onLayout={(e) => placeSection('title', e)}>
+        <TextField
+          label="Title"
+          value={draft.title}
+          onChangeText={(t) => {
+            set({ title: t });
+            if (errors.title) setErrors((e) => ({ ...e, title: null }));
+          }}
+          error={errors.title}
+          placeholder={KIND_DEFAULT_TITLE[draft.kind]}
+          maxLength={80}
+          returnKeyType="next"
+          containerStyle={styles.field}
+        />
+      </View>
       <TextField
         label="Message (optional)"
         value={draft.body}
@@ -277,7 +290,7 @@ export function ReminderSheet({ visible, reminder, onClose, whatsappAvailable, w
       />
 
       {/* Times */}
-      <Text variant="eyebrow" tone="subtle" style={styles.label}>
+      <Text variant="eyebrow" tone="subtle" style={styles.label} onLayout={(e) => placeSection('times', e)}>
         Times · {draft.times.length}
       </Text>
       <Animated.View layout={layout} style={styles.wrap}>
@@ -373,7 +386,7 @@ export function ReminderSheet({ visible, reminder, onClose, whatsappAvailable, w
       </View>
 
       {/* Channels */}
-      <Text variant="eyebrow" tone="subtle" style={styles.label}>
+      <Text variant="eyebrow" tone="subtle" style={styles.label} onLayout={(e) => placeSection('channels', e)}>
         Remind me by
       </Text>
       <View style={styles.stack}>
@@ -430,13 +443,15 @@ export function ReminderSheet({ visible, reminder, onClose, whatsappAvailable, w
 
       {reminder ? (
         confirmDelete ? (
-          <ConfirmStrip
-            message="Delete this reminder? This can't be undone."
-            confirmLabel="Delete reminder"
-            busy={del.isPending}
-            onCancel={() => setConfirmDelete(false)}
-            onConfirm={remove}
-          />
+          <AtSheetEnd>
+            <ConfirmStrip
+              message="Delete this reminder? This can't be undone."
+              confirmLabel="Delete reminder"
+              busy={del.isPending}
+              onCancel={() => setConfirmDelete(false)}
+              onConfirm={remove}
+            />
+          </AtSheetEnd>
         ) : (
           <Button
             label="Delete reminder"
@@ -467,6 +482,15 @@ function RangeButton({ label, value, onPress }: { label: string; value: string; 
       <Text variant="title">{formatTime12(value)}</Text>
     </PressableScale>
   );
+}
+
+/**
+ * The last block of the sheet, scrolled into view once laid out: the "Delete this reminder?" strip is taller than the
+ * Delete button it replaces, and its Cancel / Delete buttons were left under the pinned Save footer.
+ */
+function AtSheetEnd({ children }: { children: ReactNode }) {
+  const sheet = useSheetScroll();
+  return <View onLayout={() => sheet?.scrollToEnd()}>{children}</View>;
 }
 
 const styles = StyleSheet.create({

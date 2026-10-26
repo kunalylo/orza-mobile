@@ -14,7 +14,7 @@ import { colors, radii, spacing } from '@/theme';
 import { Button, GlassCard, Icon, Skeleton, Tag, Text, toast } from '@/ui';
 
 import { calendarKeys, usePhoneCalendarState, usePhoneCalendarSync, useRemovePhoneCalendar } from './api';
-import { AUTO_SYNC_AFTER_MS, isPhoneCalendarStale, phoneCalendarMessage, SYNC_DAYS, type PhoneSyncResult } from './deviceCalendar';
+import { AUTO_SYNC_AFTER_MS, isPhoneCalendarStale, PhoneCalendarError, phoneCalendarMessage, SYNC_DAYS, type PhoneSyncResult } from './deviceCalendar';
 
 function syncSummary(r: PhoneSyncResult): string {
   if (r.created) return `Added ÖRZA to your calendar with ${r.total} event${r.total === 1 ? '' : 's'}.`;
@@ -30,7 +30,8 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
   const sync = usePhoneCalendarSync(tz, today);
   const remove = useRemovePhoneCalendar();
   const [confirmRemove, setConfirmRemove] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; permission: boolean } | null>(null);
+  const fail = (e: unknown) => setError({ message: phoneCalendarMessage(e), permission: e instanceof PhoneCalendarError && e.reason === 'permission' });
 
   // Re-read permission + link when coming back from Settings or the Calendar app.
   useEffect(() => {
@@ -70,7 +71,7 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
         },
         onError: (e) => {
           haptics.error();
-          setError(phoneCalendarMessage(e));
+          fail(e);
         },
       }
     );
@@ -85,10 +86,14 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
       },
       onError: (e) => {
         haptics.error();
-        setError(phoneCalendarMessage(e));
+        fail(e);
       },
     });
   };
+
+  // A permission error is old news once access is back, and the "access is off" box already says it when blocked.
+  const permissionNote = blocked || (!!link && !granted);
+  const shownError = error && !(error.permission && (granted || permissionNote)) ? error.message : null;
 
   if (data && !data.supported) return null;
 
@@ -180,9 +185,9 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
         <Button label="Add to my calendar" icon="calendar" variant="energy" loading={syncing} onPress={add} style={styles.cta} />
       )}
 
-      {error ? (
+      {shownError ? (
         <Text variant="caption" tone="error" style={styles.error} accessibilityRole="alert">
-          {error}
+          {shownError}
         </Text>
       ) : null}
     </GlassCard>

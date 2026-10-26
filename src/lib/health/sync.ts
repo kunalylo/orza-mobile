@@ -212,13 +212,17 @@ export function useHealthSync() {
     };
   }, []);
 
-  const connect = useCallback(async (): Promise<ConnectResult> => {
+  /**
+   * `onlyIfGranted`: don't show the permission sheet — connect only if ÖRZA can already read something (the person just
+   * allowed it in Health Connect's settings), otherwise report `denied`.
+   */
+  const connect = useCallback(async (opts?: { onlyIfGranted?: boolean }): Promise<ConnectResult> => {
     setConnecting(true);
     try {
       const a = await recheck();
       if (a !== 'available') return { status: 'unavailable', availability: a };
-      const access = await healthBridge.requestAccess();
-      if (!access.granted) return { status: 'denied' };
+      const granted = opts?.onlyIfGranted ? await healthBridge.hasAccess() : (await healthBridge.requestAccess()).granted;
+      if (!granted) return { status: 'denied' };
       updateHealthRecord(user.id, {
         connected: true,
         platform: healthBridge.platform,
@@ -255,6 +259,7 @@ export function useHealthSync() {
     syncNow,
     recheck,
     openManage: healthBridge.openManage,
+    hasAccess: healthBridge.hasAccess,
     openStore: healthBridge.openStore,
   };
 }

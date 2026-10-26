@@ -12,7 +12,7 @@
  * The parent owns `visible`; the sheet animates out before it unmounts. Pass `scroll={false}` when the child is
  * its own list (FlatList) and `full` to use the full height even with little content (search results).
  */
-import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type TextInput } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { interpolate, LayoutAnimationConfig, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
@@ -27,6 +27,15 @@ import { holdSheetKeyboard } from './sheetKeyboard';
 import { Text } from './Text';
 import { ToastHost } from './Toast';
 import { useKeyboardHeight } from './useKeyboardHeight';
+
+/** The open sheet's scroll area, for content that grows at the bottom (a confirm strip under the last field). */
+export interface SheetScroll {
+  /** Scroll the sheet's content to its end — e.g. so a "Delete?" strip isn't left under the pinned footer. */
+  scrollToEnd: () => void;
+}
+const SheetScrollContext = createContext<SheetScroll | null>(null);
+/** The enclosing Sheet's scroll area (null outside a sheet, or in a `scroll={false}` sheet). */
+export const useSheetScroll = () => useContext(SheetScrollContext);
 
 export interface SheetProps {
   visible: boolean;
@@ -64,6 +73,8 @@ export interface SheetProps {
    * focused while the sheet's Modal window still has focus gets no keyboard on Android, and closing dismisses it).
    */
   onClosed?: () => void;
+  /** The content's ScrollView — e.g. to scroll a form's first error into view after a failed Save. */
+  scrollRef?: RefObject<ScrollView | null>;
 }
 
 export function Sheet(props: SheetProps) {
@@ -100,11 +111,18 @@ function SheetModal({
   closeButton,
   accessibilityLabel,
   initialFocus,
+  scrollRef: scrollRefProp,
 }: SheetProps & { onHidden: () => void }) {
   const reduceMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const keyboard = useKeyboardHeight();
+  const ownScrollRef = useRef<ScrollView>(null);
+  const scrollRef = scrollRefProp ?? ownScrollRef;
+  const sheetScroll = useMemo<SheetScroll>(
+    () => ({ scrollToEnd: () => requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: !reduceMotion })) }),
+    [reduceMotion, scrollRef],
+  );
 
   const progress = useSharedValue(0); // 0 = off screen, 1 = open
   const drag = useSharedValue(0); // finger offset while swiping down
@@ -241,13 +259,14 @@ function SheetModal({
 
               {scroll ? (
                 <ScrollView
+                  ref={scrollRef}
                   style={full ? styles.fill : undefined}
                   contentContainerStyle={styles.body}
                   keyboardShouldPersistTaps="handled"
                   keyboardDismissMode={isIOS ? 'interactive' : 'on-drag'}
                   showsVerticalScrollIndicator={false}
                 >
-                  {children}
+                  <SheetScrollContext.Provider value={sheetScroll}>{children}</SheetScrollContext.Provider>
                 </ScrollView>
               ) : (
                 <View style={[styles.bodyStatic, full && styles.fill]}>{children}</View>
