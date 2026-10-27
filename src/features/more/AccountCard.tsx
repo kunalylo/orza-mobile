@@ -47,7 +47,7 @@ export function AccountCard({ user }: { user: PublicUser }) {
         <Text variant="label" color={low ? colors.warning : colors.energyInk}>
           {formatNumber(credits)} AI credits
         </Text>
-        <Text variant="caption" tone="muted" style={styles.creditsHint} numberOfLines={1}>
+        <Text variant="caption" tone="muted" style={styles.creditsHint} numberOfLines={2}>
           {low ? 'Running low — top up' : 'Balance & history'}
         </Text>
         <Icon name="arrow-up-right" size={14} color={colors.muted} />

@@ -86,7 +86,7 @@ export function DailySummary({
           </Text>
         </EnergyRing>
         <View style={styles.topText}>
-          <Text variant="eyebrow" tone="subtle" numberOfLines={1}>
+          <Text variant="eyebrow" tone="subtle" numberOfLines={2}>
             {dayLabel} · Totals
           </Text>
           <Text variant="h3" tone="ink" style={styles.headline}>

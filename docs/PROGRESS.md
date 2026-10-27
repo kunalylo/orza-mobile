@@ -447,3 +447,17 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   averages/day label, credits pill + labels, memory note field, SaveBar note, password card/keyboard reveal, sign-out-everywhere copy, delete
   field caps, auto-retry of Credits/Goals/Reports/Settings once back online). Shared UI: `Screen`/`TextField` now scroll a focused field +
   its error above a footer (`ui/scrollReveal.ts`). Web follow-up: weekly CSV "Average (logged days)" row in src/components/reports/format.ts.
+- 2026-10-27: D1 care DONE (`2dd0c2a`): 38 cases (Health Connect, Calendar, Reminders) — 25 pass, 13 fixed. Health Connect denial
+  recovery (after two "Don't allow"s HC never shows its sheet again → hint + "Open Health Connect", auto-connect on return), 30/90-day
+  switch, calendar selected-day square, offline month states, deleted reminders left ringing in the phone calendar after the app was
+  killed (re-sync flag now persisted), refill alerts counted apart from reminders, reminder sheet delete/validation scroll. For wrap-up
+  (native): manifest `<queries>` for `android.health.connect.action.MANAGE_HEALTH_PERMISSIONS` (+ `androidx.health.ACTION_MANAGE_HEALTH_PERMISSIONS`
+  for Android 9–13) so "Manage access" opens ÖRZA's own Health Connect page. Env: 2 GB AVD thrashes with the ~600 MB dev build (PC has
+  7.4 GB, so the AVD stays at 2 GB; stop Chrome/Play/Messages if adb hangs).
+- 2026-10-27: layout-a11y resumed (run `wf_13c9ee26-f64`, WIP `19f4e6f`). In parallel: web backend batch 1 being prepared in worktree
+  `E:\aylo\orza-backend` (branch `mobile-backend-batch`, node_modules = junction to the main repo's; run `wf_8d8cf45b-08d`): dose
+  acted_at/snooze_until, refuse snooze/skip over taken, GET /api/meds/doses range, devices alarms_local_until, adherence history after
+  schedule edits, onboarding lb wording + full bar on summary, weekly CSV averages, rebalance "no room to trim" honesty (floor unchanged).
+  NOT pushed — needs the user's OK; test it first by checking the branch out in `E:\aylo\orza-localtest` after D1, then adapt the phone.
+  Also running: auto steps v2 research + plan (run `wf_a75a741e-df0`, read-only) → session scratchpad `steps-v2\PLAN.md`; copy it to
+  `docs/notes/steps-v2.md` when D1 is committed.

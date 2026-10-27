@@ -152,7 +152,7 @@ export function AlarmDoseCard({
             disabled={busy}
             onPress={() => onAct('snooze')}
             accessibilityLabel={`Snooze ${dose.name} for ${SNOOZE_MINUTES} minutes`}
-            style={styles.flex}
+            style={styles.snooze}
           />
           <PressableScale
             onPress={() => onAct('skip')}
@@ -241,8 +241,10 @@ const styles = StyleSheet.create({
   pillMissed: { backgroundColor: 'rgba(255,122,106,0.2)' },
   pillNeutral: { backgroundColor: colors.heroGlass },
   actions: { marginTop: spacing.xl, gap: spacing.sm },
-  row: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
-  skip: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill },
+  // Both at their content width, sharing the rest; with large text Skip wraps below instead of cutting "Snooze 10 …".
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' },
+  snooze: { flexGrow: 1 },
+  skip: { flexGrow: 1, minHeight: 48, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill },
   disabled: { opacity: 0.5 },
   done: {
     flexDirection: 'row',

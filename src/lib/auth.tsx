@@ -122,6 +122,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const lastRefresh = useRef(0);
   /** Id of the user in state, readable synchronously by late answers (`setUser`). */
   const userId = useRef<string | null>(null);
+  /**
+   * The session a deliberate sign-out is ending. Between `/auth/logout` and `clearLocal()` (the calendar clean-up can
+   * take seconds) screens still refetch with it and the server answers 401 — that is our own sign-out, not an expiry.
+   */
+  const endingToken = useRef<string | null>(null);
 
   /** Puts a user in place (state + Keychain snapshot). Callers make sure it belongs to the current session. */
   const applyUser = useCallback((next: PublicUser) => {
@@ -175,6 +180,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // 401 from any authenticated call → signed out, with a one-time notice.
   useEffect(() => {
     setUnauthorizedHandler(() => {
+      // Our own sign-out revoked it: `signOut` finishes the job without the "session ended" notice.
+      if (endingToken.current && endingToken.current === getSessionToken()) return;
       setSessionExpired(true);
       void clearLocal();
     });
@@ -284,21 +291,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (opts: { everywhere?: boolean } = {}) => {
       haptics.firm();
       const token = getSessionToken();
+      endingToken.current = token;
       try {
-        // Revokes this app session and forgets the phone (`everywhere`: every browser and phone of the account).
-        await api.post('/auth/logout', opts.everywhere ? { everywhere: true } : {}, { timeoutMs: 6_000 });
-      } catch (e) {
-        // "Everywhere" only happens on the server: stay signed in so the screen can say it didn't work.
-        if (opts.everywhere) throw e;
-        // Offline: sign out here anyway and end the server session on the next launch or sign-in.
-        if (token && unreachable(e)) await writeSecure(KEYS.unrevoked, token);
+        try {
+          // Revokes this app session and forgets the phone (`everywhere`: every browser and phone of the account).
+          await api.post('/auth/logout', opts.everywhere ? { everywhere: true } : {}, { timeoutMs: 6_000 });
+        } catch (e) {
+          // "Everywhere" only happens on the server: stay signed in so the screen can say it didn't work.
+          if (opts.everywhere) throw e;
+          // Offline: sign out here anyway and end the server session on the next launch or sign-in.
+          if (token && unreachable(e)) await writeSecure(KEYS.unrevoked, token);
+        }
+        // The phone's ÖRZA calendar holds this account's medicine names and rings for its doses: delete it (best effort,
+        // never throws, waits <= 4 s). Loaded on demand so expo-calendar stays out of start-up and lib/ has no static
+        // feature import. Deliberate sign-out only: on a 401 expiry the per-user link just stays with its account.
+        await import('@/features/calendar/deviceCalendar').then((m) => m.clearPhoneCalendar()).catch(() => undefined);
+        setSessionExpired(false);
+        await clearLocal();
+      } finally {
+        endingToken.current = null;
       }
-      // The phone's ÖRZA calendar holds this account's medicine names and rings for its doses: delete it (best effort,
-      // never throws, waits <= 4 s). Loaded on demand so expo-calendar stays out of start-up and lib/ has no static
-      // feature import. Deliberate sign-out only: on a 401 expiry the per-user link just stays with its account.
-      await import('@/features/calendar/deviceCalendar').then((m) => m.clearPhoneCalendar()).catch(() => undefined);
-      setSessionExpired(false);
-      await clearLocal();
     },
     [clearLocal]
   );

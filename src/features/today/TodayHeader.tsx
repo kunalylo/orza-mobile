@@ -109,7 +109,7 @@ export function WeekStrip({ week, date, today, target, onSelect }: { week: WeekD
         <Text variant="eyebrow" tone="subtle" style={styles.weekEyebrow}>
           Your week
         </Text>
-        <Text variant="caption" tone="subtle" numberOfLines={1} style={styles.flexShrink}>
+        <Text variant="caption" tone="subtle" numberOfLines={2} align="right" style={styles.flexShrink}>
           Warm bars = calories vs your target
         </Text>
       </View>

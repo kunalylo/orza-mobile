@@ -95,11 +95,11 @@ export function SettingsRow({ icon, tint = TINTS.ink, title, subtitle, onPress, 
         <Icon name={icon} size={20} color={tint.tint} />
       </View>
       <View style={styles.rowText}>
-        <Text variant="title" numberOfLines={1} color={destructive ? colors.error : undefined}>
+        <Text variant="title" numberOfLines={2} color={destructive ? colors.error : undefined}>
           {title}
         </Text>
         {subtitle ? (
-          <Text variant="caption" tone="muted" numberOfLines={2}>
+          <Text variant="caption" tone="muted" numberOfLines={3}>
             {subtitle}
           </Text>
         ) : null}

@@ -212,7 +212,7 @@ export function Viewfinder({
             <PlateIllustration />
             <View style={styles.captionRow} pointerEvents="none">
               <View style={styles.captionPill}>
-                <Text variant="caption" weight="medium" tone="ink" numberOfLines={1}>
+                <Text variant="caption" weight="medium" tone="ink" align="center" numberOfLines={2}>
                   Frame the whole plate, from slightly above
                 </Text>
               </View>

@@ -18,14 +18,15 @@ const SIGNALS = [
 
 /** Dark ÖRZA hero with the living orb, the website's promise, and the two ways in. */
 export default function Welcome() {
-  const { width, height } = useWindowDimensions();
+  const { width, height, fontScale } = useWindowDimensions();
   const { sessionExpired } = useAuth();
   // Light status-bar icons only while this dark hero is on screen: sign-in / sign-up are pushed on top of it (it
   // stays mounted underneath), and their cream canvas needs the root's dark icons back.
   const focused = useIsFocused();
   const compact = height < 700;
-  const orbSize = Math.round(Math.min(width * 0.8, height * (compact ? 0.28 : 0.4), 360));
-
+  // Large text on a small phone: the copy grows, so the orb gives way and both ways in stay on the first screen.
+  const tight = compact && fontScale > 1.1;
+  const orbSize = Math.round(Math.min(width * 0.8, height * (tight ? 0.2 : compact ? 0.28 : 0.4), 360));
   // The server ended the session (401): go straight to sign-in, which explains why.
   useEffect(() => {
     if (sessionExpired) router.push('/sign-in');
@@ -66,7 +67,7 @@ export default function Welcome() {
         ))}
       </View>
 
-      <View style={styles.copy}>
+      <View style={[styles.copy, compact && styles.copyCompact]}>
         <Animated.View entering={enter(0)}>
           <Text variant="display" tone="inverse" accessibilityRole="header" style={compact ? styles.headlineCompact : undefined}>
             Your health,{' '}
@@ -86,7 +87,7 @@ export default function Welcome() {
         </Animated.View>
       </View>
 
-      <Animated.View entering={enter(2)} style={styles.actions}>
+      <Animated.View entering={enter(2)} style={[styles.actions, compact && styles.actionsCompact]}>
         <Button label="Get started" iconRight="arrow-right" variant="energy" size="lg" block onPress={() => router.push('/sign-up')} />
         <Button label="I have an account" variant="heroOutline" size="lg" block onPress={() => router.push('/sign-in')} />
         <Text variant="eyebrow" tone="heroSubtle" align="center" style={styles.langs}>
@@ -131,9 +132,11 @@ const styles = StyleSheet.create({
   signalText: { flex: 1, minWidth: 0 },
   signalValue: { fontSize: 13 },
   copy: { marginTop: spacing.xxl },
+  copyCompact: { marginTop: spacing.lg },
   headlineCompact: { fontSize: 34, lineHeight: 40 },
   lineTwo: { marginTop: 2 },
   body: { marginTop: spacing.md },
   actions: { gap: spacing.md, marginTop: spacing.xxl },
+  actionsCompact: { marginTop: spacing.xl },
   langs: { marginTop: spacing.xs },
 });

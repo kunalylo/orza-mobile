@@ -161,8 +161,8 @@ export function MealsSection({
                 : 'Forgot to log? You can still add meals for this day — ÖRZA will update your totals.'}
             </Text>
             <View style={styles.emptyActions}>
-              <Button label="Snap a meal" icon="camera" variant="energy" onPress={onSnap} style={styles.flex} />
-              <Button label="Type or speak" icon="mic" variant="secondary" onPress={onType} style={styles.flex} />
+              <Button label="Snap a meal" icon="camera" variant="energy" onPress={onSnap} style={styles.emptyAction} />
+              <Button label="Type or speak" icon="mic" variant="secondary" onPress={onType} style={styles.emptyAction} />
             </View>
           </GlassCard>
         </Animated.View>
@@ -214,4 +214,6 @@ const styles = StyleSheet.create({
   emptyTitle: { marginTop: spacing.lg },
   emptyBody: { marginTop: spacing.sm, maxWidth: 320 },
   emptyActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xl, alignSelf: 'stretch' },
+  // Content width that grows to share the row; large text wraps the second button below instead of cutting both labels.
+  emptyAction: { flexGrow: 1 },
 });

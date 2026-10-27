@@ -3,8 +3,8 @@
  * and Take · Snooze 10 min · Skip (or "Taken early" / "Take after all").
  */
 import { router } from 'expo-router';
-import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 
 import { colors, fonts, radii, spacing } from '@/theme';
@@ -149,18 +149,27 @@ export function DoseRow({
   const due = dose.status === 'due';
   const title = medicineTitle(dose);
   const heading = showTime ? formatTime12(dose.local_time) : title;
+  // Large text in a narrow row (a small phone, the time rail beside it): the text column beside the 72 pt photo got
+  // so thin that Android broke names mid-word ("Pantopr / azole"). Then the photo sits above the text instead.
+  const { fontScale } = useWindowDimensions();
+  const [stacked, setStacked] = useState(false);
+  const measure = (e: LayoutChangeEvent) => {
+    const textColumn = e.nativeEvent.layout.width - 2 * spacing.md - PHOTO - spacing.md;
+    const next = textColumn < MIN_TEXT_COLUMN * fontScale;
+    if (next !== stacked) setStacked(next);
+  };
 
   const info = (
-    <View style={styles.rowTop}>
+    <View style={stacked ? styles.rowTopStacked : styles.rowTop}>
       <View>
-        <MedPhoto url={dose.photo_urls[0]} size={72} accessibilityLabel={`Photo of ${title}`} />
+        <MedPhoto url={dose.photo_urls[0]} size={PHOTO} accessibilityLabel={`Photo of ${title}`} />
         {dose.status === 'taken' ? (
           <Animated.View entering={ZoomIn.springify().damping(14).stiffness(180)} style={styles.check}>
             <Icon name="check" size={13} color={colors.white} />
           </Animated.View>
         ) : null}
       </View>
-      <View style={styles.flex}>
+      <View style={stacked ? styles.stackedText : styles.flex}>
         <Text variant="title" numberOfLines={2} style={[showTime && styles.tabular, dose.status === 'skipped' && styles.strike]}>
           {heading}
         </Text>
@@ -182,7 +191,7 @@ export function DoseRow({
   // No `layout` transition on the row: its parents (the time group, the Today card) and everything below re-lay out at
   // once, so a row springing from its old, taller size overlapped the next group for half a second after Take.
   return (
-    <View style={[styles.row, due && styles.rowDue, done && styles.rowDone]}>
+    <View style={[styles.row, due && styles.rowDue, done && styles.rowDone]} onLayout={measure}>
       {linkToMedicine ? (
         <PressableScale
           haptic="soft"
@@ -247,7 +256,10 @@ export function TodayTimeline({
             {gi < groups.length - 1 ? <View style={styles.line} /> : null}
             <View style={styles.rail} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
               <View style={[styles.dot, allDone ? styles.dotDone : anyDue ? styles.dotDue : null]} />
-              <Text style={styles.clock}>{clock}</Text>
+              {/* One line always: "10:00" in large text broke into "10:0 / 0" in the 48 pt rail. */}
+              <Text style={styles.clock} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                {clock}
+              </Text>
               <Text variant="eyebrow" tone="subtle" style={styles.suffix}>
                 {suffix}
               </Text>
@@ -265,6 +277,9 @@ export function TodayTimeline({
 }
 
 const RAIL = 48;
+const PHOTO = 72;
+/** Narrowest text column (at font scale 1) that still fits a long medicine name such as "Pantoprazole" on a line. */
+const MIN_TEXT_COLUMN = 118;
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
@@ -298,6 +313,8 @@ const styles = StyleSheet.create({
   rowDone: { opacity: 0.82 },
   skeletonRow: { flex: 1 },
   rowTop: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
+  rowTopStacked: { gap: spacing.sm, alignItems: 'flex-start' },
+  stackedText: { alignSelf: 'stretch' },
   gapTop: { marginTop: spacing.sm },
   strike: { textDecorationLine: 'line-through', color: colors.muted },
   tabular: { fontVariant: ['tabular-nums'] },

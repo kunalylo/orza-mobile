@@ -396,7 +396,7 @@ function CompactCard({ hideWhenIdle, style }: { hideWhenIdle?: boolean; style?: 
         >
           {nextDose && s.ready ? <MedPhoto url={nextDose.photo} size={40} /> : <Icon name={icon} size={20} color={tone} />}
           <View style={styles.flex}>
-            <Text variant="label" tone={s.ready ? 'ink' : 'warning'} numberOfLines={1}>
+            <Text variant="label" tone={s.ready ? 'ink' : 'warning'} numberOfLines={2}>
               {title}
             </Text>
             <Text variant="caption" tone="muted" numberOfLines={2}>

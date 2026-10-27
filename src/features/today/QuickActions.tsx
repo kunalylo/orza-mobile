@@ -30,7 +30,7 @@ export function QuickActions({ onSnap, onType, onAsk }: { onSnap: () => void; on
           <Text variant="label" tone="ink" numberOfLines={2} style={styles.label}>
             {a.label}
           </Text>
-          <Text variant="caption" tone="muted" numberOfLines={2} style={styles.hint}>
+          <Text variant="caption" tone="muted" numberOfLines={4} style={styles.hint}>
             {a.hint}
           </Text>
         </PressableScale>
