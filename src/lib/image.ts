@@ -13,6 +13,7 @@
  * - `toUploadDataUrl` uses the contextual expo-image-manipulator API (EXIF orientation applied, metadata dropped),
  *   then steps size / quality down until the JPEG fits under `MAX_UPLOAD_BYTES` (or the caller's `maxBytes`).
  */
+import { Directory, File, Paths } from 'expo-file-system';
 import { ImageManipulator, SaveFormat, type ImageRef } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
@@ -87,17 +88,19 @@ function toPicked(result: ImagePicker.ImagePickerResult, max: number): PickedPho
 }
 
 /* Android can stop ÖRZA while the camera / photo picker is in front (low memory — common on 2–3 GB phones). The system
-   then restarts the app and hands it the photo, which `ImagePicker.getPendingResultAsync` returns once. Callers that can
-   pick up again pass an `owner`; it is remembered while the picker is open so the restarted app knows whose photo it is.
-   Not verifiable on the dev-client build: there the restarted app gets `null` (the dev launcher creates the React
-   context ~20 s after the camera's result arrives) — the mark is read correctly; check the photo comes back on a
-   release / preview build (camera open → `adb shell am kill in.co.ylo.orza` → take the photo). */
-type PendingPick = { owner: string; at: number };
+   then restarts the app when the camera finishes. Callers that can pick up again pass an `owner`; it is remembered (with
+   the time and the source) while the picker is open so the restarted app knows whose photo it is.
+   Expo's own answer, `ImagePicker.getPendingResultAsync`, only covers an Activity that was destroyed while the process
+   lived: its result registry is saved when the Activity is destroyed, never on a process kill, so after a real kill the
+   result is dropped (D1 wrap-up, release build: camera open → `am kill` → photo taken → restarted app got nothing). The
+   camera has still written the photo into the temp file expo-image-picker handed it (`<cache>/ImagePicker/<uuid>.jpg`,
+   deleted only when the result is handled) — so a camera mark is recovered from that file. */
+type PendingPick = { owner: string; at: number; source?: PhotoSource };
 const PENDING_MAX_AGE_MS = 30 * 60_000;
 
-async function withPendingMark<T>(owner: string | undefined, launch: () => Promise<T>): Promise<T> {
+async function withPendingMark<T>(owner: string | undefined, source: PhotoSource, launch: () => Promise<T>): Promise<T> {
   const mark = !!owner && Platform.OS === 'android';
-  if (mark) await writeSecureJson(KEYS.pendingPick, { owner, at: Date.now() } satisfies PendingPick);
+  if (mark) await writeSecureJson(KEYS.pendingPick, { owner, at: Date.now(), source } satisfies PendingPick);
   try {
     return await launch();
   } finally {
@@ -117,9 +120,41 @@ export async function takePendingPhotos(owner: string, max = 1): Promise<PickedP
   if (!(Date.now() - mark.at < PENDING_MAX_AGE_MS)) return [];
   try {
     const result = await ImagePicker.getPendingResultAsync();
-    return result && 'assets' in result ? toPicked(result, max) : [];
+    const picked = result && 'assets' in result ? toPicked(result, max) : [];
+    if (picked.length) return picked;
   } catch {
-    return [];
+    // fall through to the camera's file
+  }
+  if (mark.source !== 'camera') return [];
+  const orphan = await orphanCameraPhoto(mark.at);
+  return orphan ? [orphan] : [];
+}
+
+/** The camera photo of a launch that never came back (see above): the newest non-empty image written since `since`. */
+async function orphanCameraPhoto(since: number): Promise<PickedPhoto | null> {
+  let newest: { file: File; modified: number } | null = null;
+  try {
+    const dir = new Directory(Paths.cache, 'ImagePicker');
+    if (!dir.exists) return null;
+    for (const entry of dir.list()) {
+      if (!(entry instanceof File) || !/\.(jpe?g|png|webp|heic)$/i.test(entry.name)) continue;
+      const size = entry.size ?? 0;
+      const modified = entry.lastModified ?? 0;
+      // A cancelled camera leaves the temp file empty; older files are earlier picks.
+      if (size <= 0 || modified < since - 2_000) continue;
+      if (!newest || modified > newest.modified) newest = { file: entry, modified };
+    }
+  } catch {
+    return null;
+  }
+  if (!newest) return null;
+  try {
+    const ref = await render(newest.file.uri); // also proves the file is a whole, readable image
+    const photo = { uri: newest.file.uri, width: ref.width, height: ref.height };
+    release(ref);
+    return photo;
+  } catch {
+    return null;
   }
 }
 
@@ -137,7 +172,7 @@ export async function pickPhotos(
 
   if (source === 'camera') {
     await ensureCameraPermission();
-    const result = await withPendingMark(opts.owner, () =>
+    const result = await withPendingMark(opts.owner, 'camera', () =>
       ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, exif: false, base64: false })
     );
     return toPicked(result, 1);
@@ -153,7 +188,7 @@ export async function pickPhotos(
     orderedSelection: multiple,
   };
   try {
-    return toPicked(await withPendingMark(opts.owner, () => ImagePicker.launchImageLibraryAsync(options)), max);
+    return toPicked(await withPendingMark(opts.owner, 'library', () => ImagePicker.launchImageLibraryAsync(options)), max);
   } catch (e) {
     // The system picker needs no permission (Android uses the Photo Picker; READ_MEDIA_IMAGES is blocked in
     // app.json). Older iOS versions may — ask once, then retry.

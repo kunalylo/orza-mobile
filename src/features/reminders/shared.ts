@@ -255,5 +255,8 @@ export function formatPhone(e164: string | null | undefined): string {
   return `${code} ${national}`;
 }
 
-/** "Asia/Kolkata" → "Asia/Kolkata" with spaces for underscores ("America/New York"). */
-export const tzLabel = (tz: string) => tz.replace(/_/g, ' ');
+/**
+ * "Asia/Kolkata" with spaces for underscores ("America/New York"). A word joiner after the slash keeps the name on one
+ * line (Android otherwise breaks after "Asia/", leaving it alone at a line end).
+ */
+export const tzLabel = (tz: string) => tz.replace(/_/g, ' ').replace(/\//g, '/\u2060');

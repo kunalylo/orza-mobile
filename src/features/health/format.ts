@@ -64,18 +64,21 @@ export function formatRelativeDay(date: string, today: string): string {
   return `${WEEKDAYS[p.wd]} ${p.d} ${MONTHS[p.m - 1]}`;
 }
 
-/** ISO instant → "just now", "5 min ago", "3 h ago", "2 days ago", or a date for anything older than a week. */
+/**
+ * ISO instant → "just now", "5 min ago", "3 h ago", "2 days ago", or a date for anything older than a week. Whole units
+ * that have passed (a sync 1 h 42 min ago is "1 h ago", not "2 h ago" — never older than it really is).
+ */
 export function timeAgo(iso: string | null | undefined, now = Date.now()): string {
   if (!iso) return '';
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return '';
-  const s = Math.max(0, Math.round((now - t) / 1000));
+  const s = Math.max(0, Math.floor((now - t) / 1000));
   if (s < 60) return 'just now';
-  const min = Math.round(s / 60);
+  const min = Math.floor(s / 60);
   if (min < 60) return `${min} min ago`;
-  const h = Math.round(min / 60);
+  const h = Math.floor(min / 60);
   if (h < 24) return `${h} h ago`;
-  const d = Math.round(h / 24);
+  const d = Math.floor(h / 24);
   if (d < 7) return d === 1 ? 'yesterday' : `${d} days ago`;
   const x = new Date(t);
   return `${x.getDate()} ${MONTHS[x.getMonth()]} ${x.getFullYear()}`;
