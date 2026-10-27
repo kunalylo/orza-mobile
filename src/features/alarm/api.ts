@@ -34,6 +34,8 @@ export interface AlarmData {
   next: DoseItem | null;
   /** Built from the data on this phone (no connection): actions are queued here. */
   offline?: boolean;
+  /** Offline only because ÖRZA had not answered within `ONLINE_WAIT_MS` (a slow server or a weak network, not "no connection"). */
+  slow?: boolean;
   /** Offline: the member's timezone from that data. */
   tz?: string;
 }
@@ -78,7 +80,8 @@ async function loadWithFallback(userId: string | null, at: string | null, signal
   try {
     const first = await Promise.race([online, slow]);
     if (first !== 'slow') return first;
-    return fromPhone(userId, at) ?? (await online);
+    const local = fromPhone(userId, at);
+    return local ? { ...local, slow: true } : await online;
   } catch (e) {
     const local = isNoConnection(e) ? fromPhone(userId, at) : null;
     if (local) return local;

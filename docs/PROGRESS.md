@@ -461,3 +461,9 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   NOT pushed — needs the user's OK; test it first by checking the branch out in `E:\aylo\orza-localtest` after D1, then adapt the phone.
   Also running: auto steps v2 research + plan (run `wf_a75a741e-df0`, read-only) → session scratchpad `steps-v2\PLAN.md`; copy it to
   `docs/notes/steps-v2.md` when D1 is committed.
+- 2026-10-27: D1 layout-a11y DONE: 27 cases — 14 pass, 13 fixed, 10 bugs (`docs/notes/D1-layout-a11y.md`). TalkBack audit of every main screen
+  (all icon-only buttons labelled; stale "Loading the day's totals" label on the Meals totals card fixed); deliberate sign-out no longer
+  says "session ended"; small phone (720x1280 @320) + font 1.3: Welcome buttons above the gesture bar, Today / Medicines timeline / Alarm
+  / Settings / More / Snap / Meals text no longer cut (button pairs: equal halves while the labels fit, stacked otherwise — normal layout
+  unchanged); alarm says "ÖRZA is taking a while to answer" (not "No connection") when it falls back to the phone's copy because the
+  server is slow. Emulator restored: size/density/font reset, animation scales 1.

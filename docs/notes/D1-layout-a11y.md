@@ -2,7 +2,7 @@
 
 Emulator Medium_Phone (Android 16, 1080x2400, density 420), dev-client build 0b45fa1 + native alarm module (package in.co.ylo.orza),
 Metro from the main repo, local server http://10.0.2.2:3100 (JSON DB `E:\aylo\orza-localtest\.data\orza-db.json`).
-Safety gate (`node scripts/e2e/verify-local-bundle.mjs`) printed SAFE at start and on resume (2026-10-27).
+Safety gate (`node scripts/e2e/verify-local-bundle.mjs`) printed SAFE at start, on both resumes and before the commit (2026-10-27).
 System animation scales set to 0 (Reduce Motion path) for the run; restored to 1 at the end.
 Screenshots `lNN` and uiautomator dumps `ui-*.xml` in the session scratchpad `e2e/` folder; `tools/a11y.mjs` lists clickable
 nodes without an accessible name, off-screen text and stale "Loading…" content descriptions.
@@ -34,7 +34,14 @@ Plan: main screens (Welcome, Sign-in, Today, Meals, Snap, Medicines, Alarm via o
 | 17 | Small + font 1.3 — More | FIXED | audits more_s0..s5 labelled; credits pill "Balance & hi…" → 2 lines |
 | 18 | Small + font 1.3 — Settings | FIXED | audits set_s0..s8 labelled; rows "What ÖRZA remem…", "…all of your da…" cut → SettingsRow title 2 / subtitle 3 lines (l28) |
 | 19 | Small + font 1.3 — Reminders + New reminder sheet with keyboard | PASS | audits rem_s1..s8, remsheet labelled; l29/l30 layout fine (presets scroll sideways by design); l32 focused Message field sits between header and the Add reminder footer above the keyboard |
-| 20 | Small + font 1.3 — Alarm screen (orza://alarm) | FIXED | audits alarm_s0..s4 labelled; l33: "Snooze 10 …" cut beside "Skip this dose" (bug 7) → l34 Snooze full width, Skip below. Note: the dev server took 8.5 s for /api/meds/doses, so the alarm used the phone copy and said "No connection — …" (by design after 4.5 s; wording see open issues) |
+| 20 | Small + font 1.3 — Alarm screen (orza://alarm) | FIXED | audits alarm_s0..s4 labelled; l33: "Snooze 10 …" cut beside "Skip this dose" (bug 7) → l34 Snooze full width, Skip below. Note: the dev server took 8.5 s for /api/meds/doses, so the alarm used the phone copy and said "No connection — …" (by design after 4.5 s; the "No connection" wording → case 25, bug 10) |
+| 21 | Reset after the small-phone / large-text pass | PASS | `wm size` 1080x2400 (no override), `wm density` 420, `font_scale` 1.0 — verified after every later size/font change too |
+| 22 | Default size + font 1.0 — Today re-look after the large-text fixes | FIXED | l41/l42: week legend on one line, quick-action hints 2 lines, cards unchanged. l43: the empty-state "Snap a meal" / "Type or speak" pair now stacked even at normal size (bug 9; old layout l44 = equal halves). After fix: equal halves at 1080@420/1.0, stacked at font 1.3 (default size), at 720x1280@320 + 1.3 (l45) and 1.0 (l46, 278 pt row is too narrow for both labels) |
+| 23 | Default size + font 1.0 — Medicines re-look | PASS | l47: photo beside the text (no stacking), "8:00 AM" rail clock one line at full size, next-alarm title one line, Take / Snooze / Skip unchanged |
+| 24 | Default size + font 1.0 — Alarm re-look (orza://alarm?at=2026-10-27T02:30:00.000Z) | FIXED | l48: Snooze 202 pt / Skip 136 pt — no longer the equal halves of before (bug 9). After fix l49: 169.5 pt each; small phone + 1.3 (l50): Snooze full width, Skip below, nothing cut |
+| 25 | Alarm offline note wording (open point from case 20) | FIXED | A slow answer (no reply within 4.5 s, server reachable) said "No connection" (bug 10). Retest: ONLINE_WAIT_MS temporarily 1 ms → l54 "ÖRZA is taking a while to answer — …" with a clock icon; wifi + data off → l56 "No connection — …" with wifi-off. Timeout restored to 4 500 ms, network back on |
+| 26 | Animation scales restored to 1 (animator / transition / window) → animations spot-check | PASS | App restarted: no "[Reanimated] Reduced motion" warning. Frame diffs 1.5 s apart on Today (l51a/b): top-right orb 904 px, tab-bar halo 7 990 px, ring glow changed; alarm (l53a/b): breathing glow changes 269k px (subtle, max Δ6) in the header |
+| 27 | `npm run typecheck`, `npx expo lint`, `npm run test:alarms` | PASS | tsc rc 0, lint rc 0, alarms 34/34 |
 
 ## Bugs
 
@@ -48,3 +55,16 @@ Plan: main screens (Welcome, Sign-in, Today, Meals, Snap, Medicines, Alarm via o
 | 6 | Medicines timeline at large text on a small phone: medicine names broken mid-word, "10:00" rail clock broken in two, next-alarm title cut | FIXED (`TodayTimeline.tsx`: row measures itself and stacks the photo above the text when the text column is under 118 pt × fontScale; clock `numberOfLines=1 adjustsFontSizeToFit`; `AlarmStatusCard.tsx` title 2 lines) |
 | 7 | Alarm screen: "Snooze 10 min" cut to "Snooze 10 …" at large text | FIXED (`AlarmDoseCard.tsx`: wrap row, content-width buttons) |
 | 8 | Minor truncations at large text: Meals totals eyebrow, Snap viewfinder caption, More credits pill hint, Settings rows | FIXED (2–3 lines instead of 1–2) |
+| 9 | Bugs 4 and 7 fixes (content-width `flexGrow` buttons) changed the normal layout: Today's empty-state pair stacked at 1080@420 / font 1.0 (the 20 pt paddings need 340 pt, the row has 329) and the alarm's Snooze / Skip became unequal (202 / 136 pt) | FIXED (`MealsSection.tsx`, `AlarmDoseCard.tsx`: `flexBasis: 0` + `minWidth: 150 × fontScale` — the row wraps on the min width, then each line shares its width equally: equal halves while both labels fit, stacked full-width buttons at large text / on narrow phones) |
+| 10 | Alarm said "No connection" when ÖRZA was merely slow (no answer within 4.5 s → the phone's copy) | FIXED (`features/alarm/api.ts` marks that fallback `slow`; `app/(app)/alarm.tsx` OfflineNote: "ÖRZA is taking a while to answer — this alarm was saved on your phone. Your answers sync automatically." with a clock icon) |
+
+## Environment notes
+
+- The adb device transport reconnected several times during the run (`adb reverse --list` went empty, host-18 ↔ host-23); the dev
+  client then failed with "Unable to load script" / "Cannot connect to Expo CLI" and Fast Refresh stopped. Fix: `adb reverse tcp:8081
+  tcp:8081`, then dev menu (keyevent 82) › Reload. Not an app bug.
+- With animations on, uiautomator dumps can fail (endless orb / halo / glow animations) — use screenshots then.
+
+## Open issues
+
+- None in this area. Medicine-list meta lines ending in "…" at font 1.3 on a 720x1280 phone are accepted (details are one tap away).

@@ -3,7 +3,7 @@
  * Take / Snooze 10 min / Skip. Once handled it collapses to a status row (taken, snoozed, skipped, gone).
  */
 import { router } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
 import { MedPhoto } from '@/features/meds/MedPhoto';
@@ -84,6 +84,9 @@ export function AlarmDoseCard({
   const busy = !!pending;
   const timing = TIMING_INSTRUCTION[dose.timing];
   const layout = useCardLayout();
+  const { fontScale } = useWindowDimensions();
+  // Equal halves while "Snooze 10 min" fits; with large text (or a narrow phone) Skip wraps below instead of cutting it.
+  const half = { minWidth: SECONDARY_MIN_WIDTH * fontScale };
   return (
     <Animated.View
       entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}
@@ -152,13 +155,13 @@ export function AlarmDoseCard({
             disabled={busy}
             onPress={() => onAct('snooze')}
             accessibilityLabel={`Snooze ${dose.name} for ${SNOOZE_MINUTES} minutes`}
-            style={styles.snooze}
+            style={[styles.half, half]}
           />
           <PressableScale
             onPress={() => onAct('skip')}
             disabled={busy}
             haptic="tap"
-            style={[styles.skip, busy && styles.disabled]}
+            style={[styles.half, half, styles.skip, busy && styles.disabled]}
             accessibilityRole="button"
             accessibilityLabel={`Skip this dose of ${dose.name}`}
             accessibilityState={{ disabled: busy, busy: pending === 'skip' }}
@@ -210,6 +213,9 @@ export function HandledDoseRow({ dose, tz }: { dose: HandledDose; tz: string }) 
   );
 }
 
+/** Narrowest Snooze / Skip half (pt at font scale 1) that still shows "Snooze 10 min" with its icon. */
+const SECONDARY_MIN_WIDTH = 150;
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   card: {
@@ -241,10 +247,10 @@ const styles = StyleSheet.create({
   pillMissed: { backgroundColor: 'rgba(255,122,106,0.2)' },
   pillNeutral: { backgroundColor: colors.heroGlass },
   actions: { marginTop: spacing.xl, gap: spacing.sm },
-  // Both at their content width, sharing the rest; with large text Skip wraps below instead of cutting "Snooze 10 …".
+  // flexBasis 0 + a font-scaled minWidth: the row wraps on the minWidth, then each line shares its width equally.
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' },
-  snooze: { flexGrow: 1 },
-  skip: { flexGrow: 1, minHeight: 48, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill },
+  half: { flexGrow: 1, flexShrink: 1, flexBasis: 0 },
+  skip: { minHeight: 48, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill },
   disabled: { opacity: 0.5 },
   done: {
     flexDirection: 'row',

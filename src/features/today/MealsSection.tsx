@@ -1,5 +1,5 @@
 /** The day's meals grouped by type (breakfast · lunch · snacks · dinner) with per-group totals; tap a meal to edit it. */
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { colors, radii, spacing } from '@/theme';
@@ -126,6 +126,10 @@ export function MealsSection({
   onType: () => void;
 }) {
   const reduce = useReducedMotion();
+  const { fontScale } = useWindowDimensions();
+  // Equal halves side by side while both labels fit; at large text (or on a narrow phone) the pair stacks instead of
+  // cutting both labels.
+  const emptyAction = [styles.emptyAction, { minWidth: EMPTY_ACTION_MIN_WIDTH * fontScale }];
   return (
     <View>
       <View style={styles.head}>
@@ -161,8 +165,8 @@ export function MealsSection({
                 : 'Forgot to log? You can still add meals for this day — ÖRZA will update your totals.'}
             </Text>
             <View style={styles.emptyActions}>
-              <Button label="Snap a meal" icon="camera" variant="energy" onPress={onSnap} style={styles.emptyAction} />
-              <Button label="Type or speak" icon="mic" variant="secondary" onPress={onType} style={styles.emptyAction} />
+              <Button label="Snap a meal" icon="camera" variant="energy" onPress={onSnap} style={emptyAction} />
+              <Button label="Type or speak" icon="mic" variant="secondary" onPress={onType} style={emptyAction} />
             </View>
           </GlassCard>
         </Animated.View>
@@ -178,6 +182,9 @@ export function MealsSection({
     </View>
   );
 }
+
+/** Narrowest empty-state button (pt at font scale 1) that still shows "Type or speak" with its icon and some padding. */
+const EMPTY_ACTION_MIN_WIDTH = 150;
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
@@ -214,6 +221,6 @@ const styles = StyleSheet.create({
   emptyTitle: { marginTop: spacing.lg },
   emptyBody: { marginTop: spacing.sm, maxWidth: 320 },
   emptyActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xl, alignSelf: 'stretch' },
-  // Content width that grows to share the row; large text wraps the second button below instead of cutting both labels.
-  emptyAction: { flexGrow: 1 },
+  // flexBasis 0 + a font-scaled minWidth: the row wraps on the minWidth, then each line shares its width equally.
+  emptyAction: { flexGrow: 1, flexShrink: 1, flexBasis: 0 },
 });

@@ -246,7 +246,7 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
           </Text>
         </Animated.View>
 
-        {offline ? <OfflineNote /> : null}
+        {offline ? <OfflineNote slow={!!q.data?.slow} /> : null}
 
         {several ? (
           <Animated.View entering={FadeInDown.delay(80).springify().damping(18).stiffness(100).mass(1)} layout={layout}>
@@ -324,12 +324,15 @@ function AlarmFrame({ live, label = 'ÖRZA · Medicine alarm', onClose, children
   );
 }
 
-function OfflineNote() {
+/** `slow`: no answer from ÖRZA in time (slow server or weak network) — "No connection" would be wrong then. */
+function OfflineNote({ slow }: { slow: boolean }) {
   return (
     <Animated.View entering={FadeIn.duration(240)} style={styles.offline} accessibilityRole="alert">
-      <Icon name="wifi-off" size={14} color={colors.heroMuted} />
+      <Icon name={slow ? 'clock' : 'wifi-off'} size={14} color={colors.heroMuted} />
       <Text variant="caption" tone="heroMuted" style={styles.flex}>
-        No connection — this alarm was saved on your phone. Your answers sync when you&apos;re back online.
+        {slow
+          ? 'ÖRZA is taking a while to answer — this alarm was saved on your phone. Your answers sync automatically.'
+          : "No connection — this alarm was saved on your phone. Your answers sync when you're back online."}
       </Text>
     </Animated.View>
   );
