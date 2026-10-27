@@ -8,7 +8,7 @@ import { Linking, PermissionsAndroid, Platform } from 'react-native';
 import * as sampler from '../../../modules/orza-steps';
 import { healthBridge } from '../health/bridge';
 
-import { coversDayEnd, coversWholeDay, dailyStepCounts, dayStartMs, type StepSample } from './counter';
+import { coversWholeDay, dailyStepCounts, dayComplete, dayStartMs, type StepSample } from './counter';
 import { bestOf, dayRanges, type Candidate } from './shared';
 import { permissionHistory, setPermissionHistory } from './store';
 import type { DaySteps, ReadOptions, StepPermission, StepsAccess, StepsReader } from './types';
@@ -57,8 +57,9 @@ async function phoneDays(dates: readonly string[], opts: ReadOptions): Promise<M
       steps: d.steps,
       ...(coversWholeDay(d, tz) ? {} : { partialFrom: d.coveredFrom }),
       ...(d.estimatedSteps > 0 ? { estimated: d.estimatedSteps } : {}),
-      // A past day is final once a reading after its midnight exists (a background run may not have one yet).
-      complete: coversDayEnd(d, tz),
+      // A past day is final once a reading after its midnight exists (a background run may not have one yet) and no
+      // reboot without a shutdown reading may have lost steps (C10).
+      complete: dayComplete(d, tz),
     });
   }
   return out;

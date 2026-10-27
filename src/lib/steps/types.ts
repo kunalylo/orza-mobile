@@ -7,6 +7,27 @@
 /** Where a day's automatic count came from. `phone` = this phone's own step counter / motion coprocessor. */
 export type StepSource = 'phone' | 'health_connect' | 'apple_health';
 
+/** Which counter a `phone` reading came from. They all read the same sensor: compared, never added (M1). */
+export type PhoneCounter = 'recording' | 'sampler' | 'pedometer';
+
+/**
+ * Steps v2 (`docs/notes/steps-v2.md` §2): one source's count for one member day [s, e) in the profile time zone. A
+ * source with no data for the day gives no reading (null), never a 0: a 0 is a reading only for time it covered (M0).
+ */
+export interface SourceReading {
+  source: StepSource;
+  /** `phone` only: which counter. */
+  counter?: PhoneCounter;
+  /** Steps in [coverFrom, min(e, now)). */
+  steps: number;
+  /** The first instant of the day the source can see: the day's start when it sees the whole day. */
+  coverFrom: number;
+  /** Sampler only: how many of `steps` are a long-gap estimate. */
+  estimated?: number;
+  /** The source has read up to the day's end (a past day can become final, M7). */
+  complete?: boolean;
+}
+
 /**
  * The phone's own counter permission ("Physical activity" on Android 10+, "Motion & Fitness" on iPhone):
  * - `undetermined`: never asked — one tap asks;

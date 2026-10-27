@@ -1,15 +1,25 @@
 /// <reference types="node" />
 /**
  * Automatic step counting tests — `npm run test:steps` (= `npx tsx --test scripts/tests/steps-counter.test.ts`).
- * Pure: the day math (`counter.ts`), the save / display rules (`policy.ts`), the sync's scheduling decisions
- * (`plan.ts`), saving one day (`save.ts`, run against a fake server + store) and the source pick (`shared.ts`) have no
- * React Native imports.
+ * Pure: the day math (`counter.ts`; the Recording API's buckets in `recording.ts`), the save / display rules
+ * (`policy.ts`), the sync's scheduling decisions (`plan.ts`), saving one day (`save.ts`, run against a fake server +
+ * store) and the source pick (`shared.ts`) have no React Native imports.
  */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { zonedToUtc } from '../../src/lib/alarms/schedule';
-import { coversDayEnd, coversWholeDay, dailyStepCounts, dayStartMs, localDay, MAX_STEPS_PER_HOUR, type StepSample } from '../../src/lib/steps/counter';
+import { addDays, zonedToUtc } from '../../src/lib/alarms/schedule';
+import {
+  coversDayEnd,
+  coversWholeDay,
+  dailyStepCounts,
+  dayComplete,
+  dayStartMs,
+  localDay,
+  MAX_STEPS_PER_HOUR,
+  stepsInRange,
+  type StepSample,
+} from '../../src/lib/steps/counter';
 import { FINAL_DAYS, isFinalRead, mergeDays, mergeReason, PAST_READ_EVERY_MS, pendingPastDays, shouldReadPast } from '../../src/lib/steps/plan';
 import {
   clampSteps,
@@ -25,6 +35,7 @@ import {
   withBase,
   type DayRecord,
 } from '../../src/lib/steps/policy';
+import { RECORDING_FRESH_MS, recordingDays, recordingRange, recordingSince, recordingWindow, type RecordingBucket } from '../../src/lib/steps/recording';
 import { applyManualSteps, saveDay, type SaveDeps } from '../../src/lib/steps/save';
 import { forgetServerObservations, observeServerSteps } from '../../src/lib/steps/serverSeen';
 import { bestOf, dayRanges } from '../../src/lib/steps/shared';
@@ -271,10 +282,19 @@ describe('dailyStepCounts — absurd spikes', () => {
     assert.equal(r['2026-10-20'], 400);
   });
 
-  test(`more than ${MAX_STEPS_PER_HOUR} steps an hour is rejected; a big but possible hour is kept`, () => {
+  test(`T1: more than ${MAX_STEPS_PER_HOUR} steps an hour is rejected; a big but possible hour is kept`, () => {
+    assert.equal(MAX_STEPS_PER_HOUR, 15_000, 'C13: 250 steps a minute for a whole hour is beyond running cadence');
     const s = bootOf(10, ist('2026-10-19', '05:00'));
-    assert.equal(totals([s(ist('2026-10-20', '10:00'), 0), s(ist('2026-10-20', '11:00'), 60_000)])['2026-10-20'], 0);
-    assert.equal(totals([s(ist('2026-10-20', '10:00'), 0), s(ist('2026-10-20', '11:00'), 12_000)])['2026-10-20'], 12_000);
+    assert.equal(totals([s(ist('2026-10-20', '10:00'), 0), s(ist('2026-10-20', '11:00'), 16_000)])['2026-10-20'], 0);
+    assert.equal(totals([s(ist('2026-10-20', '10:00'), 0), s(ist('2026-10-20', '11:00'), 14_000)])['2026-10-20'], 14_000);
+  });
+
+  test('T1: a 15-min window holds at most 3 750 steps (3 800 rejected, 3 700 kept)', () => {
+    const s = bootOf(10, ist('2026-10-19', '05:00'));
+    assert.equal(totals([s(ist('2026-10-20', '10:00'), 0), s(ist('2026-10-20', '10:15'), 3_800)])['2026-10-20'], 0);
+    assert.equal(totals([s(ist('2026-10-20', '10:00'), 0), s(ist('2026-10-20', '10:15'), 3_700)])['2026-10-20'], 3_700);
+    // Shorter intervals are judged over 15 min too: 3 800 bunched into 5 min is still too many.
+    assert.equal(totals([s(ist('2026-10-20', '10:00'), 0), s(ist('2026-10-20', '10:05'), 3_800)])['2026-10-20'], 0);
   });
 
   test('short intervals are judged over at least 15 min (a delayed reading can bunch steps)', () => {
@@ -436,6 +456,277 @@ describe('dailyStepCounts — boot clock and wall clock', () => {
     );
     assert.ok(after);
     assert.equal(coversDayEnd(after, IST), true);
+  });
+});
+
+/* ───────────────────────────── Steps v2: counter ───────────────────────────── */
+
+/** The same reading, tagged with why the sampler took it (`shutdown`: the last one before a power-off). */
+const tagged = (s: StepSample, reason: string): StepSample => ({ ...s, reason });
+
+describe('dailyStepCounts — reboot gaps (T2, C10)', () => {
+  // Boot 41 covers the 19th from the 18th's last reading; the phone reboots at 15:00 and boot 42 reads past midnight.
+  const a = bootOf(41, ist('2026-10-18', '08:00'));
+  const b = bootOf(42, ist('2026-10-19', '15:00'));
+  const before = [a(ist('2026-10-18', '23:55'), 500), a(ist('2026-10-19', '09:00'), 1_000), tagged(a(ist('2026-10-19', '13:00'), 4_000), 'periodic')];
+  const after = [b(ist('2026-10-19', '16:00'), 300), b(ist('2026-10-20', '00:05'), 2_000)];
+  const the19th = (samples: StepSample[]) => {
+    const d = dailyStepCounts(samples, IST).get('2026-10-19');
+    assert.ok(d);
+    return d;
+  };
+
+  test('a reboot with no shutdown reading before it may have lost steps: the day is not complete', () => {
+    const d = the19th([...before, ...after]);
+    assert.equal(coversDayEnd(d, IST), true, 'read up to its end …');
+    assert.equal(d.uncertainGap, true);
+    assert.equal(dayComplete(d, IST), false, '… but not final: it stays pending (saved raise-only)');
+  });
+
+  test('a shutdown reading just before the reboot: nothing was lost, the day is complete', () => {
+    const d = the19th([...before, tagged(a(ist('2026-10-19', '14:50'), 4_100), 'shutdown'), ...after]);
+    assert.equal(d.uncertainGap, false);
+    assert.equal(dayComplete(d, IST), true);
+    assert.equal(d.steps, dailyStepCounts([...before, ...after], IST).get('2026-10-19')!.steps + 100, 'the shutdown reading adds what it saw');
+  });
+
+  test('the gap marks every day it touches, and only those', () => {
+    const c = bootOf(43, ist('2026-10-21', '00:30'));
+    const days = dailyStepCounts([...before, ...after, b(ist('2026-10-20', '22:00'), 9_000), c(ist('2026-10-21', '09:00'), 700), c(ist('2026-10-22', '00:10'), 900)], IST);
+    assert.equal(days.get('2026-10-20')?.uncertainGap, true, '22:00 → the 00:30 boot');
+    assert.equal(days.get('2026-10-21')?.uncertainGap, true);
+    assert.equal(dayComplete(days.get('2026-10-21')!, IST), false);
+    assert.equal(days.get('2026-10-22')?.uncertainGap, false);
+  });
+
+  test('no boot clock: the gap runs from the last reading to the first one of the new boot', () => {
+    const days = dailyStepCounts(
+      [
+        { ts: ist('2026-10-19', '20:00'), counter: 5_000, boot: 3, elapsed: -1 },
+        { ts: ist('2026-10-20', '09:00'), counter: 700, boot: 4, elapsed: -1 },
+        { ts: ist('2026-10-21', '00:05'), counter: 900, boot: 4, elapsed: -1 },
+      ],
+      IST
+    );
+    assert.equal(days.get('2026-10-19')?.uncertainGap, true);
+    assert.equal(days.get('2026-10-20')?.uncertainGap, true);
+  });
+
+  test('no reboot (BOOT_COUNT moved, the boot clock kept running) → no gap; a counter restart is one', () => {
+    const booted = ist('2026-10-18', '08:00');
+    const [b41, b42] = [bootOf(41, booted), bootOf(42, booted)];
+    const moved = dailyStepCounts([b41(ist('2026-10-19', '23:50'), 100), b41(ist('2026-10-20', '10:00'), 500), b42(ist('2026-10-20', '12:00'), 800), b42(ist('2026-10-21', '00:05'), 900)], IST);
+    assert.equal(moved.get('2026-10-20')?.uncertainGap, false);
+    assert.equal(dayComplete(moved.get('2026-10-20')!, IST), true);
+    const s = bootOf(7, booted);
+    const restarted = dailyStepCounts([s(ist('2026-10-19', '23:50'), 9_000), s(ist('2026-10-20', '10:00'), 9_400), s(ist('2026-10-20', '11:00'), 150), s(ist('2026-10-21', '00:05'), 300)], IST);
+    assert.equal(restarted.get('2026-10-20')?.uncertainGap, true, 'steps before the restart are lost as with a reboot');
+  });
+});
+
+describe('stepsInRange (T3)', () => {
+  const s = bootOf(10, ist('2026-10-19', '05:00'));
+  const samples = [s(ist('2026-10-20', '10:00'), 1_000), s(ist('2026-10-20', '11:00'), 2_000), s(ist('2026-10-20', '13:00'), 2_600)];
+
+  test('a delta overlapping `from` (or `to`) is prorated by time', () => {
+    assert.equal(stepsInRange(samples, IST, ist('2026-10-20', '10:30'), ist('2026-10-20', '13:00')), 500 + 600);
+    assert.equal(stepsInRange(samples, IST, ist('2026-10-20', '10:00'), ist('2026-10-20', '10:15')), 250);
+    assert.equal(stepsInRange(samples, IST, ist('2026-10-20', '12:00'), ist('2026-10-20', '20:00')), 300);
+    assert.equal(stepsInRange(samples, IST, ist('2026-10-20', '13:00'), ist('2026-10-20', '20:00')), 0, 'nothing read after the last reading');
+    assert.equal(stepsInRange(samples, IST, ist('2026-10-20', '08:00'), ist('2026-10-20', '10:00')), 0, 'before the first reading');
+    assert.equal(stepsInRange([], IST, ist('2026-10-20', '00:00'), ist('2026-10-21', '00:00')), 0);
+    assert.equal(stepsInRange(samples, IST, ist('2026-10-20', '12:00'), ist('2026-10-20', '12:00')), 0, 'an empty range');
+  });
+
+  test('the same rules as the day totals: glitches skipped, a reboot gap is 0 steps', () => {
+    const glitch = [s(ist('2026-10-20', '10:00'), 1_000), s(ist('2026-10-20', '11:00'), 900_000), s(ist('2026-10-20', '12:00'), 1_500)];
+    assert.equal(stepsInRange(glitch, IST, ist('2026-10-20', '10:00'), ist('2026-10-20', '12:00')), 500);
+    const a = bootOf(41, ist('2026-10-19', '20:00'));
+    const b = bootOf(42, ist('2026-10-20', '13:00'));
+    const reboot = [a(ist('2026-10-20', '12:00'), 12_000), b(ist('2026-10-20', '14:00'), 600)];
+    assert.equal(stepsInRange(reboot, IST, ist('2026-10-20', '12:00'), ist('2026-10-20', '13:00')), 0, 'the phone was off');
+    assert.equal(stepsInRange(reboot, IST, ist('2026-10-20', '12:30'), ist('2026-10-20', '13:30')), 300);
+  });
+
+  test('a whole-day range equals dailyStepCounts (same rounding)', () => {
+    const b10 = bootOf(10, ist('2026-10-20', '05:00'));
+    const a = bootOf(41, ist('2026-10-19', '20:00'));
+    const b = bootOf(42, ist('2026-10-21', '00:30'));
+    const ny1 = bootOf(1, ny('2026-03-01', '08:00'));
+    const sets: [StepSample[], string][] = [
+      // first reading counted from boot, then an hour split across midnight
+      [[b10(ist('2026-10-20', '23:00'), 5_000), b10(ist('2026-10-21', '01:00'), 5_240)], IST],
+      // uneven splits (largest remainder)
+      [[s(ist('2026-10-20', '23:55'), 1_000), s(ist('2026-10-21', '00:05'), 1_007), s(ist('2026-10-21', '00:20'), 1_008)], IST],
+      [[s(ist('2026-10-20', '23:57'), 1_000), s(ist('2026-10-21', '00:04'), 1_007), s(ist('2026-10-21', '02:13'), 2_331)], IST],
+      // a multi-day estimate
+      [[s(ist('2026-10-20', '12:00'), 1_000), s(ist('2026-10-23', '12:00'), 73_001)], IST],
+      // a reboot after midnight
+      [[a(ist('2026-10-20', '06:00'), 1_000), a(ist('2026-10-20', '22:00'), 6_000), b(ist('2026-10-21', '06:30'), 300), b(ist('2026-10-21', '09:30'), 1_300)], IST],
+      // New York spring forward
+      [[ny1(ny('2026-03-07', '23:00'), 10_000), ny1(ny('2026-03-09', '01:00'), 12_501)], NY],
+    ];
+    for (const [list, tz] of sets) {
+      const days = dailyStepCounts(list, tz);
+      assert.ok(days.size > 0);
+      for (const [date, d] of days) assert.equal(stepsInRange(list, tz, dayStartMs(date, tz), dayStartMs(addDays(date, 1), tz)), d.steps, `${tz} ${date}`);
+    }
+  });
+
+  test('a New York DST day is measured in real time', () => {
+    const n = bootOf(1, ny('2026-03-01', '08:00'));
+    const spring = [n(ny('2026-03-07', '23:00'), 10_000), n(ny('2026-03-09', '01:00'), 12_500)];
+    assert.equal(stepsInRange(spring, NY, dayStartMs('2026-03-08', NY), dayStartMs('2026-03-09', NY)), 2_300);
+    // 00:00 → 04:00 on the 8th is 3 real hours (02:00–03:00 doesn't exist): 3 × 100.
+    assert.equal(stepsInRange(spring, NY, ny('2026-03-08', '00:00'), ny('2026-03-08', '04:00')), 300);
+    const f = bootOf(1, ny('2026-10-25', '08:00'));
+    const fall = [f(ny('2026-10-31', '23:00'), 0), f(ny('2026-11-02', '01:00'), 2_700)];
+    // 00:00 → 03:00 on 1 November is 4 real hours (01:00–02:00 happens twice): 4 × 100.
+    assert.equal(stepsInRange(fall, NY, ny('2026-11-01', '00:00'), ny('2026-11-01', '03:00')), 400);
+  });
+});
+
+/* ───────────────────────────── Steps v2: Recording API ───────────────────────────── */
+
+const KTM = 'Asia/Kathmandu';
+const DAY = 24 * H;
+const QUARTER = 15 * MIN;
+
+/**
+ * What the Recording API answers for `recordingRange(from, to, minutes)`: buckets of `minutes` from the range start to
+ * its last millisecond, non-zero ones only (as the native read returns them). `steps(start)` = a bucket's count.
+ */
+function fakeBuckets(from: number, to: number, minutes: number, steps: (start: number) => number): RecordingBucket[] {
+  const range = recordingRange(from, to, minutes);
+  assert.ok(range);
+  const out: RecordingBucket[] = [];
+  for (let start = range.startMs; start <= range.lastMs; start += minutes * MIN) {
+    const n = steps(start);
+    if (n > 0) out.push({ start, end: Math.min(start + minutes * MIN, range.lastMs + 1), steps: n });
+  }
+  return out;
+}
+
+const recording = (steps: number, coverFrom: number, complete: boolean) => ({ source: 'phone', counter: 'recording', steps, coverFrom, complete });
+
+describe('recordingDays — 15-min buckets to local days (T4)', () => {
+  /** 1 step every quarter-hour, but 10 in the one that ends at `midnight` and 1 000 in the one that starts there. */
+  const marked = (midnight: number) => (start: number) => (start === midnight - QUARTER ? 10 : start === midnight ? 1_000 : 1);
+  const cases: [zone: string, day: string, quarters: number][] = [
+    [IST, '2026-10-20', 96],
+    [KTM, '2026-10-20', 96],
+    [NY, '2026-03-08', 92], // spring forward: 23 h
+    [NY, '2026-11-01', 100], // fall back: 25 h
+  ];
+  for (const [tz, day, quarters] of cases) {
+    test(`${tz} ${day}: ${quarters} quarter-hours, split exactly at local midnight`, () => {
+      const next = addDays(day, 1);
+      const s = dayStartMs(day, tz);
+      const midnight = dayStartMs(next, tz);
+      const e = dayStartMs(addDays(next, 1), tz);
+      assert.equal((midnight - s) / QUARTER, quarters);
+      const now = e + 2 * H;
+      const days = recordingDays(fakeBuckets(s, now, 15, marked(midnight)), [day, next], tz, recordingWindow(s - DAY, now));
+      assert.deepEqual(days.get(day), recording(quarters - 1 + 10, s, true));
+      assert.deepEqual(days.get(next), recording((e - midnight) / QUARTER - 1 + 1_000, midnight, true), 'the hours after it belong to the day after');
+    });
+  }
+
+  test('a bucket straddling midnight (never with recordingRange’s alignment) is split by time', () => {
+    const midnight = dayStartMs('2026-10-21', IST);
+    const days = recordingDays([{ start: midnight - 10 * MIN, end: midnight + 5 * MIN, steps: 300 }], ['2026-10-20', '2026-10-21'], IST, recordingWindow(midnight - 2 * DAY, midnight + 2 * H));
+    assert.equal(days.get('2026-10-20')?.steps, 200);
+    assert.equal(days.get('2026-10-21')?.steps, 100);
+  });
+});
+
+describe('recordingRange (T5)', () => {
+  test('the start is floored to a UTC quarter-hour; the end is the last millisecond (the read’s end is inclusive)', () => {
+    assert.deepEqual(recordingRange(Date.parse('2026-10-20T10:07:31.500Z'), Date.parse('2026-10-20T12:00:00Z')), {
+      startMs: Date.parse('2026-10-20T10:00:00Z'),
+      lastMs: Date.parse('2026-10-20T12:00:00Z') - 1,
+      bucketMinutes: 15,
+    });
+    assert.equal(recordingRange(Date.parse('2026-10-20T10:15:00Z'), Date.parse('2026-10-20T10:20:00Z'))?.startMs, Date.parse('2026-10-20T10:15:00Z'));
+  });
+
+  test('local midnights are already on a UTC quarter-hour in every real offset (+05:30, +05:45, +08:45, +13:45, DST)', () => {
+    const zones: [string, string][] = [
+      [IST, '2026-10-20'],
+      [KTM, '2026-10-20'],
+      ['Australia/Eucla', '2026-10-20'],
+      ['Pacific/Chatham', '2026-10-20'],
+      [NY, '2026-03-08'],
+      [NY, '2026-11-01'],
+    ];
+    for (const [tz, day] of zones) {
+      const s = dayStartMs(day, tz);
+      assert.equal(recordingRange(s, s + DAY)?.startMs, s, `${tz} ${day}`);
+    }
+  });
+
+  test('1-minute buckets (bases): floored to the minute; an empty range reads nothing', () => {
+    assert.equal(recordingRange(Date.parse('2026-10-20T10:07:31.500Z'), Date.parse('2026-10-20T12:00:00Z'), 1)?.startMs, Date.parse('2026-10-20T10:07:00Z'));
+    assert.equal(recordingRange(ist('2026-10-20', '10:00'), ist('2026-10-20', '10:00')), null);
+    assert.equal(recordingRange(ist('2026-10-20', '10:00'), ist('2026-10-20', '09:00')), null);
+  });
+});
+
+describe('recordingDays — the 10-day window (T6)', () => {
+  const now = ist('2026-10-27', '12:00');
+
+  test('the window runs from the later of the subscription and now − 10 days, to now', () => {
+    assert.deepEqual(recordingWindow(ist('2026-10-01', '09:00'), now), { start: now - 10 * DAY, end: now });
+    assert.deepEqual(recordingWindow(ist('2026-10-25', '14:10'), now), { start: ist('2026-10-25', '14:10'), end: now });
+  });
+
+  test('subscribed mid-day: the day before → null, that day → from the subscription, a day with no buckets → 0', () => {
+    const sub = ist('2026-10-25', '14:10');
+    const buckets: RecordingBucket[] = [
+      { start: ist('2026-10-25', '13:00'), end: ist('2026-10-25', '13:15'), steps: 999 }, // before the window: never counts
+      { start: ist('2026-10-25', '15:00'), end: ist('2026-10-25', '15:15'), steps: 400 },
+      { start: ist('2026-10-27', '09:00'), end: ist('2026-10-27', '09:15'), steps: 50 },
+      { start: ist('2026-10-27', '12:15'), end: ist('2026-10-27', '12:30'), steps: 70 }, // after now: never counts
+    ];
+    const days = recordingDays(buckets, ['2026-10-28', '2026-10-27', '2026-10-26', '2026-10-25', '2026-10-24'], IST, recordingWindow(sub, now));
+    assert.equal(days.get('2026-10-28'), null, 'not started yet');
+    assert.deepEqual(days.get('2026-10-27'), recording(50, dayStartMs('2026-10-27', IST), false));
+    assert.deepEqual(days.get('2026-10-26'), recording(0, dayStartMs('2026-10-26', IST), true), 'covered, really 0');
+    assert.deepEqual(days.get('2026-10-25'), recording(400, sub, true));
+    assert.equal(days.get('2026-10-24'), null, 'before the subscription: no data, never 0');
+  });
+
+  test('older than 10 days → null; the day the window starts in is covered from there', () => {
+    const days = recordingDays([], ['2026-10-17', '2026-10-16'], IST, recordingWindow(ist('2026-09-01', '09:00'), now));
+    assert.equal(days.get('2026-10-16'), null);
+    assert.deepEqual(days.get('2026-10-17'), recording(0, now - 10 * DAY, true));
+  });
+
+  test('a subscription time in the future (the clock moved back) reads nothing', () => {
+    const days = recordingDays([{ start: ist('2026-10-27', '09:00'), end: ist('2026-10-27', '09:15'), steps: 50 }], ['2026-10-27'], IST, recordingWindow(now + H, now));
+    assert.equal(days.get('2026-10-27'), null);
+  });
+
+  test(`a past day is complete only on a read ${RECORDING_FRESH_MS / MIN} min after it ended (freshness, C9.4)`, () => {
+    const e = dayStartMs('2026-10-27', IST);
+    const read = (t: number) => recordingDays([], ['2026-10-26'], IST, recordingWindow(e - 5 * DAY, t)).get('2026-10-26')?.complete;
+    assert.equal(read(e + 30 * MIN), false);
+    assert.equal(read(e + RECORDING_FRESH_MS), true);
+  });
+});
+
+describe('recordingSince — 1-min buckets (T7)', () => {
+  const day = '2026-10-20';
+  const perMinute = fakeBuckets(ist(day, '08:00'), ist(day, '12:00'), 1, () => 1);
+
+  test('`at` is floored to the minute and the sum covers [at, end)', () => {
+    const at = ist(day, '09:30') + 40_000;
+    assert.equal(recordingRange(at, ist(day, '11:00'), 1)?.startMs, ist(day, '09:30'));
+    assert.equal(recordingSince(perMinute, at, ist(day, '11:00')), 90);
+    assert.equal(recordingSince(perMinute, ist(day, '09:30'), ist(day, '09:31')), 1);
+    assert.equal(recordingSince(perMinute, ist(day, '11:00'), ist(day, '11:00')), 0);
+    assert.equal(recordingSince(perMinute, ist(day, '12:30'), ist(day, '13:00')), 0, 'nothing after the last bucket');
+    assert.equal(recordingSince([], at, ist(day, '11:00')), 0);
   });
 });
 

@@ -445,9 +445,10 @@ dependencies {
 - `unsubscribe(ctx, cb)`:
   - calls `….unsubscribe(LocalDataType.TYPE_STEP_COUNT_DELTA)`;
   - always clears `recordingSubscribedAt`.
-- `read(ctx, startMs, endMs, bucketMinutes, cb)`:
+- `read(ctx, startMs, lastMs, bucketMinutes, cb)`, with the arguments from JS `recordingRange()` (J2: `lastMs` is
+  already `end − 1`, so it is passed as is, never minus 1 again):
   - request: `LocalDataReadRequest.Builder().aggregate(LocalDataType.TYPE_STEP_COUNT_DELTA).bucketByTime(bucketMinutes,
-    TimeUnit.MINUTES).setTimeRange(startMs, endMs - 1, TimeUnit.MILLISECONDS)`;
+    TimeUnit.MINUTES).setTimeRange(startMs, lastMs, TimeUnit.MILLISECONDS)`;
   - sums `dp.getValue(LocalField.FIELD_STEPS).asInt()` per bucket;
   - returns JSON `[[bucketStartMs, bucketEndMs, steps], …]`, non-zero buckets only.
 
@@ -476,8 +477,8 @@ dependencies {
 - `recordingStatus()`
 - `recordingSubscribe(): {ok, subscribedAt}`
 - `recordingUnsubscribe()`
-- `recordingRead(startMs, endMs, bucketMinutes): string`, which rejects `ERR_RECORDING_READ` (message = exception class +
-  status code)
+- `recordingRead(startMs, lastMs, bucketMinutes): string` (`lastMs` inclusive, from `recordingRange()`), which rejects
+  `ERR_RECORDING_READ` (message = exception class + status code)
 - `recordingSubscribedAt()`
 - `healthFeatures()`
 
@@ -942,8 +943,10 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
 
 **Phase J: pure JS core (no native; test-first)**
 
-- [ ] **J1.** `counter.ts`: 15k cap, `reason`, uncertain gaps, `stepsInRange` + T1–T3.
-- [ ] **J2.** `recording.ts` + T4–T7.
+- [x] **J1.** `counter.ts`: 15k cap, `reason`, uncertain gaps, `stepsInRange` + T1–T3.
+  - Added `dayComplete()` (`coversDayEnd` and no `uncertainGap`), now used by `reader.android.ts`. A counter restart without a reboot also flags a gap, because it loses steps the same way. For N4: the store drops a `shutdown` sample taken within 60 s of an unchanged one, so it should re-tag the kept sample as `shutdown`.
+- [x] **J2.** `recording.ts` + T4–T7.
+  - `SourceReading` (without `since`) and `PhoneCounter` were added to `types.ts` early, for `recordingDays`; J3a adds the rest and may refine them. `recordingRange` returns `{startMs, lastMs = end − 1, bucketMinutes}`, so §4.1's native read no longer subtracts 1 (it did twice before). Also added: `recordingWindow(subscribedAt, now)` and `RECORDING_FRESH_MS` = 60 min for `complete`. Tests T1–T7 live in `steps-counter.test.ts`, and `package.json` is unchanged.
 - [ ] **J3a.** `types.ts` new shapes. `merge.ts` M0–M4 + T8–T15. Delete `bestOf`, keeping a thin adapter until R2/R4.
 - [ ] **J3b.** `merge.ts` M5 (`dayValue`, base creation) + T16–T22.
 - [ ] **J4.** `policy.ts`: the new `DayBase` and `DayRecord`, `savePlan`, `shownSteps` + T23–T26. Delete `rebased` and

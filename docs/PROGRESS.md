@@ -500,3 +500,8 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   `wf_a75a741e-df0`). One reference number = the health store's day total (HC aggregate / HealthKit cumulativeSum), Today = max(store,
   phone) live; Android 14+ HC Steps, Android 9–13 Play services Recording API (sampler = fallback), iPhone Apple Health; no writes;
   per-member consent + off switch; server modes manual/auto/reconcile on /api/track/steps. Resume: first unticked step in §10.
+  Phase J (pure core) running as `wf_743ae41a-b53` (WIP commit per step group; resume with resumeFromRunId).
+- 2026-10-27: Web batch 1 on `mobile-backend-batch`: meds/devices `118c538` (review fixes included), onboarding + CSV `bae08b1`;
+  rebalance (uncommitted) + review nits + whole-branch review running as `wf_6409d7a1-e8f`. Phone follow-up package after Phase J:
+  send acted_at / snooze_until from the alarm queue, GET /api/meds/doses?from&to in alarms sync, alarms_local_until on POST /api/devices,
+  409 dose_already_taken = taken, rebalance at-floor rule `usual − floor < 10` (src/features/rebalance/PlanView.tsx + types.ts).

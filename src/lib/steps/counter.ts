@@ -7,6 +7,9 @@
  * - a reboot (or the counter restarted) → the new value was walked since the restart (from boot time when known);
  * - a delta faster than MAX_STEPS_PER_HOUR is a glitch and ignored (the next plausible reading carries on);
  * and each delta is credited to local days in the member's time zone, split across midnight in proportion to time.
+ * A reboot not preceded by a `shutdown` reading may have lost the steps walked before the power-off: the days that
+ * stretch touches are flagged (`uncertainGap`) and never final (C10). `stepsInRange` gives the same count for any
+ * instant range (time-anchored bases, M5).
  *
  * "Same boot" is decided by the boot clock (`elapsed`) whenever both readings have it: it restarts only with the
  * kernel, while BOOT_COUNT can move without one (a runtime restart re-sends BOOT_COMPLETED). Readings of one boot are
@@ -24,6 +27,11 @@ export interface StepSample {
   boot: number;
   /** ms since this boot at the reading (survives wall-clock changes); -1 when unknown. */
   elapsed: number;
+  /**
+   * Why the sampler took it: app / periodic / midnight / boot / updated / shutdown. `shutdown` is the last reading
+   * before a power-off — a reboot right after it lost nothing.
+   */
+  reason?: string;
 }
 
 export interface DayCount {
@@ -38,10 +46,19 @@ export interface DayCount {
   estimated: boolean;
   /** How many of `steps` are such an estimate (0 when none). */
   estimatedSteps: number;
+  /**
+   * A reboot (or a counter restart) touched this day with no `shutdown` reading before it: the steps walked between the
+   * last reading and the power-off are missing, so the count is never final (C10).
+   */
+  uncertainGap: boolean;
 }
 
-/** Faster than this is a sensor glitch, not walking (elite sprinting is ~18 000 steps an hour). */
-export const MAX_STEPS_PER_HOUR = 50_000;
+/**
+ * Faster than this is a sensor glitch, not walking: 250 steps a minute for a whole hour is beyond running cadence, and
+ * a jump that got through would be saved for good (C13). The phone's own counter only — a health store's or the
+ * Recording API's numbers are never filtered (ÖRZA would then differ from them).
+ */
+export const MAX_STEPS_PER_HOUR = 15_000;
 /** Short intervals are judged as if they lasted this long: a delayed reading can bunch a few minutes of steps. */
 export const MIN_RATE_WINDOW_MS = 15 * 60_000;
 /** A delta spread over a longer gap than this across midnight makes the days it touches estimates. */
@@ -164,6 +181,8 @@ interface Delta {
   gapFrom?: number;
   /** The readings' clocks can't place it (a reboot whose new reading isn't after the old one, no boot clock): skip. */
   unplaceable?: boolean;
+  /** The counter restarted in between (a reboot, or the sensor reset): steps walked before the restart weren't counted. */
+  restart?: boolean;
 }
 
 /**
@@ -192,13 +211,13 @@ function deltaBetween(a: StepSample, b: StepSample): Delta {
   const boot = rebooted ? bootInstant(b) : null;
   if (rebooted && b.ts <= a.ts) {
     // The two boots' clocks disagree: credit the new boot's steps from its own boot when known, else skip it.
-    if (boot != null && boot <= b.ts) return { steps: b.counter, start: boot, end: b.ts };
-    return { steps: b.counter, start: b.ts, end: b.ts, unplaceable: true };
+    if (boot != null && boot <= b.ts) return { steps: b.counter, start: boot, end: b.ts, restart: true };
+    return { steps: b.counter, start: b.ts, end: b.ts, unplaceable: true, restart: true };
   }
   let start = a.ts;
   if (boot != null && boot > start && boot <= b.ts) start = boot;
   start = Math.min(start, b.ts);
-  return { steps: b.counter, start, end: b.ts, ...(start > a.ts ? { gapFrom: a.ts } : {}) };
+  return { steps: b.counter, start, end: b.ts, restart: true, ...(start > a.ts ? { gapFrom: a.ts } : {}) };
 }
 
 function plausible(d: Delta): boolean {
@@ -209,6 +228,42 @@ function plausible(d: Delta): boolean {
 
 /* ───────────────────────────── Crediting days ───────────────────────────── */
 
+interface DayPiece {
+  date: string;
+  from: number;
+  to: number;
+  steps: number;
+}
+
+/**
+ * `steps` taken during [start, end], split across local days in proportion to time, in whole steps (largest-remainder
+ * rounding: the pieces add up to exactly `steps`). An instant (end ≤ start) is one piece on the day of `end`.
+ */
+function splitAcrossDays(steps: number, start: number, end: number, tz: string): DayPiece[] {
+  if (!(end > start)) return [{ date: localDay(end, tz), from: end, to: end, steps }];
+  const pieces: DayPiece[] = [];
+  let at = start;
+  for (let guard = 0; at < end && guard < 400; guard++) {
+    const to = Math.min(end, nextDayStart(at, tz));
+    pieces.push({ date: localDay(at, tz), from: at, to, steps: 0 });
+    at = to;
+  }
+  if (at < end) pieces.push({ date: localDay(at, tz), from: at, to: end, steps: 0 });
+
+  const total = end - start;
+  const exact = pieces.map((p) => (steps * (p.to - p.from)) / total);
+  const whole = exact.map(Math.floor);
+  let left = steps - whole.reduce((s, n) => s + n, 0);
+  const byRemainder = exact.map((x, i) => ({ i, r: x - whole[i] })).sort((a, b) => b.r - a.r || a.i - b.i);
+  for (const { i } of byRemainder) {
+    if (left <= 0) break;
+    whole[i] += 1;
+    left -= 1;
+  }
+  pieces.forEach((p, i) => (p.steps = whole[i]));
+  return pieces;
+}
+
 class DayBook {
   readonly days = new Map<string, DayCount>();
 
@@ -218,7 +273,7 @@ class DayBook {
     const est = estimated ? steps : 0;
     const d = this.days.get(date);
     if (!d) {
-      this.days.set(date, { date, steps, coveredFrom: from, coveredTo: to, estimated, estimatedSteps: est });
+      this.days.set(date, { date, steps, coveredFrom: from, coveredTo: to, estimated, estimatedSteps: est, uncertainGap: false });
       return;
     }
     d.steps += steps;
@@ -233,56 +288,54 @@ class DayBook {
     this.credit(localDay(at, this.tz), 0, at, at, false);
   }
 
-  /** Credits a delta: its steps, and the off-time before a reboot as covered (so a reboot doesn't look like a gap). */
-  add(d: Delta) {
+  /**
+   * Credits a delta from reading `prev`: its steps, and the off-time before a reboot as covered (so a reboot doesn't
+   * look like a gap). A restart not preceded by a `shutdown` reading flags the days between `prev` and the restart.
+   */
+  add(d: Delta, prev: StepSample) {
     if (d.gapFrom != null && d.start > d.gapFrom) this.spread(0, d.gapFrom, d.start);
     this.spread(d.steps, d.start, d.end);
+    if (d.restart && prev.reason !== 'shutdown') {
+      // The lost steps lie between `prev` and the boot when it is known, else anywhere up to the new reading.
+      const until = d.gapFrom != null ? d.start : d.end;
+      this.flagGap(Math.min(prev.ts, d.start), Math.max(prev.ts, until));
+    }
   }
 
   /** Credits `steps` taken during [start, end], split across local days in proportion to time (whole steps). */
   spread(steps: number, start: number, end: number) {
-    if (!(end > start)) {
-      this.credit(localDay(end, this.tz), steps, end, end, false);
-      return;
-    }
-    const pieces: { date: string; from: number; to: number }[] = [];
-    let at = start;
-    for (let guard = 0; at < end && guard < 400; guard++) {
-      const to = Math.min(end, nextDayStart(at, this.tz));
-      pieces.push({ date: localDay(at, this.tz), from: at, to });
-      at = to;
-    }
-    if (at < end) pieces.push({ date: localDay(at, this.tz), from: at, to: end });
-
+    const pieces = splitAcrossDays(steps, start, end, this.tz);
     const estimated = steps > 0 && pieces.length > 1 && end - start > ESTIMATE_GAP_MS;
-    // Largest-remainder rounding: the pieces add up to exactly `steps`.
-    const total = end - start;
-    const exact = pieces.map((p) => (steps * (p.to - p.from)) / total);
-    const whole = exact.map(Math.floor);
-    let left = steps - whole.reduce((s, n) => s + n, 0);
-    const byRemainder = exact.map((x, i) => ({ i, r: x - whole[i] })).sort((a, b) => b.r - a.r || a.i - b.i);
-    for (const { i } of byRemainder) {
-      if (left <= 0) break;
-      whole[i] += 1;
-      left -= 1;
+    for (const p of pieces) this.credit(p.date, p.steps, p.from, p.to, estimated);
+  }
+
+  /** Flags the (already credited) days that [from, to] touches as possibly missing steps. */
+  private flagGap(from: number, to: number) {
+    const last = localDay(to > from ? to - 1 : from, this.tz);
+    let date = localDay(from, this.tz);
+    for (let guard = 0; date <= last && guard < 400; guard++, date = addDays(date, 1)) {
+      const d = this.days.get(date);
+      if (d) d.uncertainGap = true;
     }
-    pieces.forEach((p, i) => this.credit(p.date, whole[i], p.from, p.to, estimated));
   }
 }
 
-/* ───────────────────────────── Public ───────────────────────────── */
+/* ───────────────────────────── Walking the samples ───────────────────────────── */
+
+/** What the walk hands on: the first reading's own steps, then every accepted delta. */
+interface DeltaVisitor {
+  /** The first reading: its steps since a boot earlier that same local day (`d`), or null — counting starts `at` it. */
+  first(d: Delta | null, at: number): void;
+  /** A plausible delta from reading `prev` to the next one. */
+  delta(d: Delta, prev: StepSample): void;
+}
 
 /**
- * Steps per local day (member's time zone `timeZone`) from raw samples in any order. Days with coverage but no steps
- * are included with 0; days the samples don't reach are absent.
- *
- * The very first reading has nothing before it: when the phone booted earlier that same local day, its counter is
- * exactly that day's steps since boot (counted from boot time); otherwise counting starts at the reading and the day
- * is partial (`coveredFrom` after its start).
+ * The samples in the order they were taken, turned into deltas. The very first reading has nothing before it: when the
+ * phone booted earlier that same local day, its counter is exactly that day's steps since boot (counted from boot
+ * time); otherwise counting starts at the reading.
  */
-export function dailyStepCounts(samples: readonly StepSample[], timeZone: string): Map<string, DayCount> {
-  const tz = safeTimeZone(timeZone);
-  const book = new DayBook(tz);
+function walkSamples(samples: readonly StepSample[], tz: string, visit: DeltaVisitor) {
   let base: StepSample | null = null;
   /** The last reading rejected as a glitch — kept in case the counter really jumped and carries on from there. */
   let rejected: StepSample | null = null;
@@ -291,14 +344,13 @@ export function dailyStepCounts(samples: readonly StepSample[], timeZone: string
     if (!base) {
       const boot = bootInstant(cur);
       const first: Delta | null = boot != null && boot <= cur.ts && localDay(boot, tz) === localDay(cur.ts, tz) ? { steps: cur.counter, start: boot, end: cur.ts } : null;
-      if (first && plausible(first)) book.spread(first.steps, first.start, first.end);
-      else book.mark(cur.ts);
+      visit.first(first && plausible(first) ? first : null, cur.ts);
       base = cur;
       continue;
     }
     const d = deltaBetween(base, cur);
     if (plausible(d)) {
-      book.add(d);
+      visit.delta(d, base);
       base = cur;
       rejected = null;
       continue;
@@ -306,7 +358,7 @@ export function dailyStepCounts(samples: readonly StepSample[], timeZone: string
     if (rejected) {
       const r = deltaBetween(rejected, cur);
       if (plausible(r)) {
-        book.add(r);
+        visit.delta(r, rejected);
         base = cur;
         rejected = null;
         continue;
@@ -314,7 +366,53 @@ export function dailyStepCounts(samples: readonly StepSample[], timeZone: string
     }
     rejected = cur;
   }
+}
+
+/* ───────────────────────────── Public ───────────────────────────── */
+
+/**
+ * Steps per local day (member's time zone `timeZone`) from raw samples in any order. Days with coverage but no steps
+ * are included with 0; days the samples don't reach are absent. A day whose first reading isn't preceded by a boot
+ * that same day is partial (`coveredFrom` after its start).
+ */
+export function dailyStepCounts(samples: readonly StepSample[], timeZone: string): Map<string, DayCount> {
+  const tz = safeTimeZone(timeZone);
+  const book = new DayBook(tz);
+  walkSamples(samples, tz, {
+    first: (d, at) => (d ? book.spread(d.steps, d.start, d.end) : book.mark(at)),
+    delta: (d, prev) => book.add(d, prev),
+  });
   return book.days;
+}
+
+/**
+ * Steps counted during the instant range [from, to): the same deltas and day splits as `dailyStepCounts`, so a whole
+ * local day's range gives exactly that day's count. A delta partly in the range is prorated by time (whole steps).
+ * Time the samples don't cover counts 0: the caller starts `from` no earlier than the source's coverage.
+ */
+export function stepsInRange(samples: readonly StepSample[], timeZone: string, from: number, to: number): number {
+  if (!(to > from)) return 0;
+  const tz = safeTimeZone(timeZone);
+  let total = 0;
+  const add = (d: Delta) => {
+    for (const p of splitAcrossDays(d.steps, d.start, d.end, tz)) {
+      if (p.steps <= 0) continue;
+      if (!(p.to > p.from)) {
+        if (p.to >= from && p.to < to) total += p.steps;
+        continue;
+      }
+      const overlap = Math.min(p.to, to) - Math.max(p.from, from);
+      if (overlap <= 0) continue;
+      total += overlap >= p.to - p.from ? p.steps : Math.round((p.steps * overlap) / (p.to - p.from));
+    }
+  };
+  walkSamples(samples, tz, {
+    first: (d) => {
+      if (d) add(d);
+    },
+    delta: (d) => add(d),
+  });
+  return total;
 }
 
 /** True when `day`'s coverage starts at (or within a minute of) its local midnight. */
@@ -322,8 +420,13 @@ export function coversWholeDay(day: DayCount, timeZone: string): boolean {
   return day.coveredFrom <= dayStartMs(day.date, safeTimeZone(timeZone)) + COVER_SLACK_MS;
 }
 
-/** True when `day`'s coverage reaches (within a minute of) the next local midnight — a past day's count is final. */
+/** True when `day`'s coverage reaches (within a minute of) the next local midnight. */
 export function coversDayEnd(day: DayCount, timeZone: string): boolean {
   const tz = safeTimeZone(timeZone);
   return day.coveredTo >= dayStartMs(addDays(day.date, 1), tz) - COVER_SLACK_MS;
+}
+
+/** A past day's sampler count is final (`complete`): read up to its end, with no reboot gap that may have lost steps. */
+export function dayComplete(day: DayCount, timeZone: string): boolean {
+  return coversDayEnd(day, timeZone) && !day.uncertainGap;
 }
