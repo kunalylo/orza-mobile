@@ -173,7 +173,7 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
    checks first; this protects against other clients and races).
 
 ## Phase D — Test & fix (Android emulator "Medium_Phone" + EAS dev build; iOS via TestFlight)
-- [ ] D1 EAS development build (Android) → install on emulator → E2E every flow → fix → repeat
+- [x] D1 Android dev build (local Gradle, JDK 17) → emulator → E2E every flow against the LOCAL server → fix → retest (2026-10-27, 250 cases)
 - [ ] D2 iOS build via EAS → TestFlight (needs the user's Apple Developer login) → user tests on iPhone
 - [ ] D3 Release builds (AAB + IPA), store listing assets, privacy (iOS PrivacyInfo, Health usage strings, Play Data safety, exact-alarm / full-screen-intent declarations)
 
@@ -467,3 +467,32 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   / Settings / More / Snap / Meals text no longer cut (button pairs: equal halves while the labels fit, stacked otherwise — normal layout
   unchanged); alarm says "ÖRZA is taking a while to answer" (not "No connection") when it falls back to the phone's copy because the
   server is slow. Emulator restored: size/density/font reset, animation scales 1.
+- 2026-10-27: **D1 DONE** (wrap-up `6cc6a25`, notes `docs/notes/D1-wrap-up.md`). Results per area (final run of each area):
+
+  | Area | Cases | Pass | Fixed | Still open |
+  |---|---|---|---|---|
+  | auth-onboarding | 21 | 14 | 7 | — |
+  | today-meals | 17 | 11 | 5 | live step counting needs a real phone (AVD has no step sensor) |
+  | snap | 24 | 15 | 8 | photo lost on process kill → FIXED in wrap-up (W14/W15, release build) |
+  | meds-rx | 17 | 7 | 10 | — |
+  | alarms | 24 | 16 | 7 | first-run permission sheet → PASS in wrap-up (W7) |
+  | coach | 31 | 21 | 10 | — |
+  | progress-account | 36 | 21 | 15 | — |
+  | care | 38 | 25 | 13 | — |
+  | layout-a11y | 27 | 14 | 13 | — |
+  | wrap-up | 15 | 11 | 4 | — |
+  | **Total** | **250** | **155** | **92** | 1 (needs a real phone) |
+
+  Native wrap-up: Health Connect "Manage access" opens HC home on Android 14+ (per-app page is system-only); alarm cold start measured
+  (release 1.8 s, debug 3.8 s; ÖRZA's own work ~0.2–0.3 s; `adb logcat -s OrzaAlarms` shows it per alarm); Snap camera photo recovered
+  after Android kills the app (from expo-image-picker's temp file); charts draw plain SVG after their entrance (Reanimated settled-value
+  bug); single-line placeholders; Reduce-Motion-safe layout transitions; Snap halo no longer animates forever. Release-type build
+  (local only, debug-signed, prod unreachable by a wrong pin) RSS 302–325 MB vs debug 471 MB + swap.
+  Checks at `6cc6a25`: typecheck ✓, lint ✓, test:alarms 34/34, test:steps 66/66. expo-doctor: 6 Expo patch updates available
+  (expo 57.0.31, expo-router 57.0.29, expo-notifications 57.0.24, expo-calendar 57.0.6, expo-sharing 57.0.24, @expo/ui 57.0.26) —
+  apply with the next native rebuild (steps v2) via `npx expo install --check`.
+  Still open (not wrap-up fixes): N4 direct-boot (LOCKED_BOOT_COMPLETED) needs device-protected storage design + real phone; N10 rare
+  native crash right after a dev-client JS reload (RN 0.86 Fabric / Reanimated layout-animation proxy, no ÖRZA code) — watch on release.
+  Backend findings → web batch 1 (`E:\aylo\orza-backend`, not pushed). Web-only notes (not changed): MealComposer "1 credit · 0 left"
+  hint at 0 credits although the text parser logs for free; macro bar colours differ between Today and Meals (web too); slow first
+  /api/meds/doses on the local dev server (8.5 s) — check production cold starts.
