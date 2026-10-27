@@ -21,3 +21,4 @@ export { TextField, type TextFieldProps } from './TextField';
 export { ToastHost, toast, type ToastKind } from './Toast';
 export { useKeyboardHeight } from './useKeyboardHeight';
 export { useLayoutTransition } from './useLayoutTransition';
+export { useReveal, type RevealOptions } from './useReveal';

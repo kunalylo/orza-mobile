@@ -4,21 +4,22 @@
  * The line draws itself in and the wash fades up on mount (skipped with Reduce Motion). Screen readers get a summary and can
  * swipe up / down to step through weigh-ins (adjustable role).
  */
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { StyleSheet, View, type AccessibilityActionEvent, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { Easing, useAnimatedProps, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedProps } from 'react-native-reanimated';
 import Svg, { Circle, Defs, G, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
 
 import { haptics } from '@/lib/haptics';
 import { colors, fonts } from '@/theme';
-import { Text } from '@/ui';
+import { Text, useReveal } from '@/ui';
 
 import { KG_PER_LB, daysBetween, formatDayDate, formatDecimal, formatShortDate, kgToUnit, weightUnit } from './math';
 import type { WeightPoint } from './types';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 const AnimatedG = Animated.createAnimatedComponent(G);
+const REVEAL = { duration: 900 };
 
 const M = { top: 16, right: 14, bottom: 26, left: 40 };
 const AXIS = colors.subtle;
@@ -81,7 +82,6 @@ const signed = (d: number) => (d === 0 ? '±0' : `${d > 0 ? '+' : '−'}${format
 
 export function WeightChart({ points: kgPoints, target: targetKg, imperial = false, height = 220 }: { points: WeightPoint[]; target?: number | null; imperial?: boolean; height?: number }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
-  const reduce = useReducedMotion();
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<number | null>(null);
   const unit = weightUnit(imperial);
@@ -110,22 +110,15 @@ export function WeightChart({ points: kgPoints, target: targetKg, imperial = fal
   const area = n > 1 ? `${line}L${coords[n - 1].x.toFixed(1)},${baseY}L${coords[0].x.toFixed(1)},${baseY}Z` : '';
   const xTicks = n > 1 ? [...new Set(innerW > 300 ? [0, Math.floor((n - 1) / 2), n - 1] : [0, n - 1])] : n ? [0] : [];
 
-  // Draw the curve in whenever the data set changes size (first paint, new weigh-in).
-  const reveal = useSharedValue(reduce ? 1 : 0);
-  useEffect(() => {
-    if (!width) return;
-    if (reduce) {
-      reveal.set(1);
-      return;
-    }
-    reveal.set(0);
-    reveal.set(withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) }));
-  }, [width, n, reduce, reveal]);
+  // Draw the curve in whenever the data set changes size (first paint, new weigh-in); afterwards it is plain SVG
+  // React owns (see useReveal).
+  const { progress: reveal, done: drawn } = useReveal(width > 0, String(n), REVEAL);
   // Polyline length (+ slack) ≥ the curve's length, so the dash fully hides the line at the start.
   const lineLen = coords.reduce((sum, c, i) => (i ? sum + Math.hypot(c.x - coords[i - 1].x, c.y - coords[i - 1].y) : 0), 0) * 1.2 + 12;
   const lineProps = useAnimatedProps(() => ({ strokeDashoffset: lineLen * (1 - reveal.get()) }));
   const washProps = useAnimatedProps(() => ({ opacity: reveal.get() }));
   const dotsProps = useAnimatedProps(() => ({ opacity: Math.max(0, reveal.get() * 2 - 1) }));
+  const dots = coords.map((c, i) => <Circle key={points[i].date} cx={c.x} cy={c.y} r={2.4} fill={colors.white} stroke={colors.coral} strokeWidth={1.4} />);
 
   const shown = active != null && active < n ? active : n - 1;
   const select = (x: number) => {
@@ -253,8 +246,10 @@ export function WeightChart({ points: kgPoints, target: targetKg, imperial = fal
               ) : null}
 
               {/* curve */}
-              {area ? <AnimatedPath d={area} fill={`url(#area${id})`} animatedProps={washProps} /> : null}
-              {n > 1 ? (
+              {area ? drawn ? <Path d={area} fill={`url(#area${id})`} /> : <AnimatedPath d={area} fill={`url(#area${id})`} animatedProps={washProps} /> : null}
+              {n > 1 && drawn ? (
+                <Path d={line} stroke={`url(#stroke${id})`} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              ) : n > 1 ? (
                 <AnimatedPath
                   d={line}
                   stroke={`url(#stroke${id})`}
@@ -267,11 +262,11 @@ export function WeightChart({ points: kgPoints, target: targetKg, imperial = fal
                 />
               ) : null}
               {n <= 24 ? (
-                <AnimatedG animatedProps={dotsProps}>
-                  {coords.map((c, i) => (
-                    <Circle key={points[i].date} cx={c.x} cy={c.y} r={2.4} fill={colors.white} stroke={colors.coral} strokeWidth={1.4} />
-                  ))}
-                </AnimatedG>
+                drawn ? (
+                  <G>{dots}</G>
+                ) : (
+                  <AnimatedG animatedProps={dotsProps}>{dots}</AnimatedG>
+                )
               ) : null}
 
               {/* selection */}

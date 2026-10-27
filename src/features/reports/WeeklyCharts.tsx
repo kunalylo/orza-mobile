@@ -3,15 +3,15 @@
  * small protein / water / steps charts. Bars grow up from the baseline (skipped with Reduce Motion); tap a day
  * to read it. Each day column is an accessible element with the same data.
  */
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import Animated, { Easing, useAnimatedProps, useReducedMotion, useSharedValue, withDelay, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedProps, type SharedValue } from 'react-native-reanimated';
 import Svg, { Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
 
 import { formatNumber } from '@/features/goals/math';
 import { haptics } from '@/lib/haptics';
 import { colors, fonts, radii, spacing } from '@/theme';
-import { GlassCard, Icon, Text, type IconName } from '@/ui';
+import { GlassCard, Icon, Text, useReveal, type IconName } from '@/ui';
 
 import { dayMonth, weekdayLong, weekdayShort } from './format';
 import type { WeeklyDay } from './types';
@@ -38,28 +38,28 @@ function useWidth(): [number, (e: LayoutChangeEvent) => void] {
   ];
 }
 
-/** 0 → 1 once the chart has a width (and again when `key` changes). */
-function useGrow(ready: boolean, key: string) {
-  const reduce = useReducedMotion();
-  const grow = useSharedValue(reduce ? 1 : 0);
-  useEffect(() => {
-    if (!ready) return;
-    if (reduce) {
-      grow.set(1);
-      return;
-    }
-    grow.set(0);
-    grow.set(withDelay(60, withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) })));
-  }, [ready, key, reduce, grow]);
-  return grow;
+/** 0 → 1 once the chart has a width (and again when `key` changes); `grown` once it finished — see useReveal. */
+function useGrow(ready: boolean, key: string): Grow {
+  const { progress, done } = useReveal(ready, key, GROW);
+  return { progress, grown: done };
 }
 
-function Bar({ grow, i, x, base, w, h, r, fill, opacity = 1 }: { grow: SharedValue<number>; i: number; x: number; base: number; w: number; h: number; r: number; fill: string; opacity?: number }) {
+const GROW = { delay: 60, duration: 900 };
+
+interface Grow {
+  progress: SharedValue<number>;
+  /** The entrance finished: bars are plain paths React owns. */
+  grown: boolean;
+}
+
+function Bar({ grow, i, x, base, w, h, r, fill, opacity = 1 }: { grow: Grow; i: number; x: number; base: number; w: number; h: number; r: number; fill: string; opacity?: number }) {
+  const progress = grow.progress;
   const props = useAnimatedProps(() => {
     // Stagger: each bar starts a little after the previous one.
-    const t = Math.min(1, Math.max(0, grow.get() * 1.36 - i * 0.06));
+    const t = Math.min(1, Math.max(0, progress.get() * 1.36 - i * 0.06));
     return { d: barPath(x, base, w, h * t, r) };
   });
+  if (grow.grown) return <Path d={barPath(x, base, w, h, r)} fill={fill} opacity={opacity} />;
   return <AnimatedPath animatedProps={props} fill={fill} opacity={opacity} />;
 }
 

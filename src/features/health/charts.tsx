@@ -6,25 +6,20 @@
  *   selected — or latest — day, so nothing hides under a finger.
  * - Screen readers get a summary label and can swipe up / down to step through days (adjustable role).
  */
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type AccessibilityActionEvent, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  Easing,
   FadeInDown,
   useAnimatedProps,
   useAnimatedStyle,
   useReducedMotion,
-  useSharedValue,
-  withDelay,
-  withSpring,
-  withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle, Defs, G, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
 
 import { haptics } from '@/lib/haptics';
 import { colors, fonts, radii, spacing } from '@/theme';
-import { GlassCard, Text } from '@/ui';
+import { GlassCard, Text, useReveal } from '@/ui';
 
 import { compact, formatDay, niceTicks } from './format';
 import type { ChartPoint } from './types';
@@ -34,6 +29,8 @@ const AnimatedPath = Animated.createAnimatedComponent(Path);
 const M = { top: 12, right: 8, bottom: 24, left: 36 };
 const PLOT_H = 148;
 const HEIGHT = M.top + PLOT_H + M.bottom;
+const BAR_REVEAL = { delay: 120, spring: { damping: 18, stiffness: 120, mass: 0.9 } };
+const LINE_REVEAL = { delay: 140, duration: 900 };
 
 export type ChartTone = 'energy' | 'violet' | 'coral' | 'cyan';
 
@@ -195,7 +192,6 @@ export interface BarChartProps {
 
 export function BarChart({ points, tone = 'energy', format, label, reference, unitNote, yFormat }: BarChartProps) {
   const [width, onLayout] = useWidth();
-  const reduce = useReducedMotion();
   const gid = `bar${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const t = TONE[tone];
   const n = points.length;
@@ -210,16 +206,41 @@ export function BarChart({ points, tone = 'energy', format, label, reference, un
 
   const { active, shown, gesture, onAccessibilityAction } = useSelection(points, band);
 
-  // Grow from the baseline.
-  const grow = useSharedValue(reduce ? 1 : 0);
-  useEffect(() => {
-    if (reduce) grow.set(1);
-    else grow.set(withDelay(120, withSpring(1, { damping: 18, stiffness: 120, mass: 0.9 })));
-  }, [reduce, grow]);
+  // Grow from the baseline (then the bars are plain views — see useReveal).
+  const { progress: grow, done: grown } = useReveal(width > 0, '', BAR_REVEAL);
   const growStyle = useAnimatedStyle(() => ({ transform: [{ scaleY: grow.get() }] }));
 
   const sel = shown !== null ? points[shown] : null;
   const note = sel && sel.value !== undefined && unitNote ? unitNote(sel.value) : undefined;
+
+  const bars = (
+    <Svg width={plotW} height={PLOT_H}>
+      <Defs>
+        <LinearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <Stop offset={0} stopColor={t.top} />
+          <Stop offset={1} stopColor={t.bottom} />
+        </LinearGradient>
+      </Defs>
+      {points.map((p, i) => {
+        if (p.value === undefined || p.value <= 0) return null;
+        const h = Math.max(2, (p.value / top) * PLOT_H);
+        const reached = !reference || p.value >= reference.value;
+        const dim = shown !== null && active !== null && i !== shown;
+        return (
+          <Rect
+            key={p.date}
+            x={band * i + (band - barW) / 2}
+            y={PLOT_H - h}
+            width={barW}
+            height={h}
+            rx={Math.min(barW / 2, 5)}
+            fill={`url(#${gid})`}
+            opacity={dim ? 0.3 : reached ? 1 : 0.55}
+          />
+        );
+      })}
+    </Svg>
+  );
 
   return (
     <View>
@@ -243,34 +264,15 @@ export function BarChart({ points, tone = 'energy', format, label, reference, un
                 <XLabels points={points} width={width} band={band} />
               </Svg>
 
-              <Animated.View pointerEvents="none" style={[styles.layer, { left: M.left, top: M.top, width: plotW, height: PLOT_H }, growStyle]}>
-                <Svg width={plotW} height={PLOT_H}>
-                  <Defs>
-                    <LinearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-                      <Stop offset={0} stopColor={t.top} />
-                      <Stop offset={1} stopColor={t.bottom} />
-                    </LinearGradient>
-                  </Defs>
-                  {points.map((p, i) => {
-                    if (p.value === undefined || p.value <= 0) return null;
-                    const h = Math.max(2, (p.value / top) * PLOT_H);
-                    const reached = !reference || p.value >= reference.value;
-                    const dim = shown !== null && active !== null && i !== shown;
-                    return (
-                      <Rect
-                        key={p.date}
-                        x={band * i + (band - barW) / 2}
-                        y={PLOT_H - h}
-                        width={barW}
-                        height={h}
-                        rx={Math.min(barW / 2, 5)}
-                        fill={`url(#${gid})`}
-                        opacity={dim ? 0.3 : reached ? 1 : 0.55}
-                      />
-                    );
-                  })}
-                </Svg>
-              </Animated.View>
+              {grown ? (
+                <View pointerEvents="none" style={[styles.layer, { left: M.left, top: M.top, width: plotW, height: PLOT_H }]}>
+                  {bars}
+                </View>
+              ) : (
+                <Animated.View pointerEvents="none" style={[styles.layer, { left: M.left, top: M.top, width: plotW, height: PLOT_H }, growStyle]}>
+                  {bars}
+                </Animated.View>
+              )}
 
               <Svg width={width} height={HEIGHT} style={StyleSheet.absoluteFill} pointerEvents="none">
                 {reference ? (
@@ -350,7 +352,6 @@ export interface LineChartProps {
 
 export function LineChart({ points, tone = 'coral', format, label, minSpan = 4, yFormat }: LineChartProps) {
   const [width, onLayout] = useWidth();
-  const reduce = useReducedMotion();
   const gid = `line${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const t = TONE[tone];
   const n = points.length;
@@ -378,13 +379,8 @@ export function LineChart({ points, tone = 'coral', format, label, minSpan = 4, 
 
   const { active, shown, gesture, onAccessibilityAction } = useSelection(points, band);
 
-  // Draw the line in.
-  const draw = useSharedValue(reduce ? 1 : 0);
-  useEffect(() => {
-    if (!width) return;
-    if (reduce) draw.set(1);
-    else draw.set(withDelay(140, withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) })));
-  }, [reduce, draw, width]);
+  // Draw the line in (then it is a plain path — see useReveal).
+  const { progress: draw, done: drawn } = useReveal(width > 0, '', LINE_REVEAL);
   const lineProps = useAnimatedProps(() => ({ strokeDashoffset: total * (1 - draw.get()) }));
   const fadeProps = useAnimatedProps(() => ({ opacity: draw.get() }));
 
@@ -416,8 +412,10 @@ export function LineChart({ points, tone = 'coral', format, label, minSpan = 4, 
               </Defs>
               <YGrid ticks={ticks} y={y} width={width} format={yFormat} />
               <XLabels points={points} width={width} band={band} />
-              {area ? <AnimatedPath d={area} fill={`url(#${gid})`} animatedProps={fadeProps} /> : null}
-              {defined.length > 1 ? (
+              {area ? drawn ? <Path d={area} fill={`url(#${gid})`} /> : <AnimatedPath d={area} fill={`url(#${gid})`} animatedProps={fadeProps} /> : null}
+              {defined.length > 1 && drawn ? (
+                <Path d={d} fill="none" stroke={t.solid} strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" />
+              ) : defined.length > 1 ? (
                 <AnimatedPath
                   d={d}
                   fill="none"

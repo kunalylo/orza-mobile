@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Ref } from 'react';
-import { Pressable, StyleSheet, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
+import { Platform, Pressable, Text as RNText, StyleSheet, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 
 import { haptics } from '@/lib/haptics';
 import { colors, fonts, radii } from '@/theme';
@@ -7,6 +7,8 @@ import { colors, fonts, radii } from '@/theme';
 import { Icon, type IconName } from './Icon';
 import { useScrollReveal } from './scrollReveal';
 import { Text } from './Text';
+
+const PLACEHOLDER = 'rgba(20,20,20,0.38)';
 
 export interface TextFieldProps extends Omit<TextInputProps, 'style'> {
   label?: string;
@@ -24,8 +26,13 @@ export interface TextFieldProps extends Omit<TextInputProps, 'style'> {
 }
 
 /** Labelled glass input with cyan focus ring, inline error, optional icon / suffix / password toggle. */
-export function TextField({ label, error, hint, icon, secure, suffix, containerStyle, inputStyle, onFocus, onBlur, editable = true, ref, ...rest }: TextFieldProps) {
+export function TextField({ label, error, hint, icon, secure, suffix, containerStyle, inputStyle, onFocus, onBlur, editable = true, placeholder, ref, ...rest }: TextFieldProps) {
   const [focused, setFocused] = useState(false);
+  // Android draws a single-line field's placeholder (the EditText hint) with line wrapping: one longer than the field
+  // wraps onto a second line that the one-line field cuts in half ("Add another, e.g. mush…" with the rest sliced off),
+  // on narrow phones and at large font sizes. Single-line controlled fields draw their own one-line placeholder that
+  // ends in "…" instead (multiline fields and custom input styles keep the native one).
+  const ownPlaceholder = Platform.OS === 'android' && !!placeholder && !rest.multiline && !inputStyle && rest.value !== undefined;
   const [hidden, setHidden] = useState(true);
   const invalid = !!error;
   const wrap = useRef<View>(null);
@@ -38,6 +45,32 @@ export function TextField({ label, error, hint, icon, secure, suffix, containerS
     if (focused) reveal.focus(wrap.current);
     else reveal.blur(wrap.current);
   }, [reveal, focused, error, hint]);
+
+  const input = (
+    <TextInput
+      ref={ref}
+      accessibilityLabel={rest.accessibilityLabel ?? label}
+      accessibilityHint={error ?? hint ?? (ownPlaceholder && !rest.value ? placeholder : undefined)}
+      placeholder={ownPlaceholder ? undefined : placeholder}
+      accessibilityState={{ disabled: !editable }}
+      placeholderTextColor={PLACEHOLDER}
+      selectionColor={colors.cyan600}
+      cursorColor={colors.cyan600}
+      editable={editable}
+      secureTextEntry={secure ? hidden : rest.secureTextEntry}
+      maxFontSizeMultiplier={1.4}
+      onFocus={(e) => {
+        setFocused(true);
+        onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setFocused(false);
+        onBlur?.(e);
+      }}
+      style={[styles.input, icon ? styles.withIcon : null, inputStyle]}
+      {...rest}
+    />
+  );
 
   return (
     <View ref={wrap} collapsable={false} style={containerStyle}>
@@ -52,28 +85,20 @@ export function TextField({ label, error, hint, icon, secure, suffix, containerS
             <Icon name={icon} size={18} color={focused ? colors.cyan700 : colors.subtle} />
           </View>
         ) : null}
-        <TextInput
-          ref={ref}
-          accessibilityLabel={rest.accessibilityLabel ?? label}
-          accessibilityHint={error ?? hint}
-          accessibilityState={{ disabled: !editable }}
-          placeholderTextColor="rgba(20,20,20,0.38)"
-          selectionColor={colors.cyan600}
-          cursorColor={colors.cyan600}
-          editable={editable}
-          secureTextEntry={secure ? hidden : rest.secureTextEntry}
-          maxFontSizeMultiplier={1.4}
-          onFocus={(e) => {
-            setFocused(true);
-            onFocus?.(e);
-          }}
-          onBlur={(e) => {
-            setFocused(false);
-            onBlur?.(e);
-          }}
-          style={[styles.input, icon ? styles.withIcon : null, inputStyle]}
-          {...rest}
-        />
+        {ownPlaceholder ? (
+          <View style={styles.inputBox}>
+            {input}
+            {rest.value ? null : (
+              <View pointerEvents="none" importantForAccessibility="no-hide-descendants" style={[styles.placeholderWrap, icon ? styles.placeholderWithIcon : null]}>
+                <RNText numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={1.4} style={styles.placeholder}>
+                  {placeholder}
+                </RNText>
+              </View>
+            )}
+          </View>
+        ) : (
+          input
+        )}
         {suffix ? (
           <Text variant="mono" tone="subtle" style={styles.suffix}>
             {suffix}
@@ -135,6 +160,11 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   withIcon: { paddingLeft: 10 },
+  /** Single-line field with its own placeholder: the input + the placeholder drawn over it, where its text starts. */
+  inputBox: { flex: 1, alignSelf: 'stretch', justifyContent: 'center' },
+  placeholderWrap: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, justifyContent: 'center', paddingHorizontal: 16 },
+  placeholderWithIcon: { paddingLeft: 10 },
+  placeholder: { fontFamily: fonts.body, fontSize: 16, color: PLACEHOLDER },
   suffix: { paddingRight: 16, textTransform: 'uppercase' },
   toggle: { paddingHorizontal: 16, height: 52, justifyContent: 'center' },
   message: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 7, marginLeft: 4 },
