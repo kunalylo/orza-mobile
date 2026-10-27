@@ -6,14 +6,14 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Animated, { FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
 
 import { dateIn, formatDateShort, medicineTitle } from '@/features/meds/shared';
 import { ErrorPanel } from '@/features/meds/StatusViews';
 import { errorMessage, mediaSource } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
 import { colors, fonts, radii, spacing } from '@/theme';
-import { Button, EmptyState, GlassCard, Icon, Sheet, Skeleton, Tag, Text, toast } from '@/ui';
+import { Button, EmptyState, GlassCard, Icon, Sheet, Skeleton, Tag, Text, toast, useLayoutTransition } from '@/ui';
 
 import { useDeletePrescription } from './api';
 import { rowSummary, timesText, toRows } from './rows';
@@ -67,12 +67,13 @@ export function HistorySkeleton() {
 }
 
 function HistoryRow({ p, index, year, tz, onPress }: { p: PrescriptionClient; index: number; year: number; tz: string; onPress: () => void }) {
+  const layoutTransition = useLayoutTransition();
   const applied = p.status === 'applied';
   const count = medicineCount(p);
   const title = rxTitle(p);
   const date = formatDateShort(rxDate(p, tz), year);
   return (
-    <Animated.View entering={FadeInDown.delay(Math.min(index, 6) * 45).springify().damping(18).stiffness(100).mass(1)} exiting={FadeOut.duration(180)} layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}>
+    <Animated.View entering={FadeInDown.delay(Math.min(index, 6) * 45).springify().damping(18).stiffness(100).mass(1)} exiting={FadeOut.duration(180)} layout={layoutTransition}>
       <GlassCard
         padding={spacing.md}
         onPress={onPress}

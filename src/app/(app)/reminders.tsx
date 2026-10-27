@@ -215,7 +215,7 @@ export default function Reminders() {
           <Text variant="eyebrow" tone="subtle" style={styles.presetLabel}>
             One-tap presets
           </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presets} style={styles.presetScroll}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presets} style={styles.presetScroll} keyboardShouldPersistTaps="handled">
             {REMINDER_PRESETS.map((p) => {
               const added = list.isSuccess && presetAdded(p, reminders);
               const pending = pendingPreset === p.key;

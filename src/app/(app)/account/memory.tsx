@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 
 import { useAccountSync, useSaveMemory } from '@/features/settings/api';
 import { MEMORY_MAX_ITEMS, MEMORY_MAX_LENGTH } from '@/features/settings/options';
@@ -13,7 +13,7 @@ import { Note, TINTS } from '@/features/settings/parts';
 import { useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
 import { colors, radii, spacing } from '@/theme';
-import { Button, EmptyState, GlassCard, Icon, IconButton, ProgressBar, Screen, ScreenHeader, Skeleton, Text, TextField, toast } from '@/ui';
+import { Button, EmptyState, GlassCard, Icon, IconButton, ProgressBar, Screen, ScreenHeader, Skeleton, Text, TextField, toast, useLayoutTransition } from '@/ui';
 
 interface UndoState {
   message: string;
@@ -34,6 +34,7 @@ function LoadingList() {
 }
 
 export default function MemorySettings() {
+  const layoutTransition = useLayoutTransition();
   const user = useSignedInUser();
   const sync = useAccountSync();
   const saveMemory = useSaveMemory();
@@ -197,7 +198,7 @@ export default function MemorySettings() {
                   key={`${fact}-${i}`}
                   entering={FadeInDown.delay(Math.min(i, 8) * 30).springify().damping(18).stiffness(100).mass(1)}
                   exiting={FadeOut.duration(160)}
-                  layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
+                  layout={layoutTransition}
                   style={[styles.fact, i < memory.length - 1 && styles.divider]}
                 >
                   <View style={styles.bullet} />

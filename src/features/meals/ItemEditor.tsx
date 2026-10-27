@@ -3,11 +3,11 @@
  * per-unit values so changing the quantity rescales nutrition without rounding drift (same model as the web).
  */
 import { StyleSheet, TextInput, View } from 'react-native';
-import Animated, { FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
 
 import { haptics } from '@/lib/haptics';
 import { colors, fonts, radii, spacing } from '@/theme';
-import { Button, IconButton, Tag, Text } from '@/ui';
+import { Button, IconButton, Tag, Text, useLayoutTransition } from '@/ui';
 
 import { Stepper } from './Stepper';
 import type { MealItem, MealItemInput, Nutrients } from './types';
@@ -215,6 +215,7 @@ export function ItemEditor({
   showErrors?: boolean;
   addLabel?: string;
 }) {
+  const layoutTransition = useLayoutTransition();
   const update = (id: string, field: Field, value: string) => onChange(rows.map((r) => (r.uid === id ? applyEdit(r, field, value) : r)));
   const remove = (id: string) => {
     haptics.soft();
@@ -239,7 +240,7 @@ export function ItemEditor({
               key={r.uid}
               entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}
               exiting={FadeOut.duration(150)}
-              layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
+              layout={layoutTransition}
               style={styles.row}
             >
               <View style={styles.nameRow}>

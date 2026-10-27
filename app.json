@@ -136,7 +136,6 @@
         }
       ],
       "react-native-health-connect",
-      "./plugins/withHealthConnectQueries",
       [
         "@kingstinct/react-native-healthkit",
         {

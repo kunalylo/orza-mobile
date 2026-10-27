@@ -3,11 +3,11 @@
  * The first photo is the one alarms and notifications show.
  */
 import { ActivityIndicator, Alert, Linking, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, LinearTransition, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 
 import { pickPhotos, PhotoError, PhotoPermissionError, toUploadDataUrl, type PhotoSource } from '@/lib/image';
 import { colors, radii, spacing } from '@/theme';
-import { Button, IconButton, Text, toast } from '@/ui';
+import { Button, IconButton, Text, toast, useLayoutTransition } from '@/ui';
 
 import { MedPhoto } from './MedPhoto';
 
@@ -84,14 +84,15 @@ export function PhotoGrid({
   /** False for an SOS medicine: it never rings, so the first photo is just its main photo. */
   ringsOnAlarm?: boolean;
 }) {
+  const layoutTransition = useLayoutTransition();
   const full = items.length >= max;
 
   return (
     <View style={styles.wrap}>
       {items.length > 0 || busy ? (
-        <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.grid} accessibilityLabel={`${label} photos`}>
+        <Animated.View layout={layoutTransition} style={styles.grid} accessibilityLabel={`${label} photos`}>
           {items.map((p, i) => (
-            <Animated.View key={p.id} entering={ZoomIn.springify().damping(16).stiffness(100).mass(1)} exiting={FadeOut} layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.tile}>
+            <Animated.View key={p.id} entering={ZoomIn.springify().damping(16).stiffness(100).mass(1)} exiting={FadeOut} layout={layoutTransition} style={styles.tile}>
               <MedPhoto url={p.url} fill radius={radii.sm} accessibilityLabel={`${label} photo ${i + 1}${i === 0 ? (ringsOnAlarm ? ' (shown on alarms)' : ' (main photo)') : ''}`} />
               {i === 0 ? (
                 <View style={styles.badge}>

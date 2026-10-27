@@ -8,7 +8,7 @@ import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 import { useLocalToday, useMedications, useMedsTimezone } from '@/features/meds/api';
 import { DatePickerSheet } from '@/features/meds/PickerSheets';
@@ -24,7 +24,7 @@ import { ApiError, errorMessage, mediaSource, validationField } from '@/lib/api'
 import { haptics } from '@/lib/haptics';
 import { PhotoError, type PhotoSource } from '@/lib/image';
 import { colors, fonts, radii, shadows, spacing } from '@/theme';
-import { Button, Chip, EmptyState, GlassCard, Icon, PressableScale, Screen, ScreenHeader, Sheet, Skeleton, Text, TextField, goBackOrHome, toast } from '@/ui';
+import { Button, Chip, EmptyState, GlassCard, Icon, PressableScale, Screen, ScreenHeader, Sheet, Skeleton, Text, TextField, goBackOrHome, toast, useLayoutTransition } from '@/ui';
 
 type Editing = { row: ReviewRow; isNew: boolean };
 
@@ -62,6 +62,7 @@ function ReviewSkeleton() {
 }
 
 export default function PrescriptionReview() {
+  const layoutTransition = useLayoutTransition();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const tz = useMedsTimezone();
   const today = useLocalToday(tz);
@@ -414,7 +415,7 @@ export default function PrescriptionReview() {
             </Animated.View>
           ) : null}
 
-          <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.list}>
+          <Animated.View layout={layoutTransition} style={styles.list}>
             {list.map((r, i) => (
               <ReviewRowCard
                 key={r.key}

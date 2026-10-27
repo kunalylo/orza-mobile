@@ -6,14 +6,14 @@
  */
 import { useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, View, type TextInput } from 'react-native';
-import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { TimePickerSheet } from '@/features/meds/PickerSheets';
 import { activeQuickPattern, nextTime, QUICK_PATTERNS } from '@/features/meds/schedule';
 import { formatTime12, isHHMM, TIMING_OPTIONS } from '@/features/meds/shared';
 import { haptics } from '@/lib/haptics';
 import { colors, fonts, radii, spacing } from '@/theme';
-import { Button, Chip, Icon, PressableScale, Sheet, Text, TextField } from '@/ui';
+import { Button, Chip, Icon, PressableScale, Sheet, Text, TextField, useLayoutTransition } from '@/ui';
 
 import { MAX_ROW_TIMES, rowProblem } from './rows';
 import type { ReviewRow } from './types';
@@ -74,6 +74,7 @@ export function RowEditorSheet({
   onClose: () => void;
   onSave: (row: ReviewRow) => void;
 }) {
+  const layoutTransition = useLayoutTransition();
   const [draft, setDraft, opened] = useDraftOnOpen(visible, row);
   const nameRef = useRef<TextInput>(null);
   const [timeIndex, setTimeIndex] = useState<number | null>(null); // -1 = adding
@@ -236,9 +237,9 @@ export function RowEditorSheet({
           </Text>
         </Animated.View>
       ) : (
-        <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.timeRow} accessibilityLabel={`Alarm times for ${draft.name || 'this medicine'}`}>
+        <Animated.View layout={layoutTransition} style={styles.timeRow} accessibilityLabel={`Alarm times for ${draft.name || 'this medicine'}`}>
           {times.map((t, i) => (
-            <Animated.View key={t} entering={FadeIn.duration(180)} exiting={FadeOut.duration(140)} layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.timeChip}>
+            <Animated.View key={t} entering={FadeIn.duration(180)} exiting={FadeOut.duration(140)} layout={layoutTransition} style={styles.timeChip}>
               <PressableScale onPress={() => setTimeIndex(i)} haptic="tap" style={styles.timeMain} accessibilityRole="button" accessibilityLabel={`Alarm time ${formatTime12(t)}. Change`}>
                 <Icon name="bell" size={13} color={colors.energyInk} />
                 <Text variant="label">{formatTime12(t)}</Text>

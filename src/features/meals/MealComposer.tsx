@@ -325,7 +325,7 @@ export function MealComposer({
       <Text variant="label" tone="ink" style={styles.mealLabel} nativeID="composer-meal">
         Meal
       </Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} style={styles.bleed} accessibilityRole="radiogroup">
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} style={styles.bleed} accessibilityRole="radiogroup" keyboardShouldPersistTaps="handled">
         {(['auto', ...MEAL_TYPES] as ComposerMealType[]).map((t) => (
           <Chip
             key={t}

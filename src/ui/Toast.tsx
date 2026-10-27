@@ -10,7 +10,7 @@
  */
 import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, View } from 'react-native';
-import Animated, { FadeOutUp, LayoutAnimationConfig, LinearTransition, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeOutUp, LayoutAnimationConfig, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { haptics } from '@/lib/haptics';
@@ -18,6 +18,7 @@ import { colors, radii, shadows } from '@/theme';
 
 import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
+import { useLayoutTransition } from './useLayoutTransition';
 
 export type ToastKind = 'success' | 'error' | 'info';
 
@@ -94,6 +95,7 @@ const look: Record<ToastKind, { icon: IconName; color: string; bg: string }> = {
 };
 
 function ToastRow({ item }: { item: ToastItem }) {
+  const layoutTransition = useLayoutTransition();
   const [hold, setHold] = useState(false);
   // Read once per mount: a toast handed over from another host appears in place.
   const [springIn] = useState(() => !drawn.has(item.id));
@@ -115,7 +117,7 @@ function ToastRow({ item }: { item: ToastItem }) {
     <Animated.View
       entering={springIn ? ZoomIn.springify().damping(16).stiffness(220).mass(1) : undefined}
       exiting={FadeOutUp.duration(180)}
-      layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
+      layout={layoutTransition}
       style={styles.row}
     >
       <Pressable

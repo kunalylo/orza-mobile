@@ -8,7 +8,7 @@
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { RefreshControl, StyleSheet, View } from 'react-native';
-import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { useAccountSync, useSaveProfile, useSavePreference } from '@/features/settings/api';
 import { DEFAULT_PREFERENCES, TONE_COPY } from '@/features/settings/options';
@@ -20,14 +20,15 @@ import { deviceTimeZone } from '@/lib/device';
 import { haptics } from '@/lib/haptics';
 import type { Preferences } from '@/lib/types';
 import { colors, spacing } from '@/theme';
-import { Button, Icon, Screen, ScreenHeader, Segmented, Text, toast } from '@/ui';
+import { Button, Icon, Screen, ScreenHeader, Segmented, Text, toast, useLayoutTransition } from '@/ui';
 
 const DEFAULT_TZ = 'Asia/Kolkata';
 const tzLabel = (tz: string) => tz.replace(/_/g, ' ');
 
 function ChoiceRow({ title, description, children, last }: { title: string; description?: string; children: ReactNode; last?: boolean }) {
+  const layoutTransition = useLayoutTransition();
   return (
-    <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={[styles.choiceRow, !last && styles.divider]}>
+    <Animated.View layout={layoutTransition} style={[styles.choiceRow, !last && styles.divider]}>
       <Text variant="title">{title}</Text>
       {description ? (
         <Text variant="small" tone="muted" style={styles.desc}>

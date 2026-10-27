@@ -6,7 +6,7 @@ import { router, useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, RefreshControl, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 
 import { useAiStatus } from '@/features/meals/api';
 import { FALLBACK_COSTS, formatNumber } from '@/features/meals/utils';
@@ -23,7 +23,7 @@ import { useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
 import { PhotoError, type PhotoSource } from '@/lib/image';
 import { colors, radii, spacing } from '@/theme';
-import { Button, GlassCard, Icon, Screen, ScreenHeader, SectionHeader, Text, toast } from '@/ui';
+import { Button, GlassCard, Icon, Screen, ScreenHeader, SectionHeader, Text, toast, useLayoutTransition } from '@/ui';
 
 const TIPS = [
   'Lay the prescription flat in daylight; avoid shadows and glare.',
@@ -33,6 +33,7 @@ const TIPS = [
 ];
 
 export default function PrescriptionScan() {
+  const layoutTransition = useLayoutTransition();
   const user = useSignedInUser();
   const tz = useMedsTimezone();
   const today = useLocalToday(tz);
@@ -133,7 +134,7 @@ export default function PrescriptionScan() {
         <GlassCard tone="strong" padding={spacing.md} style={styles.card}>
           <Viewfinder uri={photo?.uri ?? null} scanning={scanning} />
 
-          <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.controls}>
+          <Animated.View layout={layoutTransition} style={styles.controls}>
             {problem ? <ProblemPanel problem={problem} onManual={typeInstead} onRetry={photo ? read : undefined} retrying={scanning} /> : null}
 
             {aiOff && !problem ? (

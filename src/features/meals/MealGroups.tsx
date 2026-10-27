@@ -1,11 +1,11 @@
 import { useRef } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
-import Animated, { FadeInDown, FadeOut, LinearTransition, interpolate, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOut, interpolate, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 
 import { haptics } from '@/lib/haptics';
 import { colors, radii, spacing } from '@/theme';
-import { Button, EmptyState, GlassCard, Icon, IconButton, Skeleton, Text } from '@/ui';
+import { Button, EmptyState, GlassCard, Icon, IconButton, Skeleton, Text, useLayoutTransition } from '@/ui';
 
 import { MealItemRow } from './MealItemRow';
 import type { Meal, MealType } from './types';
@@ -178,6 +178,7 @@ export function MealGroups({
   onDelete: (meal: Meal) => void;
   onSnap: () => void;
 }) {
+  const layoutTransition = useLayoutTransition();
   const total = sumNutrients(meals.map((m) => m.totals)).calories;
   const isToday = dayLabel === 'Today';
   const heading = isToday ? "Today's meals" : dayLabel === 'Yesterday' ? "Yesterday's meals" : `Meals · ${dayLabel}`;
@@ -219,7 +220,7 @@ export function MealGroups({
             const kcal = sumNutrients(list.map((m) => m.totals)).calories;
             const tone = MEAL_TONE[type];
             return (
-              <Animated.View key={type} layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}>
+              <Animated.View key={type} layout={layoutTransition}>
                 <View style={styles.groupHead}>
                   <View style={styles.groupTitle}>
                     <View style={[styles.groupIcon, { backgroundColor: tone.bg }]}>
@@ -252,7 +253,7 @@ export function MealGroups({
                     key={m.id}
                     entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}
                     exiting={FadeOut.duration(180)}
-                    layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
+                    layout={layoutTransition}
                     style={styles.cardWrap}
                   >
                     <MealCard meal={m} tz={tz} onEdit={onEdit} onDelete={onDelete} />

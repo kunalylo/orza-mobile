@@ -20,8 +20,7 @@ import { HealthNotAuthorizedError, type HealthBridge, type HealthMetric } from '
 const PROVIDER = 'com.google.android.apps.healthdata';
 const STORE_URL = `market://details?id=${PROVIDER}&url=healthconnect%3A%2F%2Fonboarding`;
 const STORE_WEB_URL = `https://play.google.com/store/apps/details?id=${PROVIDER}`;
-/** Opens one app's Health Connect permissions: the platform action (Android 14+) and the Health Connect app's (9–13). */
-const MANAGE_ACTION_PLATFORM = 'android.health.connect.action.MANAGE_HEALTH_PERMISSIONS';
+/** Opens one app's permissions in the Health Connect app (Android 9–13; its package is visible via the library's `<queries>`). */
 const MANAGE_ACTION_APK = 'androidx.health.ACTION_MANAGE_HEALTH_PERMISSIONS';
 const APP_PACKAGE = Constants.expoConfig?.android?.package ?? 'in.co.ylo.orza';
 
@@ -259,16 +258,18 @@ export const healthBridge: HealthBridge = {
   },
 
   async openManage() {
-    // ÖRZA's own page in Health Connect (the per-type read switches). After two "Don't allow"s Android stops showing
-    // the permission sheet, so this page is the only way back in — the Health Connect home would leave people to find
-    // App permissions › ÖRZA themselves.
-    try {
-      await Linking.sendIntent(Number(Platform.Version) >= 34 ? MANAGE_ACTION_PLATFORM : MANAGE_ACTION_APK, [
-        { key: 'android.intent.extra.PACKAGE_NAME', value: APP_PACKAGE },
-      ]);
-      return;
-    } catch {
-      // Older Health Connect without the per-app page — fall through to its home screen.
+    // Where people switch on what ÖRZA may read. After two "Don't allow"s Android stops showing the permission sheet,
+    // so Health Connect's settings are the only way back in (the hints say "› App permissions › ÖRZA").
+    // Android 14+: Health Connect's per-app page (MANAGE_HEALTH_PERMISSIONS + package) is a system-only entry point —
+    // starting it needs GRANT_RUNTIME_PERMISSIONS (it works from adb, never from an app: SecurityException, seen in
+    // D1), so go straight to the Health Connect home. Android 9–13 (the Health Connect app): try its per-app page first.
+    if (Number(Platform.Version) < 34) {
+      try {
+        await Linking.sendIntent(MANAGE_ACTION_APK, [{ key: 'android.intent.extra.PACKAGE_NAME', value: APP_PACKAGE }]);
+        return;
+      } catch {
+        // Not offered to apps by this Health Connect version — its home screen instead.
+      }
     }
     try {
       (await healthConnect()).openHealthConnectSettings();

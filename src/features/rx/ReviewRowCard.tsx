@@ -3,11 +3,11 @@
  * warning when it was hard to read or something blocks "Create alarms". Tap to edit in the sheet.
  */
 import { StyleSheet, View } from 'react-native';
-import Animated, { FadeInDown, FadeOut, LinearTransition, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOut, ZoomIn } from 'react-native-reanimated';
 
 import { formatTime12, isHHMM } from '@/features/meds/shared';
 import { colors, fonts, radii, spacing } from '@/theme';
-import { Icon, IconButton, PressableScale, Text } from '@/ui';
+import { Icon, IconButton, PressableScale, Text, useLayoutTransition } from '@/ui';
 
 import { isLowConfidence, rowProblem, rowSummary } from './rows';
 import type { ReviewRow } from './types';
@@ -47,6 +47,7 @@ export function ReviewRowCard({
   onEdit: () => void;
   onRemove: () => void;
 }) {
+  const layoutTransition = useLayoutTransition();
   const problem = showErrors ? rowProblem(row) : null;
   const low = isLowConfidence(row) && row.include;
   const name = row.name.trim() || `Medicine ${index + 1}`;
@@ -56,7 +57,7 @@ export function ReviewRowCard({
     <Animated.View
       entering={FadeInDown.delay(Math.min(index, 8) * 45).springify().damping(18).stiffness(100).mass(1)}
       exiting={FadeOut.duration(160)}
-      layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)}
+      layout={layoutTransition}
       style={[styles.card, problem ? styles.cardError : low ? styles.cardLow : null, !row.include && styles.cardOff]}
     >
       <View style={styles.top}>

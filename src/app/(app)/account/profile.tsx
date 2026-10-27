@@ -7,7 +7,7 @@ import { router, useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useRef, useState, type ReactNode } from 'react';
 import { Alert, Pressable, RefreshControl, StyleSheet, View, type TextInput } from 'react-native';
-import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 import { splitFieldError, useAccountSync, useSaveProfile } from '@/features/settings/api';
 import {
@@ -29,7 +29,7 @@ import { useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
 import type { Targets } from '@/lib/types';
 import { colors, radii, spacing } from '@/theme';
-import { Button, Chip, GlassCard, Icon, Screen, ScreenHeader, Text, TextField, toast } from '@/ui';
+import { Button, Chip, GlassCard, Icon, Screen, ScreenHeader, Text, TextField, toast, useLayoutTransition } from '@/ui';
 
 const digits = (s: string, max: number) => s.replace(/[^\d]/g, '').slice(0, max);
 const decimal = (s: string, max: number) => s.replace(',', '.').replace(/[^\d.]/g, '').slice(0, max);
@@ -48,6 +48,7 @@ function FormCard({ eyebrow, children, delay }: { eyebrow: string; children: Rea
 }
 
 export default function ProfileSettings() {
+  const layoutTransition = useLayoutTransition();
   const user = useSignedInUser();
   const navigation = useNavigation();
   const sync = useAccountSync();
@@ -373,7 +374,7 @@ export default function ProfileSettings() {
           error={errors.allergies}
           hint={draft.allergies.length ? null : 'No allergies saved — ÖRZA will suggest anything that fits your diet.'}
         >
-          <Animated.View layout={LinearTransition.springify().damping(20).stiffness(100).mass(1)} style={styles.chips}>
+          <Animated.View layout={layoutTransition} style={styles.chips}>
             {ALLERGY_SUGGESTIONS.map((o) => {
               const on = draft.allergies.includes(o.value);
               return <Chip key={o.value} label={o.label} role="checkbox" selected={on} icon={on ? 'check' : undefined} onPress={() => toggleAllergy(o.value)} />;
