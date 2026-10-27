@@ -10,6 +10,7 @@ import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { useEffect, useState } from 'react';
 import { Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
+  cancelAnimation,
   Easing,
   useAnimatedStyle,
   useReducedMotion,
@@ -73,14 +74,27 @@ function TabItem({ label, icon, focused, onPress, onLongPress, index, count }: {
   );
 }
 
+/**
+ * The Snap halo pulses a few times when the bar appears and whenever the member lands on another tab, then rests
+ * (hidden behind the button). An endless pulse kept the render thread busy on every tab screen (50–70 % CPU on an idle
+ * Android phone) and never let the screen settle.
+ */
+const HALO_PULSES = 3;
+
 function SnapButton({ focused, onPress, onLongPress }: { focused: boolean; onPress: () => void; onLongPress: () => void }) {
   const reduce = useReducedMotion();
   const halo = useSharedValue(0);
 
   useEffect(() => {
-    if (reduce) return;
-    halo.set(withRepeat(withSequence(withTiming(1, { duration: 1800, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 0 })), -1));
-  }, [reduce, halo]);
+    if (reduce || focused) {
+      cancelAnimation(halo);
+      halo.set(0);
+      return;
+    }
+    halo.set(0);
+    halo.set(withRepeat(withSequence(withTiming(1, { duration: 1800, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 0 })), HALO_PULSES));
+    return () => cancelAnimation(halo);
+  }, [reduce, focused, halo]);
 
   const haloStyle = useAnimatedStyle(() => ({
     opacity: 0.45 * (1 - halo.get()),

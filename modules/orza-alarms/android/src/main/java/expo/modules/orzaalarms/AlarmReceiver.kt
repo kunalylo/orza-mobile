@@ -3,6 +3,8 @@ package expo.modules.orzaalarms
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Process
+import android.os.SystemClock
 import android.util.Log
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -159,9 +161,31 @@ class AlarmReceiver : BroadcastReceiver() {
     val key = intent.getStringExtra(AlarmConst.EXTRA_KEY) ?: return
     val at = intent.getLongExtra(AlarmConst.EXTRA_AT, 0L)
     val app = context.applicationContext
+    val received = SystemClock.uptimeMillis()
     when (action) {
-      AlarmConst.ACTION_FIRE -> AlarmExecutor.runAsync(this) { AlarmFiring.fire(app, key, at) }
+      AlarmConst.ACTION_FIRE -> AlarmExecutor.runAsync(this) {
+        AlarmFiring.fire(app, key, at)
+        logTiming(key, at, received)
+      }
       AlarmConst.ACTION_SILENCE -> AlarmExecutor.runAsync(this) { AlarmFiring.silence(app, key) }
     }
+  }
+
+  /**
+   * One line per fired alarm: how late it was handled and where the time went — process start-up (the app's
+   * Application.onCreate runs before any receiver when the alarm has to start the process) vs. ÖRZA's own work
+   * (store, photos, posting). `adb logcat -s OrzaAlarms` on a real phone tells whether a cold-start alarm rings on time.
+   */
+  private fun logTiming(key: String, at: Long, received: Long) {
+    val handled = SystemClock.uptimeMillis() - received
+    val processAge = received - Process.getStartUptimeMillis()
+    val late = System.currentTimeMillis() - at
+    val start = if (processAge < COLD_START_WINDOW_MS) "process started for it ${processAge} ms before" else "process already running"
+    Log.i(AlarmConst.TAG, "Alarm $key handled ${late} ms after its time ($start; own work ${handled} ms)")
+  }
+
+  private companion object {
+    /** A receiver this soon after the process started is taken to be the reason it started. */
+    const val COLD_START_WINDOW_MS = 30_000L
   }
 }
