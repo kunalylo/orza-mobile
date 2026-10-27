@@ -41,7 +41,9 @@ export function DailySummary({
 }) {
   if (loading || !totals) {
     return (
-      <GlassCard tone="strong" accessibilityLabel="Loading the day's totals">
+      // Keyed: without it React reuses this native view for the loaded card and Android keeps the stale
+      // "Loading…" content description, so TalkBack would still announce loading over the real totals.
+      <GlassCard key="loading" tone="strong" accessibilityLabel="Loading the day's totals">
         <View style={styles.top}>
           <Skeleton circle height={116} />
           <View style={styles.topText}>
@@ -68,7 +70,7 @@ export function DailySummary({
   const headline = target <= 0 ? 'No calorie target yet' : over ? `${formatNumber(-remaining)} kcal over` : `${formatNumber(remaining)} kcal left`;
 
   return (
-    <GlassCard tone="strong" glow>
+    <GlassCard key="totals" tone="strong" glow>
       <View style={styles.top}>
         <EnergyRing
           progress={target > 0 ? totals.calories / target : 0}
