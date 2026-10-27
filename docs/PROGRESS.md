@@ -496,3 +496,7 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   Backend findings → web batch 1 (`E:\aylo\orza-backend`, not pushed). Web-only notes (not changed): MealComposer "1 credit · 0 left"
   hint at 0 credits although the text parser logs for free; macro bar colours differ between Today and Meals (web too); slow first
   /api/meds/doses on the local dev server (8.5 s) — check production cold starts.
+- 2026-10-27: **Auto steps v2 started** — plan `docs/notes/steps-v2.md` (research + 2 critics in `docs/notes/steps-v2/`; run
+  `wf_a75a741e-df0`). One reference number = the health store's day total (HC aggregate / HealthKit cumulativeSum), Today = max(store,
+  phone) live; Android 14+ HC Steps, Android 9–13 Play services Recording API (sampler = fallback), iPhone Apple Health; no writes;
+  per-member consent + off switch; server modes manual/auto/reconcile on /api/track/steps. Resume: first unticked step in §10.
