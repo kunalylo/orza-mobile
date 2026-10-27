@@ -1,9 +1,20 @@
 # Auto steps v2: final implementation plan
 
-Date: 2026-10-27. Status: **plan only.** Nothing in `E:\aylo\orza-mobile` or `E:\aylo\orza` was changed, built or run.
+Date: 2026-10-27. Status: **in progress** — see the ticks in §10 and the PROGRESS log.
+
+**Coordinator decisions on the plan's open points (2026-10-27)**
+- S0 (a) Backend changes are built LOCALLY on the `mobile-backend-batch` branch in `E:\aylo\orza-backend` after web batch 1;
+  pushing still needs the user's OK.
+- S0 (b) No WRITE_STEPS / no HealthKit writes (§0.3) is the default. The user asked for "sync to other health apps"; §11 explains
+  why phone steps already reach them; reported to the user, who can still ask for the Appendix A writer.
+- B5 is NOT done as a temporary removal: the coach keeps steps on the web (Apple's rule is about HealthKit data and the iOS app is
+  not released). Instead the app-wide AI data consent (explicit permission before personal/health data goes to the AI provider,
+  App Store 5.1.2(i) / 5.1.3) is built before any iOS submission (V6/D3) — and until it ships, the iOS build must not send
+  HealthKit-derived steps to the coach.
+- S0 (c)/(d) The real Android phone (V2) and Health Connect Toolbox download (E-3) are asked of the user when those steps come.
 
 **Inputs**
-- `research.md`, `critic-policy.md` (P1–P20) and `critic-correctness.md` (C1–C16, R1–R16), all in this folder;
+- `steps-v2/research.md`, `steps-v2/critic-policy.md` (P1–P20) and `steps-v2/critic-correctness.md` (C1–C16, R1–R16) next to this file;
 - `E:\aylo\orza-mobile\docs\PROGRESS.md` (the auto-steps log entries and "NEXT after D1: auto steps v2");
 - the code in `src/lib/steps/*`, `src/lib/health/*`, `src/features/today/StepsCard.tsx`, `modules/orza-steps/**`, `app.json` and
   `index.ts`;
@@ -910,7 +921,7 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
 
 **Phase 0: setup**
 
-- [ ] **S0.** Confirm the emulator run that is editing `orza-mobile` has finished and committed.
+- [x] **S0.** Confirm the emulator run that is editing `orza-mobile` has finished and committed.
   - Copy this file to `docs/notes/steps-v2.md` and add a PROGRESS log line "steps v2 started (plan: docs/notes/steps-v2.md)".
   - Ask the user:
     - (a) OK to build the backend batch locally;
