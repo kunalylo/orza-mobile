@@ -509,3 +509,8 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   (localtest switched to the branch head; DB copy in scratchpad backend/orza-db.before-batch1.json) running as `wf_1d35a352-ef8`.
   Phone-side rebalance change (exact code): docs in that run's fix-rebalance result — `atFloor = usual − floor < 10`,
   `belowFloor = floor − usual >= 10`, note shown on `atFloor || released_kcal > 0`, PRINCIPLES[0] "…if your target is already at or under it, meals stay as they are."
+- 2026-11-01 (after the weekly limit): J1–J2 done `19a04fb`, J3 partial checkpoint `9d6dfe6` (test:steps 112/112); both runs resumed
+  (`wf_743ae41a-b53`, `wf_1d35a352-ef8`). Emulator now has the RELEASE-TYPE TEST BUILD from the D1 wrap-up (a1b610b, installed
+  2026-10-27 13:11, not debuggable): embedded JS with API http://10.0.2.2:3100, network security config `d1_test_network_security`
+  = cleartext only to 10.0.2.2 + bogus pin on *.vercel.app (production unreachable) — checked with aapt2 on the pulled APK. No Metro
+  needed for it; reinstall the dev build (and run the safety gate) before any JS-change testing.

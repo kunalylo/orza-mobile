@@ -15,7 +15,11 @@
  *   counting existed, or saved before a sign-out cleared the phone's readings). The day is then the higher of the
  *   automatic count and N + what was counted since.
  */
+import { clampSteps } from './merge';
 import type { DaySteps, StepSource } from './types';
+
+/** The server's day limit and the clamp to it live with the merge rules (M5 clamps the day's number). */
+export { clampSteps, MAX_DAY_STEPS } from './merge';
 
 /** Where a shown / saved number came from: an automatic source, a count saved elsewhere, or the member's own edit. */
 export type ShownSource = StepSource | 'saved' | 'edited';
@@ -59,15 +63,8 @@ export interface ServerObservation {
   requestedAt: number;
 }
 
-/** Server limit (`boundedNumber(0, 100000)`). */
-export const MAX_DAY_STEPS = 100_000;
 export const POST_MIN_CHANGE = 50;
 export const POST_MIN_INTERVAL_MS = 10 * 60_000;
-
-export function clampSteps(n: number): number {
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.min(MAX_DAY_STEPS, Math.round(n));
-}
 
 /** The highest count this phone knows is on the server for the day. */
 export function knownFloor(rec: DayRecord | undefined): number {

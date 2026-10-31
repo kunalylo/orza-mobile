@@ -15,8 +15,22 @@
  * - C16 (documented, not fixed): two phones carried in different parts of a day each save their own count and the
  *   server keeps the higher one, so such a day is low. Adding them would double count the usual day, when both are
  *   carried together.
+ * - M5, the day's base (`DayBase`), anchored in TIME, never in a source's value (C4): the day is the base's number
+ *   plus what was counted after its instant `at` — each source's own count over [at, now), chosen by M3 / M4 like a
+ *   day. So a change of the leading source never loses or adds steps, and a watch's late sync of steps from before
+ *   `at` never adds on. An `edit` is that sum; a `start` (the day had a number before anything counted it) is the
+ *   higher of that sum and the whole-day count; an edit made after the day ended is the member's number for good.
  */
-import type { DayReading, PhoneCounter, SourceReading, StepSource } from './types';
+import type { DayBase, DayReading, PhoneCounter, SourceReading, StepSource } from './types';
+
+/** Server limit (`boundedNumber(0, 100000)`). */
+export const MAX_DAY_STEPS = 100_000;
+
+/** A day count as the server takes it: a whole number in 0..MAX_DAY_STEPS (not finite → 0). */
+export function clampSteps(n: number): number {
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(MAX_DAY_STEPS, Math.round(n));
+}
 
 const STORES: ReadonlySet<StepSource> = new Set(['health_connect', 'apple_health']);
 
@@ -104,4 +118,135 @@ export function applyCoverFloor(day: { start: number; end: number }, floor: numb
   if (floor == null || !Number.isFinite(floor) || floor <= day.start) return day;
   if (floor >= day.end) return null;
   return { start: floor, end: day.end };
+}
+
+/* ───────────────────────────── M5: bases ───────────────────────────── */
+
+/**
+ * What source `x` counted after `at`, as a reading of its own covered from max(at, coverFrom) — or null when it can't
+ * tell. All of its count when its coverage starts at or after `at`; else its `since`, when the reader measured it for
+ * this very `at` (one for another instant — the base changed after the read — is never stretched to fit). Never more
+ * than its whole count. A `since` without an estimate of its own is taken as at most the reading's (C7: it never
+ * passes as real steps).
+ */
+function sinceReading(x: SourceReading, at: number): SourceReading | null {
+  if (x.coverFrom >= at) return x;
+  const since = x.since;
+  if (!since || since.at !== at || !Number.isFinite(since.steps)) return null;
+  const steps = Number.isFinite(x.steps) ? Math.min(since.steps, x.steps) : since.steps;
+  const estimated = since.estimated ?? Math.min(steps, x.estimated ?? 0);
+  const { since: _since, estimated: _estimated, ...rest } = x;
+  return { ...rest, steps, coverFrom: at, ...(estimated ? { estimated } : {}) };
+}
+
+/**
+ * M5 `counted(base)`: what the day's sources counted after `at`, chosen like a day's count (M0–M4 over each source's
+ * count since `at`: today the higher, a past day the store's) — null when no source can say (none has a count for
+ * that instant, or `at` is at or after the day's end: nothing can be counted then).
+ */
+export function counted(reading: DayReading, at: number, isToday: boolean): SourceReading | null {
+  if (!(at < reading.end)) return null;
+  const sources = reading.sources.flatMap((x) => sinceReading(x, at) ?? []);
+  return autoCount({ ...reading, sources }, isToday);
+}
+
+/** A member day's number (M5) — what Today shows and the save plan saves (`policy.ts`). */
+export interface DayValue {
+  /** The day's count, 0..MAX_DAY_STEPS. */
+  steps: number;
+  /** How many of `steps` are a long-gap estimate (a phone source's): today's save leaves them out (M3). */
+  estimated: number;
+  /**
+   * What decided it: `auto` — the whole-day automatic count (no base, or a start's whole-day count was higher);
+   * `edit` / `start` — the base's number plus what was counted after it.
+   */
+  basis: 'auto' | 'edit' | 'start';
+  /** The reading the count comes from (its source and counter label the number); null: the base alone. */
+  winner: SourceReading | null;
+  /** An edit made after the day ended (M5d): the member's number for good — nothing is saved automatically. */
+  fixed: boolean;
+}
+
+function valueOf(steps: number, estimated: number | undefined, basis: DayValue['basis'], winner: SourceReading | null): DayValue {
+  const n = clampSteps(steps);
+  return { steps: n, estimated: Math.min(n, clampSteps(estimated ?? 0)), basis, winner, fixed: false };
+}
+
+const realValue = (v: DayValue) => v.steps - v.estimated;
+
+/**
+ * M5: the day's number from its reading and its base (null: no base and no source has the day).
+ * - (e) no base: the automatic count (M3 / M4);
+ * - (a) `edit`: the base's number plus what was counted after its instant;
+ * - (b) `start`: the higher of the whole-day count and that sum — by real steps (C7: a mostly estimated whole day
+ *   doesn't replace a typed number), a tie to the whole-day count;
+ * - (d) an `edit` made at or after the day's end: its number, fixed — late data from before it never adds on.
+ */
+export function dayValue(reading: DayReading, base: DayBase | null | undefined, isToday: boolean): DayValue | null {
+  const auto = autoCount(reading, isToday);
+  const whole = auto ? valueOf(auto.steps, auto.estimated, 'auto', auto) : null;
+  if (!base) return whole;
+  if (base.kind === 'edit' && base.at >= reading.end) return { ...valueOf(base.steps, 0, 'edit', null), fixed: true };
+  const since = counted(reading, base.at, isToday);
+  const added = valueOf(clampSteps(base.steps) + (since?.steps ?? 0), since?.estimated, base.kind, since);
+  if (base.kind === 'edit' || !whole) return added;
+  return realValue(added) > realValue(whole) ? added : whole;
+}
+
+/** M5c: something counted the day at instant `a` — a source with a reading (not a store's "nothing synced") from `a` or earlier. */
+function countingAt(reading: DayReading | null | undefined, a: number): boolean {
+  return !!reading?.sources.some((raw) => {
+    const x = usable(raw);
+    return !!x && x.coverFrom <= a;
+  });
+}
+
+/**
+ * M5c1: the member saved `steps` for the day on this phone at `at` (`editRef`: the edit marker the server answered
+ * with; null from a server without markers). An `edit` when something was counting the day at that instant
+ * (`reading`: the day's latest); else a `start` — typed while nothing counted, so counting that begins later adds on,
+ * and a higher whole-day count can still replace it.
+ */
+export function baseForEdit(steps: number, at: number, reading: DayReading | null | undefined, editRef: string | null | undefined): DayBase {
+  return { kind: countingAt(reading, at) ? 'edit' : 'start', steps: clampSteps(steps), at, editRef: editRef ?? null };
+}
+
+/**
+ * M5c2: the server's edit marker for the day (`steps_edited_at`, set by every manual save — the website, another
+ * phone) with the day's count there, seen at `now`. None, or one this phone already knows (`knownRef`: its own
+ * edit's, or one taken before) → null. Else the base, made like `baseForEdit` at the marker's instant clamped to
+ * [day start, now] (a marker that doesn't parse: now), with the marker as its `editRef`.
+ */
+export function baseFromMarker(
+  marker: string | null | undefined,
+  serverSteps: number,
+  reading: DayReading,
+  now: number,
+  knownRef: string | null | undefined
+): DayBase | null {
+  if (!marker || marker === knownRef) return null;
+  const latest = Math.max(reading.start, now);
+  const parsed = Date.parse(marker);
+  const at = Number.isFinite(parsed) ? Math.min(Math.max(parsed, reading.start), latest) : latest;
+  return baseForEdit(serverSteps, at, reading, marker);
+}
+
+/**
+ * M5c3, an implicit start: counting began partway through a day that already had a number on the server — a new
+ * source's first day, a re-subscribe after a sign-out, a shared phone's consent day (M9). When the day has no base,
+ * this phone hasn't saved it automatically yet (`autoSent`), the server's count (`server`, as last read) is above 0
+ * and the winning reading's coverage starts after midnight: a `start` with that number, at that coverage's start.
+ * Else null. `known` takes the day's record as it is.
+ */
+export function implicitStart(
+  reading: DayReading,
+  isToday: boolean,
+  known: { base?: DayBase | null; autoSent?: number | null; server?: number | null }
+): DayBase | null {
+  if (known.base || known.autoSent != null) return null;
+  const server = clampSteps(known.server ?? 0);
+  if (server <= 0) return null;
+  const winner = autoCount(reading, isToday);
+  if (!winner || winner.coverFrom <= reading.start) return null;
+  return { kind: 'start', steps: server, at: winner.coverFrom };
 }
