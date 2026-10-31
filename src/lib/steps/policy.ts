@@ -17,8 +17,9 @@
  * Today shows the higher of the day's number and the server's (it never drops below what the website shows); a past
  * day shows the server's — the reconciled truth.
  *
- * Until the server has the modes (`DayRecord.serverModes`), `save.ts` keeps the old raise-only path: it reads the
- * server right before each save and takes a lower read as an edit (`editedOnServer`), J6 / V4.
+ * A day whose saves the server hasn't answered with the modes yet (`DayRecord.serverModes`: the old production server)
+ * is saved the old raise-only way (`save.ts`): the server read right before each save, a lower read taken as an edit
+ * (`editedOnServer`), no reconcile. That branch goes once B1 is deployed (V4).
  */
 import { clampSteps, type DayValue } from './merge';
 import type { DayBase, StepSource } from './types';
@@ -58,6 +59,11 @@ export interface DayRecord {
 export interface ServerObservation {
   steps: number;
   requestedAt: number;
+  /**
+   * The day's edit marker in that answer (`steps_edited_at`, backend B2): null when the day has none; undefined when
+   * the answer didn't say (the old server — its only sign of an edit is a lower count, `editedOnServer`).
+   */
+  marker?: string | null;
 }
 
 export const POST_MIN_CHANGE = 50;
@@ -71,7 +77,7 @@ export function knownFloor(rec: DayRecord | undefined): number {
 /**
  * A real server read lower than this phone's last automatic save, requested after that save: the day was set lower
  * elsewhere (the member, on the website or another phone — automatic saves only ever raise it). The old server's only
- * sign of an edit; with the modes, the edit marker replaces it (J6).
+ * sign of an edit; with the modes, only the edit marker is one (`save.ts`: another phone's reconcile can lower a day).
  */
 export function editedOnServer(rec: DayRecord | undefined, seen: ServerObservation | null | undefined): boolean {
   if (!seen || rec?.autoSent == null || rec.autoAt == null) return false;

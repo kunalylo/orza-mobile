@@ -33,7 +33,9 @@ export function useTodayDashboard(date: string) {
     queryFn: async ({ signal }) => {
       const requestedAt = Date.now();
       const d = await api.get<TodayData>(`/dashboard/today?date=${encodeURIComponent(date)}`, { signal });
-      if (userId && d?.date === date && typeof d.tracking?.steps === 'number') observeServerSteps(userId, date, d.tracking.steps, requestedAt);
+      if (userId && d?.date === date && typeof d.tracking?.steps === 'number') {
+        observeServerSteps(userId, date, d.tracking.steps, requestedAt, d.tracking.steps_edited_at);
+      }
       return d;
     },
     placeholderData: keepPreviousData,

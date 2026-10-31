@@ -21,8 +21,8 @@ export function dayBounds(date: string, timeZone: string): { start: number; end:
 }
 
 /**
- * Thin adapter until R5a / J6 move the save path to `merge.dayValue` / `policy.savePlan`: the one-row-per-day shape
- * that path still takes, picked by the v2 rules (`merge.autoCount`: today the higher by real steps, a past day the
+ * Thin adapter until R5a / U1 move Today's published state to `merge.dayValue`: the one-row-per-day shape Today's
+ * card still takes, picked by the v2 rules (`merge.autoCount`: today the higher by real steps, a past day the
  * store's). The winner brings its flags; a coverage that starts after midnight becomes `partialFrom`. Null when no
  * source has the day.
  */

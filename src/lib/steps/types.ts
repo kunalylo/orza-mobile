@@ -77,8 +77,8 @@ export interface DayBase {
 export type StepPermission = 'granted' | 'undetermined' | 'denied' | 'blocked' | 'unavailable';
 
 /**
- * One day's automatic count as the save path (`policy.ts`, `save.ts`, `sync.ts`) still takes it: the winning source's
- * reading. Made from a `DayReading` by `shared.legacyDaySteps` until R5a / J6 move that path to `merge.dayValue`.
+ * One day's automatic count as Today's card still takes it (`sync.ts` publishes today's in this shape): the winning
+ * source's reading. Made from a `DayReading` by `shared.legacyDaySteps` until R5a / U1; saving uses `merge.dayValue`.
  */
 export interface DaySteps {
   /** Local day in the member's time zone, YYYY-MM-DD. */

@@ -8,11 +8,13 @@
  *   keeps the most important reason (`plan.mergeReason`). Every native / health call is time-bounded.
  * - Saving runs on its own queue (the newest readings win, pending past days are kept): a slow network never holds up
  *   Today or the permission flow.
- * - Saving one day is `save.ts` (I/O injected, tested): before each save the phone READS the server's current count
- *   (one GET per save; saves are throttled) and never lowers it. A real read lower than this phone's last save is the
- *   member's edit (website / another phone): it becomes the day's base, anchored at that instant, and what the
- *   sources count after it adds on top (`merge.dayValue`, `policy.savePlan`); the Edit sheet on the phone does the
- *   same (`saveManualSteps`). Remaining race: a count saved elsewhere between that GET and the POST (about a second).
+ * - Saving one day is `save.ts` (I/O injected, tested): `POST /api/track/steps` in the server's modes (`auto` raises
+ *   only, `reconcile` corrects this phone's own earlier save of a past day, `manual` is the member's number and sets
+ *   the day's edit marker). The member's edit (website / another phone: a marker this phone hasn't taken) becomes the
+ *   day's base, anchored at its instant, and what the sources count after it adds on top (`merge.dayValue`,
+ *   `policy.savePlan`); the Edit sheet on the phone does the same (`saveManualSteps`). Until the server answers with
+ *   the modes (the old production server), each save READS the server's count first and never lowers it, and a real
+ *   read lower than this phone's last save is the edit.
  * - Past days: up to 7 back, until settled (`plan.isFinal`, M7: 72 h after the day while a health store is connected,
  *   else an hour after it once a phone count read it whole) and saved — then final.
  * - `syncStepsInBackground()`: the same from the alarm background task (`lib/alarms/background.ts`) — the session and
@@ -31,7 +33,7 @@ import { getHealthRecord } from '../health/store';
 
 import { BACKGROUND_PAST_DAYS, isFinal, mergeDays, mergeReason, pendingPastDays, shouldReadPast } from './plan';
 import { stepsReader } from './reader';
-import { applyManualSteps, saveDay, type SaveDeps } from './save';
+import { saveDay, saveManualDay, type SaveDeps, type StepsAnswer } from './save';
 import { forgetServerObservations } from './serverSeen';
 import { legacyDaySteps } from './shared';
 import { getDayRecord, markDayFinal, updateDayRecord } from './store';
@@ -208,7 +210,7 @@ async function readAndPublish(member: StepsMember, opts: RefreshOptions) {
   }
 
   if (!getSessionToken() || stale() || !days.length) return;
-  queueSave({ userId: member.id, epoch: myEpoch, today, days, storeOn: healthConnected, onSaved: opts.onSaved, onServerSteps: opts.onServerSteps });
+  queueSave({ userId: member.id, epoch: myEpoch, today, tz, days, storeOn: healthConnected, onSaved: opts.onSaved, onServerSteps: opts.onServerSteps });
 }
 
 /* ───────────────────────────── Save queue ───────────────────────────── */
@@ -218,6 +220,8 @@ interface SaveJob {
   epoch: number;
   /** The member's today when the days were read. */
   today: string;
+  /** The profile time zone the days were read in (kept on each saved day's record, M8). */
+  tz: string;
   days: DayReading[];
   /** A health store is ON for the member (its past days settle 72 h after they end, M7). */
   storeOn: boolean;
@@ -294,7 +298,7 @@ async function runSave(job: SaveJob) {
     if (manualInFlight) await within(manualInFlight, MANUAL_WAIT_MS + SAVE_TIMEOUT_MS);
     if (stale()) return;
     const isToday = day.date === job.today;
-    const run = saveDay(saveDeps, job.userId, day, isToday, { onSaved: job.onSaved, onServerSteps: job.onServerSteps, stale });
+    const run = saveDay(saveDeps, job.userId, day, isToday, { tz: job.tz, onSaved: job.onSaved, onServerSteps: job.onServerSteps, stale });
     dayInFlight = run;
     let ok = false;
     try {
@@ -316,32 +320,35 @@ const permanent = (e: unknown) => e instanceof ApiError && e.status >= 400 && e.
 const saveDeps: SaveDeps = {
   getRecord: getDayRecord,
   updateRecord: updateDayRecord,
-  async fetchServerSteps(date) {
+  async fetchServerDay(date) {
     const d = await api.get<TodayData>(`/dashboard/today?date=${encodeURIComponent(date)}`, { timeoutMs: SERVER_READ_TIMEOUT_MS });
     if (d?.date !== date) return null;
-    return typeof d.tracking?.steps === 'number' ? d.tracking.steps : 0;
+    const steps = typeof d.tracking?.steps === 'number' ? d.tracking.steps : 0;
+    // The edit marker comes with the modes (backend B2); the old server's rows have no such field.
+    return d.tracking && 'steps_edited_at' in d.tracking ? { steps, marker: d.tracking.steps_edited_at ?? null } : { steps };
   },
-  async postSteps(date, steps) {
-    const res = await api.post<{ tracking: TrackingDay }>('/track/steps', { steps, date }, { timeoutMs: SAVE_TIMEOUT_MS });
-    return res?.tracking ?? null;
+  async postSteps(date, steps, mode, editRef, expect) {
+    const body = { steps, date, mode, edit_ref: editRef, ...(expect != null ? { expect } : {}) };
+    const res = await api.post<StepsAnswer>('/track/steps', body, { timeoutMs: SAVE_TIMEOUT_MS });
+    if (!res?.tracking) throw new Error('The step save answered without the day');
+    return res;
   },
   isPermanent: permanent,
   now: () => Date.now(),
 };
 
 /**
- * The member's own number for a day (the Edit / Log sheet): `POST /api/track/steps`, then the day's base per
- * `save.applyManualSteps` (an edit when something was counting the day, by its latest reading; else a start).
- * Serialised with the automatic queue: it first waits (bounded) for an automatic save in flight, and the queue waits
- * for it before its next day — so an automatic save can't land on the server after the member's number and undo it.
+ * The member's own number for a day (the Edit / Log sheet): `POST /api/track/steps` in `manual` mode, then the day's
+ * base with the server's edit marker (`save.saveManualDay`: an edit when something was counting the day, by its latest
+ * reading; else a start). Serialised with the automatic queue: it first waits (bounded) for an automatic save in
+ * flight, and the queue waits for it before its next day — on the old server (no modes) an automatic save landing
+ * after the member's number would undo it.
  */
 export function saveManualSteps(userId: string, date: string, steps: number): Promise<{ tracking: TrackingDay }> {
   const run = (async () => {
     if (dayInFlight) await within(dayInFlight, MANUAL_WAIT_MS);
-    const res = await api.post<{ tracking: TrackingDay }>('/track/steps', { steps, date });
-    const saved = typeof res?.tracking?.steps === 'number' ? res.tracking.steps : steps;
-    applyManualSteps(saveDeps, userId, date, saved, latestReading(userId, date));
-    return res;
+    const { tracking } = await saveManualDay(saveDeps, userId, date, steps, latestReading(userId, date));
+    return { tracking };
   })();
   const held = run.then(
     () => undefined,

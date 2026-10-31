@@ -13,6 +13,11 @@ export interface TrackingDay {
   date: string;
   water_glasses: number;
   steps: number;
+  /**
+   * The day's steps edit marker (backend B2): set by every manual save of `steps` (the website, the Edit sheet), null
+   * when there is none. Missing from the old server's answers.
+   */
+  steps_edited_at?: string | null;
   weight_kg?: number;
   updated_at?: string;
 }

@@ -514,3 +514,12 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   2026-10-27 13:11, not debuggable): embedded JS with API http://10.0.2.2:3100, network security config `d1_test_network_security`
   = cleartext only to 10.0.2.2 + bogus pin on *.vercel.app (production unreachable) — checked with aapt2 on the pulled APK. No Metro
   needed for it; reinstall the dev build (and run the safety gate) before any JS-change testing.
+- 2026-11-01: **Web batch 1 READY** (branch `mobile-backend-batch` head `47897ad`, 4 commits on top of main `c3e234c`, fast-forward):
+  review fixes (lenient alarms_local_until incl. epoch ms, snoozed-then-edited doses, conditional Skip/Snooze write, legacy adherence
+  heuristics), LIVE test on the local server 16/16 pass incl. the current phone build (backward compatible), `next build` clean.
+  `E:\aylo\orza-localtest` is LEFT on 47897ad (switch back: `git -C E:\aylo\orza-localtest checkout --detach c3e234c`; DB backup in
+  scratchpad backend/orza-db.before-batch1.json). New local account qa5@orza.test (lb onboarding). Waiting for the user's push OK.
+  Phone follow-ups found by the live test (add to the phone adaptation package): on 409 dose_already_taken mark the dose taken +
+  invalidate today/medicine queries (card stayed DUE NOW ~25 s); alarms days old rang on opening after the phone was off (27 Oct doses
+  on 1 Nov, no date shown) → drop alarms older than ~a day / show the date for non-today doses; rebalance trim tile at the floor
+  "None / Already at your safe minimum".
