@@ -1,8 +1,9 @@
-/** Helpers shared by the platform readers (pure). */
+/** Helpers shared by the platform readers and the sync (pure). */
 import { addDays, safeTimeZone } from '../alarms/schedule';
 
 import { dayStartMs } from './counter';
-import type { DaySteps, StepSource } from './types';
+import { autoCount } from './merge';
+import type { DayReading, DaySteps } from './types';
 
 /** `[start, end)` of each local date in `timeZone`, the end capped at `now` (today is still running). */
 export function dayRanges(dates: readonly string[], timeZone: string, now = Date.now()): { start: number; end: number }[] {
@@ -13,38 +14,27 @@ export function dayRanges(dates: readonly string[], timeZone: string, now = Date
   });
 }
 
-/** One candidate count for a date from one source (null = that source couldn't read the day). */
-export interface Candidate {
-  source: StepSource;
-  steps: number | null;
-  partialFrom?: number;
-  /** How many of `steps` are a long-gap estimate (phone counter). */
-  estimated?: number;
-  /** The source read the whole day. */
-  complete?: boolean;
+/** `[start, end)` of local `date` in `timeZone`: the whole day, also while it is still running (a `DayReading`'s). */
+export function dayBounds(date: string, timeZone: string): { start: number; end: number } {
+  const tz = safeTimeZone(timeZone);
+  return { start: dayStartMs(date, tz), end: dayStartMs(addDays(date, 1), tz) };
 }
 
 /**
- * The day's automatic count: the highest readable candidate (every source measures the same walking — the higher one
- * missed less; e.g. a watch in Health Connect, or the phone counting live while Health Connect hasn't synced yet).
- * A tie goes to the health store (listed first). Null when no source could read the day. The winner's own details
- * (partial / estimated / complete) come with it: a past day is final only when the count it is saved with is.
+ * Thin adapter until R5a / J6 move the save path to `merge.dayValue` / `policy.savePlan`: the one-row-per-day shape
+ * that path still takes, picked by the v2 rules (`merge.autoCount`: today the higher by real steps, a past day the
+ * store's). The winner brings its flags; a coverage that starts after midnight becomes `partialFrom`. Null when no
+ * source has the day.
  */
-export function bestOf(date: string, candidates: readonly Candidate[]): DaySteps | null {
-  let best: DaySteps | null = null;
-  for (const c of candidates) {
-    if (c.steps == null || !Number.isFinite(c.steps) || c.steps < 0) continue;
-    const steps = Math.round(c.steps);
-    if (!best || steps > best.steps) {
-      best = {
-        date,
-        steps,
-        source: c.source,
-        ...(c.partialFrom != null ? { partialFrom: c.partialFrom } : {}),
-        ...(c.estimated ? { estimated: Math.min(steps, Math.round(c.estimated)) } : {}),
-        ...(c.complete ? { complete: true } : {}),
-      };
-    }
-  }
-  return best;
+export function legacyDaySteps(reading: DayReading, isToday: boolean): DaySteps | null {
+  const w = autoCount(reading, isToday);
+  if (!w) return null;
+  return {
+    date: reading.date,
+    steps: w.steps,
+    source: w.source,
+    ...(w.coverFrom > reading.start ? { partialFrom: w.coverFrom } : {}),
+    ...(w.estimated ? { estimated: w.estimated } : {}),
+    ...(w.complete ? { complete: true } : {}),
+  };
 }

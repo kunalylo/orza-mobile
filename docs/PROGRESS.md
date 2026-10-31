@@ -505,3 +505,7 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   rebalance (uncommitted) + review nits + whole-branch review running as `wf_6409d7a1-e8f`. Phone follow-up package after Phase J:
   send acted_at / snooze_until from the alarm queue, GET /api/meds/doses?from&to in alarms sync, alarms_local_until on POST /api/devices,
   409 dose_already_taken = taken, rebalance at-floor rule `usual − floor < 10` (src/features/rebalance/PlanView.tsx + types.ts).
+  Rebalance + onboarding fixes committed `a53a1cb`; whole-branch review: no blockers. Last fixes + LIVE test on the local server
+  (localtest switched to the branch head; DB copy in scratchpad backend/orza-db.before-batch1.json) running as `wf_1d35a352-ef8`.
+  Phone-side rebalance change (exact code): docs in that run's fix-rebalance result — `atFloor = usual − floor < 10`,
+  `belowFloor = floor − usual >= 10`, note shown on `atFloor || released_kcal > 0`, PRINCIPLES[0] "…if your target is already at or under it, meals stay as they are."

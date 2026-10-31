@@ -26,6 +26,45 @@ export interface SourceReading {
   estimated?: number;
   /** The source has read up to the day's end (a past day can become final, M7). */
   complete?: boolean;
+  /**
+   * What the source counted after a base's `at` (M5): its count over [max(at, coverFrom), min(e, now)), read for the
+   * day's `ReadOptions.sinceAt`. Not needed when `coverFrom >= at` (then it is all of `steps`).
+   */
+  since?: SinceCount;
+}
+
+/** A source's count after the instant `at` (the `ReadOptions.sinceAt` it was read for). */
+export interface SinceCount {
+  at: number;
+  steps: number;
+  /** How many of `steps` are a long-gap estimate; unknown → at most the reading's own `estimated`. */
+  estimated?: number;
+}
+
+/** Every source's reading for one member day [start, end) (epoch ms, the profile zone's midnights). */
+export interface DayReading {
+  /** Local day in the member's (profile) time zone, YYYY-MM-DD. */
+  date: string;
+  start: number;
+  /** The day's end — the next midnight, also while the day is still running. */
+  end: number;
+  /** One reading per source that has data for the day; a source without data has none (M0). */
+  sources: SourceReading[];
+}
+
+/**
+ * The day's base (M5), anchored in time, never in a source's value (C4): the day is `steps` plus what is counted after
+ * `at`.
+ * - `edit`: the member set the day (on this phone, the website, another phone) while something was counting it;
+ * - `start`: the day already had `steps` when counting began (typed while nothing counted, or saved before a new
+ *   source's first day / a re-subscribe): counting adds on, and a higher whole-day count still replaces it.
+ */
+export interface DayBase {
+  kind: 'edit' | 'start';
+  steps: number;
+  at: number;
+  /** The server's edit marker (`steps_edited_at`) this base was taken from, or that this phone's edit set. */
+  editRef?: string | null;
 }
 
 /**
@@ -37,6 +76,10 @@ export interface SourceReading {
  */
 export type StepPermission = 'granted' | 'undetermined' | 'denied' | 'blocked' | 'unavailable';
 
+/**
+ * One day's automatic count as the save path (`policy.ts`, `save.ts`, `sync.ts`) still takes it: the winning source's
+ * reading. Made from a `DayReading` by `shared.legacyDaySteps` until R5a / J6 move that path to `merge.dayValue`.
+ */
 export interface DaySteps {
   /** Local day in the member's time zone, YYYY-MM-DD. */
   date: string;
@@ -56,10 +99,33 @@ export interface DaySteps {
 /** Why a read runs (a queued run keeps the most important one: `permission` > `launch` > `foreground` > …). */
 export type RefreshReason = 'launch' | 'foreground' | 'today' | 'permission' | 'background';
 
+/** The one permission Today asks for first (§2.2); `none`: nothing can count on this phone — Log steps only. */
+export type FirstAsk = 'hc' | 'phone' | 'healthkit' | 'none';
+
+/** The health store's steps read access: `needs_install` = Health Connect can be installed / updated from Play. */
+export type StoreAccess = 'granted' | 'not_granted' | 'unavailable' | 'needs_install';
+
+/** Google Play services' Recording API on this phone (`modules/orza-steps` `recordingStatus()`, S-R5). */
+export type RecordingStatus = 'available' | 'update_required' | 'missing' | 'disabled' | 'unavailable' | 'no_sensor';
+
 export interface StepsAccess {
   /** The phone's own step counter exists (step sensor / motion coprocessor + the native code to read it). */
   phoneAvailable: boolean;
   phonePermission: StepPermission;
+  /** Steps v2, filled by the readers from R2 / R4 on: what Today asks first. */
+  firstAsk?: FirstAsk;
+  /** Steps v2 (R2 / R4): the health store's steps access. */
+  store?: StoreAccess;
+  /** Steps v2, Android (R2): the Recording API's status. */
+  recording?: RecordingStatus;
+}
+
+/** Which kinds of source this member agreed to (M9: per member, set by the steps disclosure). */
+export interface ReadConsent {
+  /** Apple Health / Health Connect. */
+  store: boolean;
+  /** This phone's own counter (Recording API, sampler, CMPedometer). */
+  phone: boolean;
 }
 
 export interface ReadOptions {
@@ -69,6 +135,12 @@ export interface ReadOptions {
   healthConnected: boolean;
   /** A background run: no UI, no live sensor read (Android only delivers sensor events to the app in front). */
   background?: boolean;
+  /** Steps v2 (R2 / R4): per date, a base's `at` — each source also reports its count after it (`SourceReading.since`). */
+  sinceAt?: Record<string, number>;
+  /** Steps v2 (R2 / R4 / R5a): the member's consents; nothing is read for a kind without one. */
+  consent?: ReadConsent;
+  /** Steps v2 (M9): no source reads before this instant (a shared phone: this member's consent). */
+  coverFloor?: number | null;
 }
 
 export interface StepsReader {
@@ -85,9 +157,8 @@ export interface StepsReader {
   /** Stops background counting and forgets raw samples (sign-out). Never throws. */
   reset(): Promise<void>;
   /**
-   * Today's / recent days' automatic counts, one row per date that some source could read (0 = read, nothing walked).
-   * Several sources for a day → the highest (they all measure the same walking; the higher one missed less), a tie
-   * goes to the health store. Never throws.
+   * Every source's reading for each of `dates` (a date nothing could read has no sources, or no `DayReading`). Which
+   * reading decides the day is `merge.ts`'s job. Never throws.
    */
-  readDays(dates: readonly string[], opts: ReadOptions): Promise<DaySteps[]>;
+  readDays(dates: readonly string[], opts: ReadOptions): Promise<DayReading[]>;
 }

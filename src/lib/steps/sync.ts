@@ -32,6 +32,7 @@ import { mergeDays, mergeReason, pendingPastDays, shouldReadPast } from './plan'
 import { stepsReader } from './reader';
 import { applyManualSteps, saveDay, type SaveDeps } from './save';
 import { forgetServerObservations } from './serverSeen';
+import { legacyDaySteps } from './shared';
 import { getDayRecord, markDayFinal, updateDayRecord } from './store';
 import type { DaySteps, RefreshReason, StepsAccess } from './types';
 
@@ -184,7 +185,8 @@ async function readAndPublish(member: StepsMember, opts: RefreshOptions) {
     );
     if (stale()) return;
     if (read) {
-      days = read;
+      // One count per day by the v2 merge rules, in the shape the save path takes until R5a moves it to dayValue.
+      days = read.flatMap((r) => legacyDaySteps(r, r.date === today) ?? []);
       const t = days.find((d) => d.date === today);
       setState({ date: today, today: t ? { ...t, at: Date.now() } : null });
     } else if (state.date !== today) {

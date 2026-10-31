@@ -1,7 +1,8 @@
 /**
  * Android steps: Health Connect (when the member connected it on the Health screen and allowed Steps) and the phone's
  * own hardware step counter, sampled natively all day by `modules/orza-steps` (with the app closed too) and turned
- * into daily totals by `counter.ts`. Each day takes the higher of the two. Metro picks this file on Android only.
+ * into daily totals by `counter.ts`. Each source's reading goes out as is; `merge.ts` decides the day. Metro picks
+ * this file on Android only.
  */
 import { Linking, PermissionsAndroid, Platform } from 'react-native';
 
@@ -9,9 +10,9 @@ import * as sampler from '../../../modules/orza-steps';
 import { healthBridge } from '../health/bridge';
 
 import { coversWholeDay, dailyStepCounts, dayComplete, dayStartMs, type StepSample } from './counter';
-import { bestOf, dayRanges, type Candidate } from './shared';
+import { dayBounds, dayRanges } from './shared';
 import { permissionHistory, setPermissionHistory } from './store';
-import type { DaySteps, ReadOptions, StepPermission, StepsAccess, StepsReader } from './types';
+import type { DayReading, ReadOptions, SourceReading, StepPermission, StepsAccess, StepsReader } from './types';
 
 const PERMISSION = PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION;
 /** "Physical activity" became a run-time permission in Android 10 (API 29). */
@@ -38,8 +39,8 @@ async function permission(): Promise<StepPermission> {
 }
 
 /** Daily totals from the native sampler's raw samples (null for a day the samples don't reach). */
-async function phoneDays(dates: readonly string[], opts: ReadOptions): Promise<Map<string, Candidate>> {
-  const out = new Map<string, Candidate>();
+async function phoneDays(dates: readonly string[], opts: ReadOptions): Promise<Map<string, SourceReading>> {
+  const out = new Map<string, SourceReading>();
   if (!dates.length || !(await phoneAvailable()) || (await permission()) !== 'granted') return out;
   const tz = opts.timeZone;
   const first = [...dates].sort()[0];
@@ -54,8 +55,9 @@ async function phoneDays(dates: readonly string[], opts: ReadOptions): Promise<M
     if (!d) continue;
     out.set(date, {
       source: 'phone',
+      counter: 'sampler',
       steps: d.steps,
-      ...(coversWholeDay(d, tz) ? {} : { partialFrom: d.coveredFrom }),
+      coverFrom: coversWholeDay(d, tz) ? dayStartMs(date, tz) : d.coveredFrom,
       ...(d.estimatedSteps > 0 ? { estimated: d.estimatedSteps } : {}),
       // A past day is final once a reading after its midnight exists (a background run may not have one yet) and no
       // reboot without a shutdown reading may have lost steps (C10).
@@ -102,22 +104,22 @@ export const stepsReader: StepsReader = {
   },
 
   async readDays(dates, opts) {
-    const ranges = dayRanges(dates, opts.timeZone);
+    const now = Date.now();
+    const ranges = dayRanges(dates, opts.timeZone, now);
     const [phone, health] = await Promise.all([
-      phoneDays(dates, opts).catch(() => new Map<string, Candidate>()),
+      phoneDays(dates, opts).catch(() => new Map<string, SourceReading>()),
       opts.healthConnected ? healthBridge.stepsBetween(ranges).catch(() => ranges.map(() => null)) : Promise.resolve(ranges.map(() => null)),
     ]);
-    const out: DaySteps[] = [];
-    for (let i = 0; i < dates.length; i++) {
-      const date = dates[i];
-      // 0 from Health Connect means nothing synced into it for that day ("no data"), not a day without steps.
-      const candidates: Candidate[] = [{ source: 'health_connect', steps: health[i] || null, complete: !!health[i] }];
+    return dates.map((date, i): DayReading => {
+      const day = dayBounds(date, opts.timeZone);
+      const sources: SourceReading[] = [];
+      // 0 from Health Connect means nothing synced into it for that day ("no data", M0), not a day without steps.
+      const hc = health[i];
+      if (hc) sources.push({ source: 'health_connect', steps: hc, coverFrom: day.start, complete: now >= day.end });
       const p = phone.get(date);
-      if (p) candidates.push(p);
-      const best = bestOf(date, candidates);
-      if (best) out.push(best);
-    }
-    return out;
+      if (p) sources.push(p);
+      return { date, ...day, sources };
+    });
   },
 };
 

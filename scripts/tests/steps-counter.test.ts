@@ -1,9 +1,9 @@
 /// <reference types="node" />
 /**
- * Automatic step counting tests — `npm run test:steps` (= `npx tsx --test scripts/tests/steps-counter.test.ts`).
+ * Automatic step counting tests — `npm run test:steps` (this file and `steps-merge.test.ts`, the v2 merge rules).
  * Pure: the day math (`counter.ts`; the Recording API's buckets in `recording.ts`), the save / display rules
  * (`policy.ts`), the sync's scheduling decisions (`plan.ts`), saving one day (`save.ts`, run against a fake server +
- * store) and the source pick (`shared.ts`) have no React Native imports.
+ * store) and the save path's source pick (`shared.ts`) have no React Native imports.
  */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
@@ -38,8 +38,8 @@ import {
 import { RECORDING_FRESH_MS, recordingDays, recordingRange, recordingSince, recordingWindow, type RecordingBucket } from '../../src/lib/steps/recording';
 import { applyManualSteps, saveDay, type SaveDeps } from '../../src/lib/steps/save';
 import { forgetServerObservations, observeServerSteps } from '../../src/lib/steps/serverSeen';
-import { bestOf, dayRanges } from '../../src/lib/steps/shared';
-import type { DaySteps } from '../../src/lib/steps/types';
+import { dayBounds, dayRanges, legacyDaySteps } from '../../src/lib/steps/shared';
+import type { DayReading, DaySteps, SourceReading } from '../../src/lib/steps/types';
 
 const IST = 'Asia/Kolkata';
 const NY = 'America/New_York';
@@ -380,24 +380,54 @@ describe('policy — what Today shows', () => {
 
 /* ───────────────────────────── Sources ───────────────────────────── */
 
-describe('source pick', () => {
-  test('the higher count wins; a tie goes to the health store; unreadable sources are skipped', () => {
-    assert.deepEqual(bestOf('2026-10-20', [{ source: 'health_connect', steps: null }, { source: 'phone', steps: 10 }]), { date: '2026-10-20', steps: 10, source: 'phone' });
-    assert.deepEqual(bestOf('2026-10-20', [{ source: 'health_connect', steps: 10 }, { source: 'phone', steps: 10 }]), { date: '2026-10-20', steps: 10, source: 'health_connect' });
-    assert.deepEqual(bestOf('2026-10-20', [{ source: 'apple_health', steps: 9_001 }, { source: 'phone', steps: 8_000, partialFrom: 5 }]), {
-      date: '2026-10-20',
-      steps: 9_001,
-      source: 'apple_health',
+describe('source pick (the save path’s adapter until R5a)', () => {
+  const D = '2026-10-20';
+  const reading = (sources: SourceReading[]): DayReading => ({ date: D, ...dayBounds(D, IST), sources });
+  const s = ist(D, '00:00');
+
+  test('today: the higher count wins; a tie goes to the health store; a store 0 is no reading', () => {
+    assert.deepEqual(legacyDaySteps(reading([{ source: 'health_connect', steps: 0, coverFrom: s }, { source: 'phone', steps: 10, coverFrom: s }]), true), {
+      date: D,
+      steps: 10,
+      source: 'phone',
     });
-    assert.deepEqual(bestOf('2026-10-20', [{ source: 'phone', steps: 300, partialFrom: 5 }]), { date: '2026-10-20', steps: 300, source: 'phone', partialFrom: 5 });
-    assert.equal(bestOf('2026-10-20', [{ source: 'phone', steps: null }]), null);
+    assert.deepEqual(legacyDaySteps(reading([{ source: 'health_connect', steps: 10, coverFrom: s }, { source: 'phone', steps: 10, coverFrom: s }]), true), {
+      date: D,
+      steps: 10,
+      source: 'health_connect',
+    });
+    assert.equal(legacyDaySteps(reading([]), true), null);
   });
 
-  test('day ranges: local midnight to midnight, today capped at now', () => {
+  test('the winner’s coverage after midnight is its partialFrom; its estimate and completeness come with it', () => {
+    const from = ist(D, '07:00');
+    assert.deepEqual(legacyDaySteps(reading([{ source: 'phone', counter: 'sampler', steps: 300, coverFrom: from, estimated: 40, complete: true }]), false), {
+      date: D,
+      steps: 300,
+      source: 'phone',
+      partialFrom: from,
+      estimated: 40,
+      complete: true,
+    });
+  });
+
+  test('a past day follows the store, even below a higher phone count (C3)', () => {
+    const day = reading([
+      { source: 'apple_health', steps: 9_001, coverFrom: s, complete: true },
+      { source: 'phone', counter: 'pedometer', steps: 9_500, coverFrom: s, complete: true },
+    ]);
+    assert.deepEqual(legacyDaySteps(day, false), { date: D, steps: 9_001, source: 'apple_health', complete: true });
+    assert.equal(legacyDaySteps(day, true)?.steps, 9_500, 'today: the live tail');
+  });
+
+  test('day ranges: local midnight to midnight, today capped at now; day bounds are never capped', () => {
     const now = ist('2026-10-20', '15:00');
     const [today, yesterday] = dayRanges(['2026-10-20', '2026-10-19'], IST, now);
     assert.deepEqual(today, { start: ist('2026-10-20', '00:00'), end: now });
     assert.deepEqual(yesterday, { start: ist('2026-10-19', '00:00'), end: ist('2026-10-20', '00:00') });
+    assert.deepEqual(dayBounds('2026-10-20', IST), { start: ist('2026-10-20', '00:00'), end: ist('2026-10-21', '00:00') });
+    assert.deepEqual(dayBounds('2026-03-08', NY), { start: ny('2026-03-08', '00:00'), end: ny('2026-03-09', '00:00') });
+    assert.equal(dayBounds('2026-03-08', NY).end - dayBounds('2026-03-08', NY).start, 23 * H);
   });
 });
 

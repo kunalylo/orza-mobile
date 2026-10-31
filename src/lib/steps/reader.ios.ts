@@ -1,7 +1,8 @@
 /**
  * iPhone steps: Apple Health (when the member connected it on the Health screen — a statistics sum, iPhone + Apple
  * Watch counted once) and the iPhone's motion coprocessor through CMPedometer (expo-sensors; it records all day by
- * itself and keeps 7 days). Each day takes the higher of the two. Metro picks this file on iOS only.
+ * itself and keeps 7 days). Each source's reading goes out as is; `merge.ts` decides the day. Metro picks this file
+ * on iOS only.
  */
 import { PermissionStatus } from 'expo';
 import { Pedometer } from 'expo-sensors';
@@ -9,8 +10,8 @@ import { Linking } from 'react-native';
 
 import { healthBridge } from '../health/bridge';
 
-import { bestOf, dayRanges, type Candidate } from './shared';
-import type { DaySteps, StepPermission, StepsAccess, StepsReader } from './types';
+import { dayBounds, dayRanges } from './shared';
+import type { DayReading, SourceReading, StepPermission, StepsAccess, StepsReader } from './types';
 
 /** CMPedometer keeps this many days (older ranges return only what is left). */
 const PEDOMETER_DAYS_MS = 7 * 24 * 3_600_000;
@@ -80,18 +81,17 @@ export const stepsReader: StepsReader = {
       opts.healthConnected ? healthBridge.stepsBetween(ranges).catch(() => ranges.map(() => null)) : Promise.resolve(ranges.map(() => null)),
       usePedometer ? Promise.all(ranges.map((r) => pedometerSteps(r, now))) : Promise.resolve(ranges.map(() => null)),
     ]);
-    const out: DaySteps[] = [];
-    for (let i = 0; i < dates.length; i++) {
-      const candidates: Candidate[] = [
-        // 0 from Apple Health also means "nothing readable" (HealthKit hides a denied read as no data).
-        { source: 'apple_health', steps: health[i] || null, complete: !!health[i] },
-        // CMPedometer answers for the whole range it was asked (it records all day by itself).
-        { source: 'phone', steps: phone[i] ?? null, complete: phone[i] != null },
-      ];
-      const best = bestOf(dates[i], candidates);
-      if (best) out.push(best);
-    }
-    return out;
+    return dates.map((date, i): DayReading => {
+      const day = dayBounds(date, opts.timeZone);
+      const sources: SourceReading[] = [];
+      // 0 from Apple Health also means "nothing readable" (HealthKit hides a denied read as no data, M0).
+      const hk = health[i];
+      if (hk) sources.push({ source: 'apple_health', steps: hk, coverFrom: day.start, complete: now >= day.end });
+      // CMPedometer answers for the whole range it was asked (it records all day by itself).
+      const p = phone[i];
+      if (p != null) sources.push({ source: 'phone', counter: 'pedometer', steps: p, coverFrom: day.start, complete: now >= day.end });
+      return { date, ...day, sources };
+    });
   },
 };
 
