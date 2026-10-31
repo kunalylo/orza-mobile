@@ -70,7 +70,7 @@
     "typecheck": "node scripts/gen-routes.cjs && tsc --noEmit",
     "routes": "node scripts/gen-routes.cjs",
     "test:alarms": "npx --yes tsx --test scripts/tests/alarm-plan.test.ts",
-    "test:steps": "npx --yes tsx --test scripts/tests/steps-counter.test.ts scripts/tests/steps-merge.test.ts scripts/tests/steps-policy.test.ts scripts/tests/steps-save.test.ts"
+    "test:steps": "npx --yes tsx --test scripts/tests/steps-counter.test.ts scripts/tests/steps-merge.test.ts scripts/tests/steps-policy.test.ts scripts/tests/steps-save.test.ts scripts/tests/steps-store.test.ts"
   },
   "private": true
 }

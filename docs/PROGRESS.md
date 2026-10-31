@@ -523,3 +523,6 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   invalidate today/medicine queries (card stayed DUE NOW ~25 s); alarms days old rang on opening after the phone was off (27 Oct doses
   on 1 Nov, no date shown) → drop alarms older than ~a day / show the date for non-today doses; rebalance trim tile at the floor
   "None / Already at your safe minimum".
+- 2026-11-01: **Steps v2 phase J (pure core) done** — J6 save.ts on the server modes (feature-detects `applied`; old-server branch
+  behind the per-day GET guard until V4), J7 store split (prefs in documents, day records in cache, v1 flags migrated). test:steps
+  208/208, test:alarms 34/34. Next: phase B (backend) / N (native Android), first unticked step in §10.
