@@ -20,21 +20,8 @@ import {
   stepsInRange,
   type StepSample,
 } from '../../src/lib/steps/counter';
-import { FINAL_DAYS, isFinalRead, mergeDays, mergeReason, PAST_READ_EVERY_MS, pendingPastDays, shouldReadPast } from '../../src/lib/steps/plan';
-import {
-  clampSteps,
-  editBase,
-  editedOnServer,
-  MAX_DAY_STEPS,
-  POST_MIN_INTERVAL_MS,
-  postTarget,
-  rebased,
-  serverAllows,
-  shouldPost,
-  shownSteps,
-  withBase,
-  type DayRecord,
-} from '../../src/lib/steps/policy';
+import { mergeDays, mergeReason, PAST_READ_EVERY_MS, pendingPastDays, shouldReadPast } from '../../src/lib/steps/plan';
+import { clampSteps, editedOnServer, MAX_DAY_STEPS, serverAllows, type DayRecord } from '../../src/lib/steps/policy';
 import { RECORDING_FRESH_MS, recordingDays, recordingRange, recordingSince, recordingWindow, type RecordingBucket } from '../../src/lib/steps/recording';
 import { applyManualSteps, saveDay, type SaveDeps } from '../../src/lib/steps/save';
 import { forgetServerObservations, observeServerSteps } from '../../src/lib/steps/serverSeen';
@@ -315,35 +302,12 @@ describe('dailyStepCounts — absurd spikes', () => {
 
 /* ───────────────────────────── Policy ───────────────────────────── */
 
-describe('policy — when to save', () => {
-  const now = Date.parse('2026-10-20T10:00:00Z');
-
-  test('the first count of the day is saved at once', () => {
-    assert.equal(shouldPost(12, undefined, now, false), true);
-    assert.equal(shouldPost(0, undefined, now, false), false);
-  });
-
-  test('today: ≥ 50 more steps, or 10 min since the last save', () => {
-    const rec = { sent: 1_000, sentAt: now - MIN };
-    assert.equal(shouldPost(1_030, rec, now, false), false);
-    assert.equal(shouldPost(1_050, rec, now, false), true);
-    assert.equal(shouldPost(1_010, { sent: 1_000, sentAt: now - POST_MIN_INTERVAL_MS }, now, false), true);
-  });
-
-  test('never lowers what this phone saved, nor a higher count already on the server', () => {
-    assert.equal(shouldPost(900, { sent: 1_000, sentAt: now - H }, now, false), false);
-    assert.equal(shouldPost(900, { sent: 1_000, sentAt: now - H }, now, true), false);
-    const typedOnWeb = { sent: 1_000, sentAt: now - H, server: 5_000 };
-    assert.equal(shouldPost(4_000, typedOnWeb, now, false), false);
-    assert.equal(shouldPost(5_100, typedOnWeb, now, false), true);
+describe('policy — the old server’s guards (until the modes, J6)', () => {
+  test('never lowers the server’s count: a save must be higher than the count read right before it', () => {
     assert.equal(serverAllows(5_000, 6_000), false);
     assert.equal(serverAllows(5_000, 5_000), false);
     assert.equal(serverAllows(5_001, 5_000), true);
     assert.equal(serverAllows(5_000, null), true);
-  });
-
-  test('a past day’s final count is saved whenever it is higher (no throttle)', () => {
-    assert.equal(shouldPost(1_001, { sent: 1_000, sentAt: now }, now, true), true);
   });
 
   test('counts are clamped to the server’s limit', () => {
@@ -351,30 +315,7 @@ describe('policy — when to save', () => {
     assert.equal(clampSteps(-5), 0);
     assert.equal(clampSteps(NaN), 0);
     assert.equal(clampSteps(10.6), 11);
-    assert.equal(shouldPost(150_000, { sent: MAX_DAY_STEPS, sentAt: now - H }, now, false), false);
-  });
-});
-
-describe('policy — what Today shows', () => {
-  test('the live count when it is the highest', () => {
-    assert.deepEqual(shownSteps({ steps: 3_000, source: 'phone' }, { sent: 2_500, sentSource: 'phone' }, 2_500), { steps: 3_000, source: 'phone' });
-  });
-
-  test('a higher count saved elsewhere (typed on the website) wins and is labelled as saved', () => {
-    assert.deepEqual(shownSteps({ steps: 3_000, source: 'phone' }, { sent: 2_500, sentSource: 'phone' }, 8_000), { steps: 8_000, source: 'saved' });
-  });
-
-  test('this phone’s own save keeps its source; a tie favours the live reading', () => {
-    assert.deepEqual(shownSteps(null, { sent: 2_500, sentSource: 'health_connect' }, 2_500), { steps: 2_500, source: 'health_connect' });
-    assert.deepEqual(shownSteps({ steps: 2_500, source: 'apple_health' }, { sent: 2_500, sentSource: 'phone' }, 2_500), { steps: 2_500, source: 'apple_health' });
-  });
-
-  test('never drops below what this phone saved (a source briefly unreadable)', () => {
-    assert.deepEqual(shownSteps({ steps: 1_200, source: 'phone' }, { sent: 4_000, sentSource: 'health_connect' }, null), { steps: 4_000, source: 'health_connect' });
-  });
-
-  test('nothing known → null', () => {
-    assert.equal(shownSteps(null, undefined, null), null);
+    assert.equal(serverAllows(150_000, MAX_DAY_STEPS), false);
   });
 });
 
@@ -762,55 +703,16 @@ describe('recordingSince — 1-min buckets (T7)', () => {
 
 /* ───────────────────────────── Review fixes: policy ───────────────────────────── */
 
-describe('policy — edits, mid-day starts, estimates', () => {
+describe('policy — an edit on the old server (no marker)', () => {
   const t = ist('2026-10-20', '18:00');
-  const phone = (steps: number) => ({ steps, source: 'phone' as const });
 
-  test('a lower server read made after this phone’s save is the member’s edit; older or higher reads are not', () => {
-    const rec: DayRecord = { sent: 14_000, sentAt: t };
+  test('a lower server read made after this phone’s automatic save is the member’s edit; older or higher reads are not', () => {
+    const rec: DayRecord = { autoSent: 14_000, autoAt: t };
     assert.equal(editedOnServer(rec, { steps: 9_000, requestedAt: t + 1 }), true);
     assert.equal(editedOnServer(rec, { steps: 9_000, requestedAt: t - 1 }), false, 'requested before the save landed');
     assert.equal(editedOnServer(rec, { steps: 15_000, requestedAt: t + 1 }), false, 'another phone raised it');
     assert.equal(editedOnServer(undefined, { steps: 9_000, requestedAt: t + 1 }), false);
-  });
-
-  test('after an edit the day is the member’s number plus what is counted after it — lower than the automatic count too', () => {
-    const base = editBase(9_000, phone(14_000), t);
-    assert.deepEqual(withBase(phone(14_050), base), { steps: 9_050, source: 'edited' });
-    assert.equal(postTarget({ date: '2026-10-20', ...phone(14_050) }, { base }, true), 9_050);
-    // Shown: the member's number wins over this phone's earlier (higher) save.
-    assert.deepEqual(shownSteps(phone(14_050), { sent: 9_000, sentSource: 'edited', base }, 9_000), { steps: 9_050, source: 'edited' });
-  });
-
-  test('an edited past day with nothing counting it stays at the member’s number (never auto-saved again)', () => {
-    const base = editBase(3_000, null, t);
-    assert.equal(postTarget({ date: '2026-10-18', ...phone(8_000) }, { base }, false), null);
-    assert.deepEqual(withBase(null, base), { steps: 3_000, source: 'edited' });
-  });
-
-  test('the best source changing under a base re-anchors it (no double counting)', () => {
-    const base = { ...editBase(9_000, phone(14_000), t), last: 9_200 };
-    const hc = { steps: 15_000, source: 'health_connect' as const };
-    assert.deepEqual(withBase(hc, base), { steps: 9_200, source: 'edited' });
-    const moved = rebased(base, hc, t + H);
-    assert.ok(moved);
-    assert.equal(moved.auto, 15_000);
-    assert.equal(moved.steps, 9_200);
-    assert.deepEqual(withBase({ steps: 15_300, source: 'health_connect' }, moved), { steps: 9_500, source: 'edited' });
-    assert.equal(rebased(base, phone(14_100), t), null, 'same source: nothing to do');
-  });
-
-  test('counting that starts mid-day adds on top of the count saved before it', () => {
-    const base = { kind: 'start' as const, steps: 5_000, auto: 0, source: 'phone' as const, at: t, last: 5_000 };
-    assert.deepEqual(withBase(phone(3_000), base), { steps: 8_000, source: 'phone' });
-    assert.deepEqual(shownSteps(phone(3_000), { base, server: 5_000 }, 5_000), { steps: 8_000, source: 'phone' });
-  });
-
-  test('today never saves the estimated part of a reading; a past day saves all of it', () => {
-    const day: DaySteps = { date: '2026-10-20', steps: 4_000, source: 'phone', estimated: 4_000 };
-    assert.equal(postTarget(day, undefined, true), 0);
-    assert.equal(postTarget(day, undefined, false), 4_000);
-    assert.equal(postTarget({ ...day, steps: 6_500, estimated: 800 }, undefined, true), 5_700);
+    assert.equal(editedOnServer({ server: 14_000 }, { steps: 9_000, requestedAt: t + 1 }), false, 'never saved automatically');
   });
 });
 
@@ -827,15 +729,12 @@ describe('plan — queued runs and past days', () => {
     assert.equal(mergeReason('background', 'permission'), 'permission');
   });
 
-  test(`past days stay pending until final, up to ${FINAL_DAYS} back`, () => {
-    const pending = pendingPastDays('2026-10-20', (d) => d === '2026-10-18');
-    assert.equal(pending.length, FINAL_DAYS - 1);
+  test('past days stay pending until final, up to the lookback (steps-policy.test.ts T27–T30 for the rules)', () => {
+    const pending = pendingPastDays('2026-10-20', (d) => (d === '2026-10-18' ? { final: true } : undefined), 7, null, IST);
+    assert.equal(pending.length, 6);
     assert.equal(pending[0], '2026-10-19');
     assert.equal(pending.includes('2026-10-18'), false);
     assert.equal(pending[pending.length - 1], '2026-10-13');
-    assert.equal(isFinalRead({ date: '2026-10-19', steps: 10, source: 'phone', complete: true }), true);
-    assert.equal(isFinalRead({ date: '2026-10-19', steps: 10, source: 'phone' }), false, 'not read to its end');
-    assert.equal(isFinalRead(undefined), false, 'no source could read it');
   });
 
   test('pending past days are re-read on launch, a permission change, a new day, else every 30 min', () => {
@@ -909,9 +808,17 @@ function fakeSync(start: number, server: Record<string, number> = {}) {
   };
 }
 
-describe('save — one day against the server', () => {
+describe('save — one day against the server (the old server: raise only)', () => {
   const D = '2026-10-20';
-  const phoneDay = (steps: number, extra: Partial<DaySteps> = {}): DaySteps => ({ date: D, steps, source: 'phone', ...extra });
+  const S = dayStartMs(D, IST);
+  /** Day D read with this phone's sampler (`partialFrom`: it covers the day from then; `since`: its count after a base). */
+  const phoneDay = (
+    steps: number,
+    extra: { partialFrom?: number; estimated?: number; complete?: boolean; since?: { at: number; steps: number } } = {}
+  ): DayReading => {
+    const { partialFrom, ...rest } = extra;
+    return { date: D, ...dayBounds(D, IST), sources: [{ source: 'phone', counter: 'sampler', steps, coverFrom: partialFrom ?? S, ...rest }] };
+  };
 
   test('the first count of the day is saved; the server is read right before', async () => {
     forgetServerObservations();
@@ -919,7 +826,7 @@ describe('save — one day against the server', () => {
     assert.equal(await saveDay(f.deps, f.userId, phoneDay(1_200), true), true);
     assert.deepEqual(f.posts, [{ date: D, steps: 1_200 }]);
     assert.deepEqual(f.reads, [D]);
-    assert.equal(f.record(D)?.sent, 1_200);
+    assert.equal(f.record(D)?.autoSent, 1_200);
   });
 
   test('this phone’s own saves never hide a higher count saved elsewhere since (no stale-cache overwrite)', async () => {
@@ -943,19 +850,33 @@ describe('save — one day against the server', () => {
     await saveDay(f.deps, f.userId, phoneDay(14_000), true);
     f.advance(MIN);
     f.days.set(D, 9_000); // the member corrects a bus ride on the website
-    observeServerSteps(f.userId, D, 9_000, f.now()); // Today's dashboard fetch saw it
+    const seenAt = f.now();
+    observeServerSteps(f.userId, D, 9_000, seenAt); // Today's dashboard fetch saw it
     f.advance(MIN);
     await saveDay(f.deps, f.userId, phoneDay(14_060), true);
     assert.equal(f.days.get(D), 9_000, 'the correction is not undone');
-    assert.equal(f.record(D)?.base?.kind, 'edit');
+    assert.deepEqual(f.record(D)?.base, { kind: 'edit', steps: 9_000, at: seenAt, editRef: null }, 'anchored at the read');
     f.advance(5 * MIN);
-    await saveDay(f.deps, f.userId, phoneDay(14_200), true);
+    await saveDay(f.deps, f.userId, phoneDay(14_200, { since: { at: seenAt, steps: 140 } }), true);
     assert.equal(f.days.get(D), 9_140, 'the member’s number + 140 counted since');
     assert.deepEqual(
       f.posts.map((p) => p.steps),
       [14_000, 9_140],
       'never posted the old higher count again'
     );
+  });
+
+  test('a source that can’t say what it counted after the edit adds nothing (never a difference of values, C4)', async () => {
+    forgetServerObservations();
+    const f = fakeSync(ist(D, '12:00'));
+    await saveDay(f.deps, f.userId, phoneDay(14_000), true);
+    f.advance(MIN);
+    f.days.set(D, 9_000);
+    observeServerSteps(f.userId, D, 9_000, f.now());
+    f.advance(15 * MIN);
+    await saveDay(f.deps, f.userId, phoneDay(14_500), true);
+    assert.equal(f.days.get(D), 9_000);
+    assert.equal(f.posts.length, 1);
   });
 
   test('an edit noticed only by the read before a save is accepted, not overwritten', async () => {
@@ -968,17 +889,18 @@ describe('save — one day against the server', () => {
     await saveDay(f.deps, f.userId, phoneDay(14_060), true);
     assert.equal(f.days.get(D), 9_000);
     assert.equal(f.posts.length, 1);
+    const at = f.record(D)?.base?.at ?? assert.fail('the edit is the day’s base');
     f.advance(5 * MIN);
-    await saveDay(f.deps, f.userId, phoneDay(14_200), true);
+    await saveDay(f.deps, f.userId, phoneDay(14_200, { since: { at, steps: 140 } }), true);
     assert.equal(f.days.get(D), 9_140);
   });
 
-  test('counting that starts mid-day adds on top of steps typed that morning', async () => {
+  test('counting that starts mid-day adds on top of steps typed that morning (M5c3)', async () => {
     forgetServerObservations();
     const f = fakeSync(ist(D, '14:00'), { [D]: 5_000 });
     const partialFrom = ist(D, '14:00');
     await saveDay(f.deps, f.userId, phoneDay(0, { partialFrom }), true);
-    assert.equal(f.record(D)?.base?.kind, 'start');
+    assert.deepEqual(f.record(D)?.base, { kind: 'start', steps: 5_000, at: partialFrom });
     assert.equal(f.days.get(D), 5_000);
     f.advance(5 * H);
     await saveDay(f.deps, f.userId, phoneDay(3_000, { partialFrom }), true);
@@ -991,33 +913,37 @@ describe('save — one day against the server', () => {
     await saveDay(f.deps, f.userId, phoneDay(12_000), true);
     f.advance(MIN);
     f.days.set(D, 9_000); // the sheet's POST
-    applyManualSteps(f.deps, f.userId, D, 9_000, D, { steps: 12_100, source: 'phone' });
+    const editAt = f.now();
+    applyManualSteps(f.deps, f.userId, D, 9_000, phoneDay(12_100), null);
+    assert.deepEqual(f.record(D)?.base, { kind: 'edit', steps: 9_000, at: editAt, editRef: null }, 'something was counting → an edit');
+    assert.equal(f.record(D)?.autoSent, undefined, 'this phone’s earlier save is gone');
     f.advance(MIN);
-    await saveDay(f.deps, f.userId, phoneDay(12_120), true);
+    await saveDay(f.deps, f.userId, phoneDay(12_120, { since: { at: editAt, steps: 20 } }), true);
     assert.equal(f.days.get(D), 9_000, '+20: not worth a save yet');
     f.advance(MIN);
-    await saveDay(f.deps, f.userId, phoneDay(12_300), true);
+    await saveDay(f.deps, f.userId, phoneDay(12_300, { since: { at: editAt, steps: 200 } }), true);
     assert.equal(f.days.get(D), 9_200);
   });
 
-  test('typing a higher count today with nothing counting is a plain save (no base)', () => {
+  test('typed today with nothing counting: a start (M5c1)', () => {
     forgetServerObservations();
     const f = fakeSync(ist(D, '12:00'));
-    applyManualSteps(f.deps, f.userId, D, 4_000, D, null);
-    assert.equal(f.record(D)?.base, undefined);
+    applyManualSteps(f.deps, f.userId, D, 4_000, null);
+    assert.deepEqual(f.record(D)?.base, { kind: 'start', steps: 4_000, at: ist(D, '12:00'), editRef: null });
     assert.equal(f.record(D)?.server, 4_000);
   });
 
-  test('typed LOWER today with nothing counting: the day is that number, and counting that starts later builds on it', async () => {
+  test('typed LOWER today with nothing counting: the day is that number, and a higher whole-day count replaces it', async () => {
     forgetServerObservations();
     const f = fakeSync(ist(D, '12:00'), { [D]: 1_200 });
     f.days.set(D, 900); // the sheet's POST
-    applyManualSteps(f.deps, f.userId, D, 900, D, null);
-    assert.equal(f.record(D)?.base, undefined, 'not frozen: nothing was counting');
-    assert.equal(f.record(D)?.sent, 900);
+    applyManualSteps(f.deps, f.userId, D, 900, null);
+    assert.equal(f.record(D)?.base?.kind, 'start', 'not frozen: nothing was counting');
+    assert.equal(f.record(D)?.server, 900);
     f.advance(H);
     // Health Connect gets connected and has the whole day: its higher count is saved.
-    await saveDay(f.deps, f.userId, { date: D, steps: 5_000, source: 'health_connect', complete: false }, true);
+    const hcDay: DayReading = { date: D, ...dayBounds(D, IST), sources: [{ source: 'health_connect', steps: 5_000, coverFrom: S }] };
+    await saveDay(f.deps, f.userId, hcDay, true);
     assert.equal(f.days.get(D), 5_000);
   });
 
@@ -1025,13 +951,25 @@ describe('save — one day against the server', () => {
     forgetServerObservations();
     const f = fakeSync(ist(D, '12:00'));
     f.days.set(D, 900);
-    applyManualSteps(f.deps, f.userId, D, 900, D, null);
+    applyManualSteps(f.deps, f.userId, D, 900, null);
     f.advance(H);
     const partialFrom = f.now();
     await saveDay(f.deps, f.userId, phoneDay(0, { partialFrom }), true);
     f.advance(H);
     await saveDay(f.deps, f.userId, phoneDay(700, { partialFrom }), true);
     assert.equal(f.days.get(D), 1_600);
+  });
+
+  test('a past day typed after it ended, while a source had it: the member’s number for good (M5d)', async () => {
+    forgetServerObservations();
+    const f = fakeSync(ist(addDays(D, 1), '09:00'), { [D]: 12_000 });
+    f.days.set(D, 9_000);
+    applyManualSteps(f.deps, f.userId, D, 9_000, phoneDay(12_000, { complete: true }));
+    assert.equal(f.record(D)?.base?.kind, 'edit');
+    f.advance(H);
+    assert.equal(await saveDay(f.deps, f.userId, phoneDay(12_400, { complete: true }), false), true);
+    assert.equal(f.days.get(D), 9_000);
+    assert.equal(f.posts.length, 0);
   });
 
   test('offline: retried later (false); a refusal a retry won’t fix is not retried (true)', async () => {

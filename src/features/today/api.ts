@@ -169,12 +169,12 @@ export function useWaterWriter(date: string, glasses: number) {
  * sync (`saveManualSteps`): the member's number then stays the day's count — automatic counting adds on top of it and
  * never overwrites it.
  */
-export function useLogSteps(date: string, today: string) {
+export function useLogSteps(date: string) {
   const qc = useQueryClient();
   const userId = useAuth().user?.id;
   return useMutation({
     mutationFn: (steps: number): Promise<TrackingResponse> =>
-      userId ? saveManualSteps(userId, date, Math.round(steps), today) : api.post<TrackingResponse>('/track/steps', { steps: Math.round(steps), date }),
+      userId ? saveManualSteps(userId, date, Math.round(steps)) : api.post<TrackingResponse>('/track/steps', { steps: Math.round(steps), date }),
     onMutate: () => {
       activeWrites += 1;
     },

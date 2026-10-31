@@ -99,7 +99,7 @@ export function StepsCard({
   // Edit: correct a counted day (low-key for today — counting is the point; plain for past days).
   const editable = !!onLog && !!access && !manual && (counting || !isToday);
 
-  const shown = shownSteps(live, record, serverSteps) ?? { steps: serverSteps ?? 0, source: 'saved' as const };
+  const shown = shownSteps(live ? steps.value : null, record, serverSteps, isToday) ?? { steps: serverSteps ?? 0, source: 'saved' as const };
   const value = shown.steps;
   const progress = target > 0 ? value / target : 0;
   const reached = target > 0 && value >= target;

@@ -120,6 +120,39 @@ export interface StepsAccess {
   recording?: RecordingStatus;
 }
 
+/** What this phone can count steps with (§2.1, §2.2) — from the readers (R2 / R4); `plan.firstAsk` / `plan.sourcesOn`. */
+export interface StepFeatures {
+  platform: 'android' | 'ios' | 'none';
+  /**
+   * The health store: Health Connect's SDK status (`installable`: it can be installed or updated from Play), or
+   * whether Apple Health is available on this iPhone.
+   */
+  store: 'available' | 'installable' | 'unavailable';
+  /** Android: Health Connect counts this phone's steps itself (API ≥ 34 and SDK extension ≥ 20). */
+  stepTracking?: boolean;
+  /** The phone has a step counter (Android `TYPE_STEP_COUNTER`, the iPhone's motion coprocessor). */
+  counter: boolean;
+}
+
+/**
+ * One member's steps consent on this install (M9), kept per user id in the prefs file (J7). OS permissions belong to
+ * the phone; ÖRZA reads a kind of source only for a member who agreed to it.
+ */
+export interface StepsConsent {
+  /** Agreed to read Apple Health / Health Connect. */
+  store?: { at: number };
+  /** Agreed to read this phone's own counter. */
+  phone?: { at: number };
+  /** "Count steps automatically" switched off (P9): nothing is read or saved. */
+  off?: { at: number };
+  /** "Not now — I'll log steps": Today's ask stays folded until then (P19). */
+  notNowUntil?: number;
+  /** iPhone: the one-time "Use iPhone motion instead" was offered. */
+  motionOffered?: boolean;
+  /** Another member had agreed on this install before this member first did: nothing before that is read. */
+  sharedAtConsent: boolean;
+}
+
 /** Which kinds of source this member agreed to (M9: per member, set by the steps disclosure). */
 export interface ReadConsent {
   /** Apple Health / Health Connect. */

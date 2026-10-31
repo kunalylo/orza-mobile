@@ -16,6 +16,7 @@ import { useAuth, useSignedInUser } from '@/lib/auth';
 
 import { safeTimeZone } from '../alarms/schedule';
 
+import { dayValue } from './merge';
 import { openStepsSettings, stepsReader } from './reader';
 import { useDayRecord } from './store';
 import {
@@ -135,6 +136,8 @@ export function useTodaySteps() {
     date: mine ? s.date : null,
     /** Live automatic reading for `date` (null: no automatic source could read it). */
     reading: mine ? s.today : null,
+    /** The day's number for `date` (M5: the live reading with the day's base, `merge.dayValue`); null without a reading. */
+    value: mine && s.today ? dayValue(s.today.day, record?.base, true) : null,
     busy: mine && s.reading,
     /** What this phone saved / saw on the server for `date`. */
     record,

@@ -10,10 +10,11 @@
  *   Today or the permission flow.
  * - Saving one day is `save.ts` (I/O injected, tested): before each save the phone READS the server's current count
  *   (one GET per save; saves are throttled) and never lowers it. A real read lower than this phone's last save is the
- *   member's edit (website / another phone): it becomes the day's base and steps counted after it add on top
- *   (`policy.ts`); the Edit sheet on the phone does the same (`saveManualSteps`). Remaining race: a count saved
- *   elsewhere between that GET and the POST (about a second).
- * - Past days: up to 7 back, until a source read the whole day (`complete`) and its count is saved — then final.
+ *   member's edit (website / another phone): it becomes the day's base, anchored at that instant, and what the
+ *   sources count after it adds on top (`merge.dayValue`, `policy.savePlan`); the Edit sheet on the phone does the
+ *   same (`saveManualSteps`). Remaining race: a count saved elsewhere between that GET and the POST (about a second).
+ * - Past days: up to 7 back, until settled (`plan.isFinal`, M7: 72 h after the day while a health store is connected,
+ *   else an hour after it once a phone count read it whole) and saved — then final.
  * - `syncStepsInBackground()`: the same from the alarm background task (`lib/alarms/background.ts`) — the session and
  *   member snapshot then come from the Keychain, and Android reads stored samples only (no live sensor read).
  * - `clearStepsOnSignOut()`: stops the Android sampler and forgets its samples.
@@ -28,13 +29,13 @@ import type { PublicUser } from '@/lib/types';
 import { safeTimeZone, utcToZoned } from '../alarms/schedule';
 import { getHealthRecord } from '../health/store';
 
-import { mergeDays, mergeReason, pendingPastDays, shouldReadPast } from './plan';
+import { BACKGROUND_PAST_DAYS, isFinal, mergeDays, mergeReason, pendingPastDays, shouldReadPast } from './plan';
 import { stepsReader } from './reader';
 import { applyManualSteps, saveDay, type SaveDeps } from './save';
 import { forgetServerObservations } from './serverSeen';
 import { legacyDaySteps } from './shared';
 import { getDayRecord, markDayFinal, updateDayRecord } from './store';
-import type { DaySteps, RefreshReason, StepsAccess } from './types';
+import type { DayReading, DaySteps, RefreshReason, StepsAccess } from './types';
 
 export type { RefreshReason } from './types';
 
@@ -68,8 +69,11 @@ export interface StepsState {
   healthConnected: boolean;
   /** The member's today (YYYY-MM-DD) at the last read. */
   date: string | null;
-  /** The last automatic reading for `date`, null when no automatic source could read it. */
-  today: (DaySteps & { at: number }) | null;
+  /**
+   * The last automatic reading for `date` (the winning source's, plus every source's: `day`), null when no automatic
+   * source could read it.
+   */
+  today: (DaySteps & { at: number; day: DayReading }) | null;
   /** A read is running. */
   reading: boolean;
 }
@@ -117,6 +121,8 @@ const SERVER_READ_TIMEOUT_MS = 15_000;
 export const ACCESS_TIMEOUT_MS = 6_000;
 const PREPARE_TIMEOUT_MS = 6_000;
 const READ_TIMEOUT_MS = 20_000;
+/** Past days read back (the old 7: CMPedometer's history) until R5a reads `plan.lookbackDays(plan.sourcesOn(…))`. */
+const PAST_DAYS = 7;
 
 /** Bumped on sign-out: runs in flight finish without publishing or saving anything. */
 let epoch = 0;
@@ -163,7 +169,7 @@ async function readAndPublish(member: StepsMember, opts: RefreshOptions) {
   const healthConnected = getHealthRecord(member.id).connected;
   setState(sameMember ? { reading: true, healthConnected } : { ...EMPTY, userId: member.id, healthConnected, reading: true });
 
-  let days: DaySteps[] = [];
+  let days: DayReading[] = [];
   try {
     const access = await within(stepsReader.access(), ACCESS_TIMEOUT_MS);
     if (stale()) return;
@@ -177,7 +183,9 @@ async function readAndPublish(member: StepsMember, opts: RefreshOptions) {
       }
       preparedFor = tz;
     }
-    const past = shouldReadPast(opts.reason, today, now, lastPastRead) ? pendingPastDays(today, (d) => !!getDayRecord(member.id, d)?.final) : [];
+    const past = shouldReadPast(opts.reason, today, now, lastPastRead)
+      ? pendingPastDays(today, (d) => getDayRecord(member.id, d), PAST_DAYS, null, tz, opts.reason === 'background' ? BACKGROUND_PAST_DAYS : undefined)
+      : [];
     if (past.length) lastPastRead = { at: now, today };
     const read = await within(
       stepsReader.readDays([today, ...past], { timeZone: tz, healthConnected, background: opts.reason === 'background' }),
@@ -185,10 +193,12 @@ async function readAndPublish(member: StepsMember, opts: RefreshOptions) {
     );
     if (stale()) return;
     if (read) {
-      // One count per day by the v2 merge rules, in the shape the save path takes until R5a moves it to dayValue.
-      days = read.flatMap((r) => legacyDaySteps(r, r.date === today) ?? []);
-      const t = days.find((d) => d.date === today);
-      setState({ date: today, today: t ? { ...t, at: Date.now() } : null });
+      days = read;
+      for (const r of read) rememberReading(member.id, r);
+      // Today's winner in the shape Today's card still takes (until U1), with the whole reading for the day's number.
+      const r = read.find((d) => d.date === today);
+      const t = r ? legacyDaySteps(r, true) : null;
+      setState({ date: today, today: r && t ? { ...t, at: Date.now(), day: r } : null });
     } else if (state.date !== today) {
       // The read timed out: keep the last reading unless the day changed.
       setState({ date: today, today: null });
@@ -198,7 +208,7 @@ async function readAndPublish(member: StepsMember, opts: RefreshOptions) {
   }
 
   if (!getSessionToken() || stale() || !days.length) return;
-  queueSave({ userId: member.id, epoch: myEpoch, today, days, onSaved: opts.onSaved, onServerSteps: opts.onServerSteps });
+  queueSave({ userId: member.id, epoch: myEpoch, today, days, storeOn: healthConnected, onSaved: opts.onSaved, onServerSteps: opts.onServerSteps });
 }
 
 /* ───────────────────────────── Save queue ───────────────────────────── */
@@ -208,7 +218,9 @@ interface SaveJob {
   epoch: number;
   /** The member's today when the days were read. */
   today: string;
-  days: DaySteps[];
+  days: DayReading[];
+  /** A health store is ON for the member (its past days settle 72 h after they end, M7). */
+  storeOn: boolean;
   onSaved?: (date: string, tracking: TrackingDay) => void;
   onServerSteps?: (date: string, steps: number) => void;
 }
@@ -244,6 +256,29 @@ export async function stepSavesSettled(ms: number): Promise<void> {
   }
 }
 
+/* ───────────────────────────── Latest readings ───────────────────────────── */
+
+/**
+ * The latest reading of each day read in this app run (per member): the member's own number for a day becomes an edit
+ * when something was counting it (M5c1, `save.applyManualSteps`). Memory only; cleared at sign-out.
+ */
+const readings = new Map<string, DayReading>();
+const READINGS_KEPT = 64;
+
+function rememberReading(userId: string, reading: DayReading) {
+  const k = `${userId}|${reading.date}`;
+  readings.delete(k);
+  readings.set(k, reading);
+  if (readings.size > READINGS_KEPT) {
+    const oldest = readings.keys().next().value;
+    if (oldest !== undefined) readings.delete(oldest);
+  }
+}
+
+function latestReading(userId: string, date: string): DayReading | null {
+  return readings.get(`${userId}|${date}`) ?? null;
+}
+
 /** The day the automatic queue is saving right now (a manual save waits for it, see `saveManualSteps`). */
 let dayInFlight: Promise<unknown> | null = null;
 /** A manual save (Edit / Log sheet) in progress: the automatic queue waits for it between days. */
@@ -268,7 +303,7 @@ async function runSave(job: SaveJob) {
       if (dayInFlight === run) dayInFlight = null;
     }
     if (stale()) return;
-    if (!isToday && ok && day.complete) markDayFinal(job.userId, day.date);
+    if (!isToday && ok && isFinal(day, getDayRecord(job.userId, day.date), Date.now(), job.storeOn)) markDayFinal(job.userId, day.date);
   }
 }
 
@@ -295,18 +330,17 @@ const saveDeps: SaveDeps = {
 };
 
 /**
- * The member's own number for a day (the Edit / Log sheet): `POST /api/track/steps`, then recorded per
- * `save.applyManualSteps` (it becomes the day's base when something counts the day, or when it lowers the day).
+ * The member's own number for a day (the Edit / Log sheet): `POST /api/track/steps`, then the day's base per
+ * `save.applyManualSteps` (an edit when something was counting the day, by its latest reading; else a start).
  * Serialised with the automatic queue: it first waits (bounded) for an automatic save in flight, and the queue waits
  * for it before its next day — so an automatic save can't land on the server after the member's number and undo it.
  */
-export function saveManualSteps(userId: string, date: string, steps: number, today: string): Promise<{ tracking: TrackingDay }> {
+export function saveManualSteps(userId: string, date: string, steps: number): Promise<{ tracking: TrackingDay }> {
   const run = (async () => {
     if (dayInFlight) await within(dayInFlight, MANUAL_WAIT_MS);
     const res = await api.post<{ tracking: TrackingDay }>('/track/steps', { steps, date });
     const saved = typeof res?.tracking?.steps === 'number' ? res.tracking.steps : steps;
-    const live = state.userId === userId && state.date === date && state.today?.date === date ? state.today : null;
-    applyManualSteps(saveDeps, userId, date, saved, today, live);
+    applyManualSteps(saveDeps, userId, date, saved, latestReading(userId, date));
     return res;
   })();
   const held = run.then(
@@ -380,6 +414,7 @@ export async function clearStepsOnSignOut(): Promise<void> {
   queued = null;
   nextSave = null;
   forgetServerObservations();
+  readings.clear();
   setState(EMPTY);
   if (reading) await within(reading, 4_000);
   await within(stepsReader.reset(), 3_000);

@@ -65,7 +65,7 @@ export function StepsSheet({
 }) {
   const isToday = date === today;
   // Saved through the step sync: the member's number stays the day's count (counting adds on top, never overwrites).
-  const log = useLogSteps(date, today);
+  const log = useLogSteps(date);
   // The sheet focuses it (keyboard up) once it is on screen.
   const fieldRef = useRef<TextInput>(null);
   const [input, setInput] = useState('');

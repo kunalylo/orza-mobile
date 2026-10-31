@@ -1,36 +1,25 @@
 /**
- * Saving one day's automatic count — the step sync's decisions with their I/O injected (`SaveDeps`), so
- * `npm run test:steps` runs them in Node against fakes. `sync.ts` wires the real store (`store.ts`) and API.
+ * Saving one day's count — the step sync's decisions with their I/O injected (`SaveDeps`), so `npm run test:steps`
+ * runs them in Node against fakes. `sync.ts` wires the real store (`store.ts`) and API.
  *
- * Per day, in order:
- * 1. a real server read made after this phone's last save that is LOWER than it = the member's edit (website / another
- *    phone; automatic saves only ever raise the count) → it becomes the day's base, steps counted after it add on;
- * 2. this phone's counter began partway through the day → a START base on top of what the day already had;
- * 3. the best source changed under a base → re-anchor it;
- * 4. the target (`policy.postTarget`), throttled (`policy.shouldPost`);
- * 5. READ the server's current count right before saving (never Today's cache, which this phone's own saves keep
+ * The day's number is `merge.dayValue` (the day's reading and its base, M5); what to save is `policy.savePlan` (M6).
+ * Until J6 adds the server's modes (backend B1), this is the old server's path: raise only, the server READ right
+ * before each save. Per day, in order:
+ * 1. a real server read made after this phone's last automatic save that is LOWER than it = the member's edit (website /
+ *    another phone; automatic saves only ever raise the count) → the day's base (`merge.baseForEdit`), at that read;
+ * 2. counting began partway through a day that already had a count on the server → a START base at the coverage's
+ *    start (M5c3, `merge.implicitStart`): the server is read for it;
+ * 3. the plan (`auto` only: no reconcile without the modes);
+ * 4. READ the server's current count right before saving (never Today's cache, which this phone's own saves keep
  *    looking fresh) — never lower it, and catch an edit made since — then `POST /api/track/steps`.
- * Remaining race (the endpoint has no conditional write): a count saved elsewhere between that read and the POST.
+ * Remaining race (the old endpoint has no conditional write): a count saved elsewhere between that read and the POST.
  */
 import type { TrackingDay } from '../../features/today/types';
 
-import {
-  clampSteps,
-  editBase,
-  editedOnServer,
-  knownFloor,
-  needsStartBase,
-  postTarget,
-  rebased,
-  serverAllows,
-  shouldPost,
-  startBase,
-  withBase,
-  type AutoCount,
-  type DayRecord,
-} from './policy';
+import { autoCount, baseForEdit, dayValue, implicitStart } from './merge';
+import { clampSteps, editedOnServer, savePlan, serverAllows, type DayRecord } from './policy';
 import { observeServerSteps, serverObservation } from './serverSeen';
-import type { DaySteps } from './types';
+import type { DayBase, DayReading } from './types';
 
 export interface SaveDeps {
   getRecord(userId: string, date: string): DayRecord | undefined;
@@ -71,77 +60,75 @@ async function readServer(deps: SaveDeps, userId: string, date: string, hooks: S
   }
 }
 
-/** Accept the member's edit to `steps` (seen on the server, or made on this phone) as the day's base. */
-export function acceptEdit(deps: SaveDeps, userId: string, date: string, steps: number, auto: AutoCount | null): DayRecord | undefined {
+/**
+ * Take the member's number (`base`, made on this phone or seen on the server) as the day's: the server holds it, and
+ * this phone's earlier automatic save is gone (never reconciled); today's save throttle restarts from it.
+ */
+function takeEdit(deps: SaveDeps, userId: string, date: string, base: DayBase): DayRecord | undefined {
   const now = deps.now();
-  const n = clampSteps(steps);
-  deps.updateRecord(userId, date, { base: editBase(n, auto, now), sent: n, sentAt: now, sentSource: 'edited', server: n, serverAt: now });
+  deps.updateRecord(userId, date, { base, editRef: base.editRef ?? null, server: base.steps, serverAt: now, autoSent: undefined, autoAt: now });
   return deps.getRecord(userId, date);
 }
 
+/** M5c3 may apply: no base, no automatic save of the day yet, and the winning reading starts after midnight. */
+function startsLate(reading: DayReading, isToday: boolean, rec: DayRecord | undefined): boolean {
+  if (rec?.base || rec?.autoSent != null) return false;
+  const winner = autoCount(reading, isToday);
+  return !!winner && winner.coverFrom > reading.start;
+}
+
 /**
- * Saves `day` when the policy says so. False when it should be retried later (offline, server error) — a past day is
- * only marked final after a true.
+ * Saves the day of `reading` when the plan says so. False when it should be retried later (offline, server error) — a
+ * past day is only marked final after a true.
  */
-export async function saveDay(deps: SaveDeps, userId: string, day: DaySteps, isToday: boolean, hooks: SaveHooks = {}): Promise<boolean> {
+export async function saveDay(deps: SaveDeps, userId: string, reading: DayReading, isToday: boolean, hooks: SaveHooks = {}): Promise<boolean> {
   const stale = hooks.stale ?? (() => false);
-  let rec = deps.getRecord(userId, day.date);
+  const date = reading.date;
+  let rec = deps.getRecord(userId, date);
 
   // 1. A real server read made after this phone's last save shows a lower count: the member set the day themselves.
-  const seen = serverObservation(userId, day.date);
-  if (seen && editedOnServer(rec, seen)) rec = acceptEdit(deps, userId, day.date, seen.steps, day);
+  const seen = serverObservation(userId, date);
+  if (seen && editedOnServer(rec, seen)) rec = takeEdit(deps, userId, date, baseForEdit(seen.steps, seen.requestedAt, reading, rec?.editRef));
 
-  // 2. This phone began counting partway through the day: carry on from what was already saved that day.
-  if (needsStartBase(day, rec)) {
-    const server = await readServer(deps, userId, day.date, hooks);
+  // 2. Counting began partway through the day: carry on from what the server already had (M5c3).
+  if (startsLate(reading, isToday, rec)) {
+    const server = await readServer(deps, userId, date, hooks);
     if (stale()) return true;
     if (!server.ok) return !server.retry;
-    rec = deps.getRecord(userId, day.date);
-    if (!rec?.base) {
-      deps.updateRecord(userId, day.date, { base: startBase(day, rec, server.steps, deps.now()) });
-      rec = deps.getRecord(userId, day.date);
+    rec = deps.getRecord(userId, date);
+    const base = implicitStart(reading, isToday, { base: rec?.base, autoSent: rec?.autoSent, server: server.steps });
+    if (base) {
+      deps.updateRecord(userId, date, { base });
+      rec = deps.getRecord(userId, date);
     }
   }
 
-  // 3. The best source changed under a base: re-anchor it on the new one.
-  const moved = rebased(rec?.base, day, deps.now());
-  if (moved) {
-    deps.updateRecord(userId, day.date, { base: moved });
-    rec = deps.getRecord(userId, day.date);
-  }
+  // 3. What to save, and whether it's worth a save now (the old server: raise only).
+  const plan = savePlan(dayValue(reading, rec?.base, isToday), rec, isToday, deps.now());
+  if (plan?.mode !== 'auto') return true;
 
-  // 4. What to save, and whether it's worth a save now.
-  const target = postTarget(day, rec, isToday);
-  if (target == null) return true;
-  if (rec?.base && rec.base.last !== target) {
-    deps.updateRecord(userId, day.date, { base: { ...rec.base, last: target } });
-    rec = deps.getRecord(userId, day.date);
-  }
-  if (!shouldPost(target, rec, deps.now(), !isToday)) return true;
-
-  // 5. Never lower the server's count: read it right before saving (one GET per save; saves are throttled).
-  const server = await readServer(deps, userId, day.date, hooks);
+  // 4. Never lower the server's count: read it right before saving (one GET per save; saves are throttled).
+  const server = await readServer(deps, userId, date, hooks);
   if (stale()) return true;
   if (!server.ok) return !server.retry;
-  rec = deps.getRecord(userId, day.date);
-  const fresh = serverObservation(userId, day.date);
+  rec = deps.getRecord(userId, date);
+  const fresh = serverObservation(userId, date);
   if (fresh && editedOnServer(rec, fresh)) {
-    acceptEdit(deps, userId, day.date, fresh.steps, day);
+    takeEdit(deps, userId, date, baseForEdit(fresh.steps, fresh.requestedAt, reading, rec?.editRef));
     return true; // the next run saves from the member's number
   }
-  // The day changed meanwhile (the member's own number saved on this phone): the next run saves from it.
-  if (postTarget(day, rec, isToday) !== target) return true;
-  if (!serverAllows(target, server.steps) || target <= knownFloor(rec)) return true;
+  // The day changed meanwhile (the member's number saved on this phone, a higher count read): the next run decides.
+  const again = savePlan(dayValue(reading, rec?.base, isToday), rec, isToday, deps.now());
+  if (again?.mode !== 'auto' || again.steps !== plan.steps || !serverAllows(plan.steps, server.steps)) return true;
 
-  const steps = clampSteps(target);
+  const steps = clampSteps(plan.steps);
   try {
-    const tracking = await deps.postSteps(day.date, steps);
+    const tracking = await deps.postSteps(date, steps);
     if (stale()) return true;
     const saved = typeof tracking?.steps === 'number' ? tracking.steps : steps;
     const at = deps.now();
-    const source = withBase(day, rec?.base)?.source ?? day.source;
-    deps.updateRecord(userId, day.date, { sent: saved, sentAt: at, sentSource: source, server: saved, serverAt: at });
-    if (tracking) hooks.onSaved?.(day.date, tracking);
+    deps.updateRecord(userId, date, { autoSent: saved, autoAt: at, server: saved, serverAt: at });
+    if (tracking) hooks.onSaved?.(date, tracking);
     return true;
   } catch (e) {
     return deps.isPermanent(e);
@@ -149,19 +136,15 @@ export async function saveDay(deps: SaveDeps, userId: string, day: DaySteps, isT
 }
 
 /**
- * The member typed the day's steps on this phone (the Edit / Log sheet) and the server took `steps`. On a past day, or
- * with a count running today (`live`), it becomes the day's base: the member's number, plus steps counted after it
- * today (lower than the automatic count too — a bus ride counted as walking). Typed today with nothing counting, it is
- * a plain save, lower too: counting that starts later builds on it (a phone counter starting mid-day adds on top — a
- * START base; a health store's whole-day count replaces it once higher).
+ * The member typed the day's steps on this phone (the Edit / Log sheet) and the server took `steps` (`editRef`: the
+ * edit marker it answered with; null from the old server). It becomes the day's base (M5c1, `merge.baseForEdit`): an
+ * `edit` when something was counting the day at that moment (`reading`: the day's latest, null when none is at hand) —
+ * the member's number plus steps counted after it, lower than the automatic count too (a bus ride counted as walking);
+ * else a `start` — typed while nothing counted, so counting that begins later adds on, and a higher whole-day count can
+ * still replace it.
  */
-export function applyManualSteps(deps: SaveDeps, userId: string, date: string, steps: number, today: string, live: AutoCount | null) {
+export function applyManualSteps(deps: SaveDeps, userId: string, date: string, steps: number, reading: DayReading | null, editRef?: string | null) {
   const n = clampSteps(steps);
-  const now = deps.now();
-  observeServerSteps(userId, date, n, now);
-  if (date !== today || live) {
-    acceptEdit(deps, userId, date, n, live);
-    return;
-  }
-  deps.updateRecord(userId, date, { base: undefined, sent: n, sentAt: now, sentSource: 'saved', server: n, serverAt: now });
+  observeServerSteps(userId, date, n, deps.now());
+  takeEdit(deps, userId, date, baseForEdit(n, deps.now(), reading, editRef));
 }
