@@ -2,17 +2,18 @@
  * The alarm screen without a connection: rebuilds an alarm's doses from the alarm engine's last good data on this phone
  * (`orza-alarms.json` — medicines, the days' dose logs, the member's timezone) with the actions still queued here laid
  * on top, and the downloaded alarm photos (`file://`). Mirrors the server's dose status rules (web
- * `lib/care/meds.ts` doseStatus: snoozed until its end, due up to 60 min late, then missed).
+ * `lib/care/meds.ts` doseStatus: snoozed until its end — then due again, its `snooze_until` kept —, due up to 60 min
+ * late, then missed).
  */
 import type { DoseItem, DoseStatusView } from '@/features/meds/types';
+import { MISSED_AFTER_MS, snoozeEndOf } from '@/lib/alarms/doses';
 import { cachedAlarmPhotoUri } from '@/lib/alarms/photos';
-import { DEFAULT_SNOOZE_MINUTES, PHOTOS_PER_MEDICINE } from '@/lib/alarms/plan';
+import { PHOTOS_PER_MEDICINE } from '@/lib/alarms/plan';
 import { pendingDoseActions } from '@/lib/alarms/queue';
 import { occurrencesBetween, safeTimeZone } from '@/lib/alarms/schedule';
 import { loadAlarmCache } from '@/lib/alarms/store';
 import type { PendingDoseAction, PlanDoseState, PlanMedication } from '@/lib/alarms/types';
 
-const MISSED_AFTER_MS = 60 * 60_000;
 /** "Everything due now" looks this far back for open doses. */
 const DUE_LOOKBACK_MS = 3 * 3_600_000;
 
@@ -37,12 +38,14 @@ function statusOf(at: number, log: PlanDoseState | undefined, pending: PendingDo
     const acted_at = new Date(pending.createdAt).toISOString();
     if (pending.action === 'take') return { status: 'taken', acted_at };
     if (pending.action === 'skip') return { status: 'skipped', acted_at };
-    const until = pending.createdAt + Math.min(60, Math.max(5, pending.snoozeMinutes ?? DEFAULT_SNOOZE_MINUTES)) * 60_000;
-    if (until > now) return { status: 'snoozed', snooze_until: new Date(until).toISOString(), acted_at };
+    const until = snoozeEndOf(pending.createdAt, pending.snoozeMinutes);
+    return { status: until > now ? 'snoozed' : 'due', snooze_until: new Date(until).toISOString(), acted_at };
   } else if (log) {
     if (log.status === 'taken' || log.status === 'skipped') return { status: log.status, ...(log.acted_at ? { acted_at: log.acted_at } : {}) };
-    if (log.status === 'snoozed' && log.snooze_until && Date.parse(log.snooze_until) > now) {
-      return { status: 'snoozed', snooze_until: log.snooze_until, ...(log.acted_at ? { acted_at: log.acted_at } : {}) };
+    if (log.status === 'snoozed' && log.snooze_until && Number.isFinite(Date.parse(log.snooze_until))) {
+      // A snooze that ended is due again (the server's doseStatus) — its end decides when it counts as missed.
+      const status: DoseStatusView = Date.parse(log.snooze_until) > now ? 'snoozed' : 'due';
+      return { status, snooze_until: log.snooze_until, ...(log.acted_at ? { acted_at: log.acted_at } : {}) };
     }
   }
   const status: DoseStatusView = at > now ? 'upcoming' : now - at <= MISSED_AFTER_MS ? 'due' : 'missed';

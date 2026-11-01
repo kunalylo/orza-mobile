@@ -7,7 +7,7 @@ import { DarkPanel } from '@/features/recipes/DarkPanel';
 import { colors, radii, spacing } from '@/theme';
 import { EnergyRing, Icon, Tag, Text, type IconName } from '@/ui';
 
-import { PRINCIPLES, formatDayDate, splitMeal, type CompensationDay, type RebalancePlan } from './types';
+import { PRINCIPLES, floorNote, formatDayDate, splitMeal, trimTile, type CompensationDay, type RebalancePlan } from './types';
 
 function usualFor(plan: RebalancePlan, d: CompensationDay): number {
   return plan.summary?.usual_calories ?? d.calorie_target - d.adjustment;
@@ -170,6 +170,8 @@ export function PlanView({ plan, matched, showMessage = true }: { plan: Rebalanc
   const backTo = s?.back_to_usual;
   const trimTotal = s?.food_kcal ?? plan.days.reduce((a, d) => a + Math.max(0, -d.adjustment), 0);
   const avgTrim = s?.avg_daily_trim ?? (n ? Math.round(trimTotal / n / 10) * 10 : 0);
+  const trim = trimTile(s, avgTrim, n);
+  const note = floorNote(s);
 
   const stats: { k: string; v: string; note: string; icon: IconName }[] = [
     {
@@ -178,12 +180,7 @@ export function PlanView({ plan, matched, showMessage = true }: { plan: Rebalanc
       note: plan.estimated ? 'Estimated from what you ate' : 'As you entered it',
       icon: 'mci:fire',
     },
-    {
-      k: 'Gentle trim',
-      v: avgTrim > 0 ? `~${formatNumber(avgTrim)} kcal/day` : 'None needed',
-      note: `Over ${n} day${n === 1 ? '' : 's'}, no skipped meals`,
-      icon: 'mci:leaf',
-    },
+    { k: 'Gentle trim', v: trim.v, note: trim.note, icon: 'mci:leaf' },
     {
       k: 'Added movement',
       v: s && s.walk_minutes_per_day > 0 ? `${s.walk_minutes_per_day} min/day` : 'Your usual',
@@ -219,14 +216,11 @@ export function PlanView({ plan, matched, showMessage = true }: { plan: Rebalanc
         </View>
       ) : null}
 
-      {s && s.released_kcal > 0 ? (
+      {/* At (or under) the safe floor there is nothing to trim — "never below 1,696 kcal" next to days of 1,680 read as a
+          contradiction, so the note says why meals stay as they are. */}
+      {note ? (
         <Text variant="small" tone="muted" style={styles.released}>
-          {/* When the usual target already sits at (or under) the safe floor there is nothing to trim — "never below
-              1,696 kcal" next to days of 1,680 read as a contradiction. */}
-          {s.floor_calories >= s.usual_calories
-            ? `Your usual ${formatNumber(s.usual_calories)} kcal already sits at your body's safe floor, so ÖRZA doesn't trim meals, and walks stay comfortable — the last ~`
-            : `Trims stay within a gentle range (never below ${formatNumber(s.floor_calories)} kcal a day) and walks stay comfortable, so the last ~`}
-          {formatNumber(s.released_kcal)} kcal is simply left to even out naturally over the week.
+          {note}
         </Text>
       ) : null}
 

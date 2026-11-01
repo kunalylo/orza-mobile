@@ -1,5 +1,7 @@
-/** Rebalance (compassionate rebalancing) — shapes of /api/compensation/* plus the form's choices. */
+/** Rebalance (compassionate rebalancing) — shapes of /api/compensation/* plus the form's choices and pure texts. */
 import type { IconName } from '@/ui';
+
+import { formatNumber } from '../chat/format';
 
 export interface CompensationDay {
   /** YYYY-MM-DD */
@@ -84,10 +86,55 @@ export const PLACEHOLDERS: Record<string, string> = {
 };
 
 export const PRINCIPLES: { icon: IconName; title: string; body: string }[] = [
-  { icon: 'mci:leaf', title: 'Gentle trims, never starving', body: 'At most 15% off your usual calories on any day — and never below a safe floor for your body.' },
+  {
+    icon: 'mci:leaf',
+    title: 'Gentle trims, never starving',
+    body: 'At most 15% off your usual calories on any day, and never below a safe floor for your body — if your target is already at or under it, meals stay as they are.',
+  },
   { icon: 'mci:shoe-print', title: 'A little extra movement', body: 'An easy walk, a dance session or the stairs — something you enjoy, never a punishment.' },
   { icon: 'mci:calendar-check', title: 'Back to your rhythm in 2–5 days', body: 'No skipped meals, no detoxes, no guilt. Just steady, kind choices.' },
 ];
+
+/* ───────────────────────────── The safe floor (web RebalancePlanView) ───────────────────────────── */
+
+type FloorFields = Pick<CompensationSummary, 'usual_calories' | 'floor_calories'>;
+
+/**
+ * No room for even a 10 kcal trim above the safety floor (web `noRoomToTrim`): the usual target is already at, or
+ * under, the floor — "never below {floor} kcal" next to days at the usual target would contradict itself.
+ */
+export const isAtFloor = (s: FloorFields) => s.usual_calories - s.floor_calories < 10;
+
+/** …and clearly under it (web `belowSafeFloor`, e.g. a hand-set 1,400 with a floor of 1,700). */
+export const isBelowFloor = (s: FloorFields) => s.floor_calories - s.usual_calories >= 10;
+
+/** The "Gentle trim" tile: value + note (`avgTrim` kcal/day, over `days` days). */
+export function trimTile(s: FloorFields | undefined, avgTrim: number, days: number): { v: string; note: string } {
+  const atFloor = !!s && isAtFloor(s);
+  const belowFloor = !!s && isBelowFloor(s);
+  return {
+    v: avgTrim > 0 ? `~${formatNumber(avgTrim)} kcal/day` : atFloor ? 'None' : 'None needed',
+    note: belowFloor ? 'Already below your safe minimum' : atFloor ? 'Already at your safe minimum' : `Over ${days} day${days === 1 ? '' : 's'}, no skipped meals`,
+  };
+}
+
+/**
+ * The note under "ÖRZA says": why meals aren't trimmed (at / below the floor) and / or the calories left to even out
+ * naturally — null when there's nothing to say. Same wording as the web.
+ */
+export function floorNote(s: CompensationSummary | undefined): string | null {
+  if (!s) return null;
+  const atFloor = isAtFloor(s);
+  if (!atFloor && !(s.released_kcal > 0)) return null;
+  const released = `the last ~${formatNumber(s.released_kcal)} kcal is simply left to even out naturally over the week.`;
+  if (!atFloor) {
+    return `Trims stay within a gentle range (never below ${formatNumber(s.floor_calories)} kcal a day) and walks stay comfortable, so ${released}`;
+  }
+  const lead = isBelowFloor(s)
+    ? `Your usual ${formatNumber(s.usual_calories)} kcal is already below the safe floor for your body (${formatNumber(s.floor_calories)} kcal), so ÖRZA won't trim further`
+    : `Your usual ${formatNumber(s.usual_calories)} kcal already sits at your body's safe floor, so ÖRZA doesn't trim meals`;
+  return s.released_kcal > 0 ? `${lead}, and walks stay comfortable — ${released}` : `${lead} — a little extra movement balances this instead.`;
+}
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

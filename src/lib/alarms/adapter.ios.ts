@@ -339,6 +339,15 @@ export const alarmAdapter: PlatformAdapter = {
       }
     }),
 
+  // ÖRZA said the snoozed dose is already taken: its re-ring goes now (a re-plan would keep it for the grace period).
+  withdraw: (keys) =>
+    serial(async () => {
+      for (const key of keys) {
+        nativeSnoozes.delete(key);
+        await Notifications.cancelScheduledNotificationAsync(key).catch(() => undefined);
+      }
+    }),
+
   cancelAll: () => serial(cancelEverything),
 
   dismiss: async (key) => {

@@ -19,6 +19,9 @@
  * - `dismiss(key)` removes that alarm if it is showing / ringing (the doses were handled elsewhere) — and one that is
  *   already due but hasn't been delivered yet. No-op otherwise; never cancels a future one.
  * - `snoozeNow(item)` adds / replaces ONE alarm right away (the re-ring of a dose snoozed in the app), leaving the rest.
+ * - `withdraw(keys)` takes back such re-rings that haven't rung yet (ÖRZA answered the snooze with "already taken").
+ *   iOS removes them at once; Android leaves it to the next `schedule`, which never keeps a `snoozeNow` re-ring the
+ *   plan doesn't carry — the engine re-plans (forced) right after.
  * - `refreshShowing(items)` re-shows alarms still showing whose doses were partly handled, with only the open doses
  *   (Android; iOS can't change a delivered notification — the engine filters its actions instead).
  * - Take / Snooze / Skip pressed on an alarm: the platform dismisses it and, for Snooze, schedules the re-ring itself
@@ -106,6 +109,8 @@ export interface PlatformAdapter {
   schedule(items: AlarmPlanItem[]): Promise<ScheduleResult>;
   /** Adds / replaces one alarm now without touching the others (a dose snoozed in the app rings again). */
   snoozeNow(item: AlarmPlanItem): Promise<void>;
+  /** Takes back `snoozeNow` re-rings that haven't rung yet (their dose turned out to be taken). */
+  withdraw(keys: string[]): Promise<void>;
   cancelAll(): Promise<void>;
   dismiss(key: string): Promise<void>;
   /** Alarms showing whose doses were partly handled: re-shown with only the open doses (Android). */

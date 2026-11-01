@@ -7,14 +7,15 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { promptAlarmPermission } from '@/features/alarms/prompt';
-import { alarmDoseSaved, alarmSnoozePressed } from '@/lib/alarms/bridge';
+import { alarmDoseAlreadyTaken, alarmDoseSaved, alarmSnoozePressed } from '@/lib/alarms/bridge';
+import { doseActionBody, isDoseAlreadyTaken, snoozeEndOf } from '@/lib/alarms/doses';
 import { api, ApiError, errorMessage } from '@/lib/api';
 import { useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
 import { toast } from '@/ui';
 
 import { emitDoseEvent, onDoseEvent, type DoseEvent } from './events';
-import { clockIn, DEFAULT_TZ, doseKey, SNOOZE_MINUTES, sortMedications, todayIn, withAction } from './shared';
+import { asTaken, clockIn, DEFAULT_TZ, doseKey, SNOOZE_MINUTES, sortMedications, todayIn, withAction } from './shared';
 import type {
   AdherenceResponse,
   DoseAction,
@@ -55,14 +56,14 @@ export const medsApi = {
     api.del<{ medication: MedicationClient }>(`/meds/${encodeURIComponent(id)}/photos/${encodeURIComponent(mediaId)}`).then((r) => r.medication),
   today: (date: string) => api.get<TodayResponse>(`/meds/today?date=${encodeURIComponent(date)}`),
   adherence: (days: 7 | 30) => api.get<AdherenceResponse>(`/meds/adherence?days=${days}`),
-  dose: (d: Pick<DoseItem, 'medication_id' | 'scheduled_for'>, action: DoseAction, snoozeMinutes = SNOOZE_MINUTES) =>
+  /**
+   * Take / Skip / Snooze. ÖRZA records `pressedAt` (default: now) as `acted_at` and ends a snooze `snoozeMinutes`
+   * (default 10) after it (`snooze_until`), however late the request arrives — see `lib/alarms/doses`.
+   * Skip / Snooze over a dose already taken → 409 `dose_already_taken` (`isDoseAlreadyTaken`).
+   */
+  dose: (d: Pick<DoseItem, 'medication_id' | 'scheduled_for'>, action: DoseAction, opts: { pressedAt?: number; snoozeMinutes?: number } = {}) =>
     api
-      .post<{ dose: DoseLog }>('/meds/doses', {
-        medication_id: d.medication_id,
-        scheduled_for: d.scheduled_for,
-        action,
-        ...(action === 'snooze' ? { snooze_minutes: snoozeMinutes } : {}),
-      })
+      .post<{ dose: DoseLog }>('/meds/doses', doseActionBody(d, action, { pressedAt: opts.pressedAt, snoozeMinutes: opts.snoozeMinutes ?? SNOOZE_MINUTES }))
       .then((r) => r.dose),
 };
 
@@ -74,6 +75,9 @@ export const medsApi = {
  */
 export const isStaleDoseError = (e: unknown) =>
   e instanceof ApiError && (e.status === 404 || (e.status === 400 && /schedule/i.test(e.message)));
+
+/** A Skip / Snooze refused because the dose was already taken (on the web, another phone, the alarm): it IS taken. */
+export { isDoseAlreadyTaken };
 
 /* ───────────────────────────── Time ───────────────────────────── */
 
@@ -252,6 +256,8 @@ const doseWrites = new Map<string, { inFlight: number; refetch: boolean }>();
 /**
  * Take / Skip / Snooze with an optimistic update of today's list, haptics and toasts.
  * `pendingFor(dose)` tells which action is in flight for that dose.
+ * A Skip / Snooze ÖRZA refuses because the dose was already taken elsewhere (409) shows the dose as taken at once, with
+ * a calm toast — the alarm engine takes back the snooze re-ring it set for it.
  */
 export function useDoseActions(date: string, tz: string) {
   const qc = useQueryClient();
@@ -271,7 +277,7 @@ export function useDoseActions(date: string, tz: string) {
     const pressedAt = Date.now();
     // The phone's alarm rings again after the snooze even if the app is closed before the request (or the next alarm
     // sync) finishes.
-    if (action === 'snooze') alarmSnoozePressed([{ medId: d.medication_id, scheduledFor: d.scheduled_for }], pressedAt + SNOOZE_MINUTES * 60_000);
+    if (action === 'snooze') alarmSnoozePressed([{ medId: d.medication_id, scheduledFor: d.scheduled_for }], snoozeEndOf(pressedAt, SNOOZE_MINUTES));
     const writes = doseWrites.get(date) ?? { inFlight: 0, refetch: false };
     writes.inFlight += 1;
     doseWrites.set(date, writes);
@@ -284,7 +290,7 @@ export function useDoseActions(date: string, tz: string) {
     await qc.cancelQueries({ queryKey: medsKeys.today(date) });
     replaceDose(key, optimistic);
     try {
-      const log = await medsApi.dose(d, action);
+      const log = await medsApi.dose(d, action, { pressedAt });
       // The alarm engine keeps the confirmed log (a failed refetch can't lose it) and drops older queued presses.
       alarmDoseSaved(log, pressedAt);
       const updated = withAction(d, action, log);
@@ -303,6 +309,20 @@ export function useDoseActions(date: string, tz: string) {
       }
       return true;
     } catch (e) {
+      if (isDoseAlreadyTaken(e)) {
+        // Taken elsewhere meanwhile: show it as taken now (the refetch brings when) — not the old row and an error.
+        replaceDose(key, asTaken(d));
+        writes.refetch = true;
+        alarmDoseAlreadyTaken([{ medId: d.medication_id, scheduledFor: d.scheduled_for }]);
+        haptics.soft();
+        toast.info(`${d.name} — already marked as taken`);
+        emitOwn({ type: 'dose-updated', medId: d.medication_id, at: d.scheduled_for });
+        qc.invalidateQueries({ queryKey: medsKeys.todayAll() }, { cancelRefetch: false });
+        qc.invalidateQueries({ queryKey: medsKeys.adherenceAll() }, { cancelRefetch: false });
+        qc.invalidateQueries({ queryKey: medsKeys.list() }, { cancelRefetch: false });
+        qc.invalidateQueries({ queryKey: medsKeys.detail(d.medication_id) }, { cancelRefetch: false });
+        return true;
+      }
       replaceDose(key, d);
       if (isStaleDoseError(e)) {
         // Changed or removed elsewhere — drop the stale row now instead of failing every tap until the next poll.

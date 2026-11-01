@@ -3,7 +3,9 @@
  *
  * - **Foreground behaviour** (`installNotificationHandling`, idempotent): a notification arriving while the app is open
  *   shows as a banner with sound — except a ringing medicine alarm while a member's alarm engine is listening: then
- *   the alarm screen opens instead (the sound still plays and it stays in Notification Center / the shade).
+ *   the alarm screen opens instead (the sound still plays and it stays in Notification Center / the shade). A medicine
+ *   alarm delivered more than 60 min after its time (ÖRZA counts the dose as missed then) shows without sound and
+ *   doesn't raise the alarm screen.
  * - **Taps and action buttons**: ONE response subscription for the app — live responses plus the one that launched it
  *   (`getLastNotificationResponse`, read once at install and on every return to the foreground), de-duplicated, held
  *   back until somebody subscribes (`subscribeNotificationResponses`), then cleared natively so it isn't handled twice.
@@ -15,6 +17,8 @@
  */
 import * as Notifications from 'expo-notifications';
 import { AppState, Platform } from 'react-native';
+
+import { ringsAt } from '@/lib/alarms/doses';
 
 /** Action button ids on alarm notifications (iOS categories; shared so any platform maps them the same way). */
 export const ALARM_ACTION = {
@@ -132,6 +136,14 @@ const SHOW: Notifications.NotificationBehavior = {
   shouldSetBadge: false,
 };
 
+/** A medicine alarm that arrives when its dose is already missed: listed and shown, never rung. */
+const SHOW_QUIETLY: Notifications.NotificationBehavior = {
+  shouldShowBanner: true,
+  shouldShowList: true,
+  shouldPlaySound: false,
+  shouldSetBadge: false,
+};
+
 const PRESENTED_IN_APP: Notifications.NotificationBehavior = {
   shouldShowBanner: false,
   shouldShowList: true,
@@ -141,6 +153,7 @@ const PRESENTED_IN_APP: Notifications.NotificationBehavior = {
 
 async function handleNotification(notification: Notifications.Notification): Promise<Notifications.NotificationBehavior> {
   const data = readOrzaData(notification.request.content.data);
+  if (data?.ring && data.at > 0 && !ringsAt(data.at, Date.now())) return SHOW_QUIETLY;
   if (data?.ring && presenter && AppState.currentState === 'active') {
     let shown = false;
     try {

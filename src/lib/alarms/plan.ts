@@ -124,6 +124,12 @@ export interface AlarmPlan {
   dropped: number;
   /** Every alarm due before this instant is in `items` (= `horizonEnd` unless the cap cut the plan). Epoch ms. */
   coveredUntil: number;
+  /**
+   * The medicine alarms (doses, snoozes) alone: the first one the cap left out (iOS keeps 64), or null when none was
+   * left out — they cover the whole horizon, which every sync moves on. Reminders / refills cut by the cap don't
+   * count. Sent to ÖRZA as `alarms_local_until` (its Web Push rings the doses after it). Epoch ms.
+   */
+  doseCoveredUntil: number | null;
   horizonEnd: number;
   /** Keys of recent alarms whose doses are all handled — remove the notification if it's still showing. */
   settledKeys: string[];
@@ -548,6 +554,7 @@ export function planAlarms(input: PlanInput): AlarmPlan {
     quietReminders,
     dropped: ring.length + other.length - items.length,
     coveredUntil: Math.min(ringCovered, otherCovered, horizonEnd),
+    doseCoveredUntil: ring.length > ringKept.length ? ring[ringKept.length].at : null,
     horizonEnd,
     settledKeys: recent.settledKeys,
     partialAlarms: recent.partialAlarms,

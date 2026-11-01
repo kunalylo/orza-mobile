@@ -160,6 +160,8 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   decision); snooze re-ring keeps its photo after an app update; cold-start tap opens the right alarm.
 
 ### Phase C backend requests (web repo — optional, not blocking)
+1, 2, 4 and 5 are LIVE since web batch 1 (2026-11-01) and used by the phone (see the 2026-11-01 "Phone: use the live web
+batch 1" log entry); 3 is still open.
 1. `POST /api/meds/doses`: accept an optional client `acted_at` (clamped to [scheduled_for − 36 h, now]) and, for snooze, a
    client `snooze_until` (clamped to now … now + 60 min), so presses made offline on an alarm record when they happened
    (today the phone drops a snooze that couldn't be sent within its 10 minutes).
@@ -545,3 +547,29 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   Phase N (native Android N1–N5 + Expo patch updates, rebuild in the build copy, install the DEV build on the emulator — replaces the
   release-type test build — smoke test incl. the batch-1 changes), (3) two reviewers, (4) fix. Metro + localtest started by the
   coordinator (preview_start orza-mobile-metro-local / orza-localtest); safety gate SAFE.
+- 2026-11-01: **Phone adapted to the live web batch 1** (commit "Phone: use the live web batch 1 (…)"; NOT device-tested — the
+  release-type test build on the emulator doesn't carry this JS / Kotlin; next step = native rebuild + emulator test). Pure wire
+  rules in `src/lib/alarms/doses.ts`. (1) Every `POST /api/meds/doses` (Today / medicine screens, alarm screen, offline queue)
+  sends `acted_at` = the press and, for a snooze, `snooze_until` = press + 10 min, plus `snooze_minutes` = minutes left (≥ 5)
+  for an older server. (2) 409 `dose_already_taken` = taken: Today/medicine card flips to "Taken" at once (no acted_at until the
+  refetch) + calm toast "<name> — already marked as taken", alarm screen collapses it as taken; engine notes a taken log
+  (`recent`), drops queued presses, withdraws the snooze re-ring (new adapter `withdraw(keys)`: iOS cancels, Android relies on
+  the forced `scheduleAll`) and re-plans FORCED (an unchanged plan used to leave the re-ring on the phone); the queue drops a
+  409 / pre-check-taken snooze the same way (`FlushResult.settled`); native presses / presses with filtered doses force too. (3) Alarm planning reads one `GET /api/meds/doses?from=&to=`
+  (≤ 14 days; every day of the span cached, days between included); older server (400 / 404, or a 200 "due now" answer without
+  from / to — an old server IGNORES the params) → per-day `/meds/today`, re-tried after 6 h. (4) `POST /api/devices` sends
+  `alarms_local_until` with `alarms_local: true` = new plan field `doseCoveredUntil` (first MEDICINE alarm the cap left out; null
+  when none — reminders cut by the iOS cap don't count, else Web Push would double-ring covered doses); persisted with the
+  declaration (unknown → omitted). (5) Stale alarms: no ring past 60 min (web MISSED_AFTER_MIN; a snooze from its end) — Kotlin
+  `RING_LATE_MS` 60 min in `fire()` (was 3 h; later → silent "Missed", ≤ 12 h), `scheduleAll` shows undelivered dose alarms
+  3–12 h old as missed instead of dropping them; iOS foreground handler shows a > 60 min late alarm without sound and doesn't
+  raise the screen; the alarm screen judges by ÖRZA's clock (`now` of its answer + skew — the live case was a phone clock off
+  after days), and when every open dose is missed it silences the ring, says "Missed medicine(s)", no buzz, Take / Skip stay;
+  dates on every non-today dose ("9:00 pm yesterday", "on Tue, 27 Oct"); offline alarm keeps a lapsed snooze "due" (web
+  doseStatus). (6) Rebalance at the floor: `isAtFloor` / `isBelowFloor` / `trimTile` / `floorNote` in rebalance/types.ts (web
+  RebalancePlanView wording), PRINCIPLES[0] updated. Tests: test:alarms 55/55 (new `alarm-doses.test.ts`, 21), new
+  `npm run test:rebalance` 9/9, test:steps 241/241, typecheck + lint clean. Kotlin edits are uncompiled (Gradle = the check).
+  Device checks for the next step: 409 on Today (snooze a dose taken on the web) → "Taken" at once + no re-ring 10 min later;
+  queued offline snooze sent late → server snooze_until = press + 10; server devices doc shows alarms_local_until (null on
+  Android); logcat `/meds/doses?from=` once per sync instead of per-day `/meds/today`; an alarm due > 60 min ago (Doze /
+  `adb shell date` jump) → silent "Missed", alarm screen with the date; rebalance plan at the floor.

@@ -10,6 +10,10 @@
  * first press. Leaving for the rest of the app asks for the phone's unlock first. Offline, the alarm is rebuilt from the
  * data on this phone and the presses are queued (`features/alarm/api`). `?test=<id>` is the "Test alarm" demo: same
  * look, records nothing.
+ *
+ * Missed doses: when every open dose is already missed on ÖRZA's terms (more than 60 min past its time or its snooze's
+ * end — judged by ÖRZA's clock, so a phone clock that was off can't make old doses ring) the screen doesn't ring: it
+ * silences the alarm and shows them as missed, still with Take / Skip. A dose that isn't from today shows its date.
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -23,8 +27,9 @@ import { isValidInstant, useAlarmActions, useAlarmDoses, type HandledDose } from
 import { alarmKeysFor, useAlarmRinging } from '@/features/alarm/ringing';
 import { useMedsTimezone } from '@/features/meds/api';
 import { MedPhoto } from '@/features/meds/MedPhoto';
-import { clockIn, doseKey, formatTime12, isOpen, medicineTitle, todayIn } from '@/features/meds/shared';
+import { clockIn, doseDayText, doseKey, formatTime12, isOpen, medicineTitle, todayIn } from '@/features/meds/shared';
 import type { DoseAction, DoseItem } from '@/features/meds/types';
+import { isPastRinging } from '@/lib/alarms/doses';
 import { utcToZoned } from '@/lib/alarms/schedule';
 import { testAlarmDetails, testAlarmKey } from '@/lib/alarms/test';
 import { errorMessage } from '@/lib/api';
@@ -35,14 +40,14 @@ import { Button, EnergyRing, Icon, IconButton, Orb, Screen, Text, toast } from '
 
 const AUTO_CLOSE_MS = 1400;
 
-/** Wall clock in the member's timezone, refreshed every 15 s. */
-function useClock(tz: string): string {
-  const [clock, setClock] = useState(() => clockIn(tz));
+/** Wall clock in the member's timezone and the instant it was read (epoch ms), refreshed every 15 s. */
+function useClock(tz: string): { clock: string; now: number } {
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const t = setInterval(() => setClock(clockIn(tz)), 15_000);
+    const t = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(t);
-  }, [tz]);
-  return clock;
+  }, []);
+  return { clock: clockIn(tz, new Date(now)), now };
 }
 
 const toMedicines = () => router.dismissTo('/medicines');
@@ -89,11 +94,12 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
   const q = useAlarmDoses(at, user?.id ?? null);
   const offline = !!q.data?.offline;
   const tz = q.data?.tz ?? memberTz;
-  const clock = useClock(tz);
+  const { clock, now } = useClock(tz);
   const { act, takeAll, handled, pendingFor, anyPending } = useAlarmActions(tz, offline);
   const { raisedByAlarm, dismiss, silence, close, leave } = useAlarmRinging({ at, test: null, ringing });
   const [takingAll, setTakingAll] = useState(false);
   const buzzed = useRef(false);
+  const silencedMissed = useRef(false);
   // With Reduce Motion, Reanimated leaves a view with a layout transition where it was when its siblings change size —
   // no layout transitions then (the rows just move).
   const reduceMotion = useReducedMotion();
@@ -113,6 +119,12 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
   const mode = q.data?.mode ?? 'due';
   const lead = open[0];
   const alarmKeys = alarmKeysFor(q.data?.doses ?? [], at, med).join('|');
+  // ÖRZA's clock (its `now` when the doses loaded, moved on by the phone's): a phone clock that was off — a phone
+  // back on after days, an emulator snapshot — must not make old doses look due.
+  const serverNow = loaded ? now + clockSkew(q.data?.now, q.dataUpdatedAt) : now;
+  const isMissed = (d: DoseItem) => isPastRinging(d, serverNow);
+  const missedOnly = open.length > 0 && open.every(isMissed);
+  const today = todayIn(tz);
 
   // Opened by a tap on the alarm: its notification goes now. Raised by the ringing alarm: it stays until handled.
   useEffect(() => {
@@ -126,10 +138,17 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
 
   // A firm buzz when the alarm opens with something to take (Phase C adds sound + the notification).
   useEffect(() => {
-    if (buzzed.current || !open.length) return;
+    if (buzzed.current || !open.length || missedOnly) return;
     buzzed.current = true;
     haptics.warning();
-  }, [open.length]);
+  }, [open.length, missedOnly]);
+
+  // Rung for doses ÖRZA already counts as missed: no sound — they show as missed (the alarm stays quietly in the shade).
+  useEffect(() => {
+    if (!missedOnly || !raisedByAlarm || silencedMissed.current) return;
+    silencedMissed.current = true;
+    silence();
+  }, [missedOnly, raisedByAlarm, silence]);
 
   // Everything handled here → celebrate briefly, then close.
   useEffect(() => {
@@ -233,16 +252,26 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
     );
   } else {
     const several = open.length > 1;
-    const when = lead.status === 'missed' ? `Was due at ${formatTime12(lead.local_time)}` : `Scheduled ${formatTime12(lead.local_time)}`;
+    const day = doseDayText(lead.local_date, today);
+    const time = `${formatTime12(lead.local_time)}${day ? ` ${day}` : ''}`;
+    let when: string;
+    if (several) {
+      if (missedOnly) when = `${open.length} medicines missed at ${time}`;
+      else if (mode === 'at') when = `${open.length} medicines at ${time}`;
+      else when = day ? `${open.length} medicines due since ${time}` : `${open.length} medicines due now`;
+    } else {
+      when = isMissed(lead) ? `Was due at ${time}` : `Scheduled ${time}`;
+    }
+    const heading = missedOnly ? (several ? 'Missed medicines' : 'Missed medicine') : 'Time for your medicine';
     body = (
       <>
-        <Animated.View entering={FadeIn.duration(320)} style={styles.top} accessible accessibilityRole="header" accessibilityLabel={`Time for your medicine. It's ${clock}.`}>
+        <Animated.View entering={FadeIn.duration(320)} style={styles.top} accessible accessibilityRole="header" accessibilityLabel={`${heading}. ${when}. It's ${clock}.`}>
           <Text variant="eyebrow" tone="heroSubtle">
-            Time for your medicine
+            {heading}
           </Text>
           <Text style={styles.clock}>{clock}</Text>
           <Text variant="small" tone="heroMuted">
-            {several ? `${open.length} medicines ${mode === 'at' ? `at ${formatTime12(lead.local_time)}` : 'due now'}` : when}
+            {when}
           </Text>
         </Animated.View>
 
@@ -271,6 +300,7 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
               key={doseKey(d)}
               dose={d}
               tz={tz}
+              missed={isMissed(d)}
               primary={i === 0}
               pending={pendingFor(d)}
               onAct={(a) => {
@@ -301,10 +331,16 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
   }
 
   return (
-    <AlarmFrame live={open.length > 0} onClose={onClose}>
+    <AlarmFrame live={open.length > 0 && !missedOnly} onClose={onClose}>
       {body}
     </AlarmFrame>
   );
+}
+
+/** ÖRZA's clock minus the phone's (ms) from an answer's `now` and when it arrived; 0 when unknown. */
+function clockSkew(serverNow: string | undefined, receivedAt: number): number {
+  const t = serverNow ? Date.parse(serverNow) : NaN;
+  return Number.isFinite(t) && receivedAt > 0 ? t - receivedAt : 0;
 }
 
 function AlarmFrame({ live, label = 'ÖRZA · Medicine alarm', onClose, children }: { live: boolean; label?: string; onClose: () => void; children: ReactNode }) {
@@ -344,7 +380,7 @@ function OfflineNote({ slow }: { slow: boolean }) {
  */
 function TestAlarm({ test, ringing }: { test: string; ringing: boolean }) {
   const tz = useMedsTimezone();
-  const clock = useClock(tz);
+  const { clock } = useClock(tz);
   const { raisedByAlarm, dismiss, silence, close } = useAlarmRinging({ at: null, test, ringing });
   const [dose] = useState<DoseItem>(() => {
     const details = testAlarmDetails(test);

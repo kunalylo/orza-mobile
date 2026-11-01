@@ -10,6 +10,8 @@ export interface AlarmDoseHandlers {
   snoozed(doses: { medId: string; scheduledFor: string }[], until: number): void;
   /** ÖRZA confirmed a Take / Snooze / Skip done in the app, pressed at `pressedAt` (epoch ms). */
   saved(log: SavedDoseLog, pressedAt: number): void;
+  /** ÖRZA refused a Skip / Snooze done in the app: the dose was already taken (409 `dose_already_taken`). */
+  taken(doses: { medId: string; scheduledFor: string }[]): void;
 }
 
 let handlers: AlarmDoseHandlers | null = null;
@@ -31,6 +33,18 @@ export function alarmSnoozePressed(doses: { medId: string; scheduledFor: string 
 export function alarmDoseSaved(log: SavedDoseLog, pressedAt: number): void {
   try {
     handlers?.saved(log, pressedAt);
+  } catch {
+    // the next alarm sync fetches it anyway
+  }
+}
+
+/**
+ * ÖRZA answered a Skip / Snooze done in the app with 409 `dose_already_taken`: the dose is taken. The engine keeps
+ * that for the planner, drops queued presses for it and takes back the snooze re-ring it may already have set.
+ */
+export function alarmDoseAlreadyTaken(doses: { medId: string; scheduledFor: string }[]): void {
+  try {
+    handlers?.taken(doses);
   } catch {
     // the next alarm sync fetches it anyway
   }

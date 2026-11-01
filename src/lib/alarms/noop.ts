@@ -12,6 +12,7 @@ export function createNoopAdapter(name: PlatformAdapter['name'] = 'none'): Platf
     maxScheduled: 0,
     schedule: async () => ({ scheduled: 0 }),
     snoozeNow: async () => undefined,
+    withdraw: async () => undefined,
     cancelAll: async () => undefined,
     dismiss: async () => undefined,
     refreshShowing: async () => undefined,

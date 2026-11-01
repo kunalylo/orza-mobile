@@ -7,7 +7,7 @@ import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
 import { MedPhoto } from '@/features/meds/MedPhoto';
-import { clockIn, formatTime12, SNOOZE_MINUTES, statusDetail, TIMING_INSTRUCTION } from '@/features/meds/shared';
+import { clockIn, doseDayText, formatTime12, SNOOZE_MINUTES, statusDetail, TIMING_INSTRUCTION, todayIn } from '@/features/meds/shared';
 import type { DoseAction, DoseItem } from '@/features/meds/types';
 import { colors, fonts, radii, spacing } from '@/theme';
 import { Button, Icon, PressableScale, Text, type IconName } from '@/ui';
@@ -29,7 +29,22 @@ function takeLabel(dose: string): string {
   return /^[0-9½¼¾]/.test(dose) && dose.length <= 18 ? `Take ${dose}` : 'Take now';
 }
 
-function StatusPill({ dose, tz }: { dose: DoseItem; tz: string }) {
+/** "9:00 pm", or with its day when the dose isn't from today ("9:00 pm yesterday", "9:00 pm on Mon, 27 Oct"). */
+function doseTime(dose: DoseItem, tz: string): string {
+  const day = doseDayText(dose.local_date, todayIn(tz));
+  return `${formatTime12(dose.local_time)}${day ? ` ${day}` : ''}`;
+}
+
+function StatusPill({ dose, tz, missed }: { dose: DoseItem; tz: string; missed: boolean }) {
+  if (missed) {
+    return (
+      <View style={[styles.pill, styles.pillMissed]}>
+        <Text variant="caption" color="#FFB4A8">
+          Missed · was due at {doseTime(dose, tz)}
+        </Text>
+      </View>
+    );
+  }
   if (dose.status === 'snoozed' && dose.snooze_until) {
     return (
       <View style={[styles.pill, styles.pillInfo]}>
@@ -40,20 +55,21 @@ function StatusPill({ dose, tz }: { dose: DoseItem; tz: string }) {
       </View>
     );
   }
-  if (dose.status === 'missed') {
-    return (
-      <View style={[styles.pill, styles.pillMissed]}>
-        <Text variant="caption" color="#FFB4A8">
-          Was due at {formatTime12(dose.local_time)}
-        </Text>
-      </View>
-    );
-  }
   if (dose.status === 'upcoming') {
     return (
       <View style={[styles.pill, styles.pillNeutral]}>
         <Text variant="caption" tone="heroMuted">
-          Due at {formatTime12(dose.local_time)}
+          Due at {doseTime(dose, tz)}
+        </Text>
+      </View>
+    );
+  }
+  // Due, but from another day (a dose late last night, a snooze that ran past midnight): say which day.
+  if (doseDayText(dose.local_date, todayIn(tz))) {
+    return (
+      <View style={[styles.pill, styles.pillNeutral]}>
+        <Text variant="caption" tone="heroMuted">
+          Was due at {doseTime(dose, tz)}
         </Text>
       </View>
     );
@@ -64,6 +80,7 @@ function StatusPill({ dose, tz }: { dose: DoseItem; tz: string }) {
 export function AlarmDoseCard({
   dose,
   tz,
+  missed,
   primary,
   pending,
   onAct,
@@ -71,6 +88,8 @@ export function AlarmDoseCard({
 }: {
   dose: DoseItem;
   tz: string;
+  /** Missed on ÖRZA's terms (the screen judges it by ÖRZA's clock); default: the dose's status says so. */
+  missed?: boolean;
   /** The first medicine on the alarm — larger photo and title. */
   primary: boolean;
   pending?: DoseAction;
@@ -104,7 +123,7 @@ export function AlarmDoseCard({
       />
 
       <View style={styles.info}>
-        <StatusPill dose={dose} tz={tz} />
+        <StatusPill dose={dose} tz={tz} missed={missed ?? dose.status === 'missed'} />
         <Text style={[styles.name, !primary && styles.nameSmall]} accessibilityRole="header">
           {dose.name}
           {dose.strength ? <Text style={styles.strength}>{`  ${dose.strength}`}</Text> : null}

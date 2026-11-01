@@ -13,6 +13,10 @@
  * - The declaration is kept in SecureStore (cleared on sign-out) and loaded before the FIRST registration of a launch:
  *   otherwise every cold start — an alarm launching the app, an iOS background run — would first tell the server
  *   `alarms_local: false` until the engine re-declares, and the member's browsers could ring the same dose too.
+ * - With `alarms_local: true` goes `alarms_local_until` (web batch 1): the end of the medicine alarms this phone has set
+ *   (ISO), or null when they aren't cut short (the engine's `doseCoveredUntil`) — ÖRZA's Web Push rings the doses
+ *   after it. Unknown (a declaration stored by an older build) → left out, so the server keeps what it has. An older
+ *   server ignores the field.
  */
 import * as Localization from 'expo-localization';
 
@@ -56,9 +60,15 @@ export interface RegisterOptions {
   pushToken?: string | null;
   /** The phone rings medicine alarms itself. Omit to keep the value last declared (false until Phase C). */
   alarmsLocal?: boolean;
+  /**
+   * With `alarmsLocal: true`: the medicine alarms on this phone end here (epoch ms); null = not cut short. Omit to keep
+   * the value last declared.
+   */
+  alarmsLocalUntil?: number | null;
 }
 
-type Declaration = { pushToken: string | null; alarmsLocal: boolean };
+/** `alarmsLocalUntil` undefined = not known (left out of the request). */
+type Declaration = { pushToken: string | null; alarmsLocal: boolean; alarmsLocalUntil?: number | null };
 
 const MIN_INTERVAL_MS = 10 * 60 * 1000;
 const UNDECLARED: Declaration = { pushToken: null, alarmsLocal: false };
@@ -88,7 +98,13 @@ function loadDeclaration(): Promise<void> {
       .then(([stored, userId]) => {
         // Only this member's, and only when nothing was declared meanwhile in this launch (that one is newer).
         if (!stored || typeof stored.alarmsLocal !== 'boolean' || !userId || stored.userId !== userId || declared !== UNDECLARED) return;
-        declared = { pushToken: typeof stored.pushToken === 'string' && stored.pushToken ? stored.pushToken : null, alarmsLocal: stored.alarmsLocal };
+        declared = {
+          pushToken: typeof stored.pushToken === 'string' && stored.pushToken ? stored.pushToken : null,
+          alarmsLocal: stored.alarmsLocal,
+          ...(stored.alarmsLocalUntil === null || (typeof stored.alarmsLocalUntil === 'number' && Number.isFinite(stored.alarmsLocalUntil))
+            ? { alarmsLocalUntil: stored.alarmsLocalUntil }
+            : {}),
+        };
       })
       .catch(() => undefined);
   }
@@ -116,6 +132,9 @@ async function send(gen: number): Promise<AppDeviceView | null> {
       timezone: deviceTimeZone(),
       alarms_local: sent.alarmsLocal,
     };
+    if (sent.alarmsLocal && sent.alarmsLocalUntil !== undefined) {
+      body.alarms_local_until = sent.alarmsLocalUntil === null ? null : new Date(sent.alarmsLocalUntil).toISOString();
+    }
     if (sent.pushToken) body.push_token = sent.pushToken;
     const res = await api.post<{ device: AppDeviceView }>('/devices', body, { timeoutMs: 15_000 });
     if (gen !== generation) return null;
@@ -126,6 +145,11 @@ async function send(gen: number): Promise<AppDeviceView | null> {
   } catch {
     return null;
   }
+}
+
+/** A usable `alarmsLocalUntil`: a finite epoch ms (whole seconds) or null; anything else → null (no limit). */
+function validUntil(v: number | null): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v / 1000) * 1000 : null;
 }
 
 /**
@@ -139,11 +163,14 @@ export function registerDevice(opts: RegisterOptions & { force?: boolean } = {})
 }
 
 function registerNow(opts: RegisterOptions & { force?: boolean }): Promise<AppDeviceView | null> {
+  const until = opts.alarmsLocalUntil === undefined ? declared.alarmsLocalUntil : validUntil(opts.alarmsLocalUntil);
   const next: Declaration = {
     pushToken: opts.pushToken === undefined ? declared.pushToken : opts.pushToken || null,
     alarmsLocal: opts.alarmsLocal ?? declared.alarmsLocal,
+    ...(until !== undefined ? { alarmsLocalUntil: until } : {}),
   };
-  const changed = next.pushToken !== declared.pushToken || next.alarmsLocal !== declared.alarmsLocal;
+  const changed =
+    next.pushToken !== declared.pushToken || next.alarmsLocal !== declared.alarmsLocal || next.alarmsLocalUntil !== declared.alarmsLocalUntil;
   if (changed) {
     declared = next;
     dirty = true;

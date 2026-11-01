@@ -13,7 +13,12 @@
  *   ≥ 1 alarm. Everything else declares false. A permission that can't be READ changes nothing (alarms and the last
  *   declaration stay). Sign-out cleanup lives in `./cleanup`.
  * - Dose presses: a snooze / skip never applies to a dose already taken / skipped (`openDosesFor`); a snooze done in the
- *   app rings again at once (`ringAgainAfterSnooze`); logs ÖRZA confirmed are kept for the planner (`./recent`).
+ *   app rings again at once (`ringAgainAfterSnooze`); logs ÖRZA confirmed are kept for the planner (`./recent`). A
+ *   snooze / skip ÖRZA answers with "already taken" (409, in the app or from the queue) marks the dose taken here,
+ *   drops its queued presses and takes back its re-ring (`dosesAlreadyTaken`, `withdrawSnoozes` + a forced re-plan).
+ * - Dose logs: one `GET /api/meds/doses?from=&to=` for the days due a refresh; an older server (400 / 404, or an
+ *   answer without from / to) gets one `/api/meds/today?date=` per day (`fetchDayLogs`).
+ * - `alarms_local_until` = the end of the medicine alarms set (`doseCoveredUntil`; null when the cap cut none).
  */
 import type { QueryClient } from '@tanstack/react-query';
 import { AppState } from 'react-native';
@@ -29,6 +34,7 @@ import type { PublicUser } from '@/lib/types';
 
 import { alarmAdapter, type AdapterStatus, type AlarmActionEvent, type DoseRef, type NativeAlarmAction } from './adapter';
 import { setAlarmDoseHandlers } from './bridge';
+import { doseRangeSpan, parseDoseRange, takenDoseLog } from './doses';
 import { attachAlarmPhotos, cachedAlarmPhotoUri } from './photos';
 import {
   doseStateKey,
@@ -41,11 +47,21 @@ import {
   withInAppSnoozes,
   type AlarmPlan,
 } from './plan';
-import { enqueueDoseActions, flushDoseQueue, pendingDoseActions, supersedeQueuedDose } from './queue';
+import { enqueueDoseActions, flushDoseQueue, pendingDoseActions, supersedeQueuedDose, type FlushResult } from './queue';
 import { cachedDoseLogs, mergeRecentDoseLogs, noteSavedDoseLog, type SavedDoseLog } from './recent';
 import { addDays, isQuietAt, safeTimeZone, utcToZoned, validQuietHours } from './schedule';
 import { loadAlarmCache, saveAlarmCache, type AlarmCache, type AlarmSettings } from './store';
-import { isoOf, type AlarmPlanItem, type DoseActionKind, type PendingDoseAction, type PlanDoseState, type PlanMedication, type PlanReminder, type QuietDose } from './types';
+import {
+  isoOf,
+  snoozeAlarmKey,
+  type AlarmPlanItem,
+  type DoseActionKind,
+  type PendingDoseAction,
+  type PlanDoseState,
+  type PlanMedication,
+  type PlanReminder,
+  type QuietDose,
+} from './types';
 
 /* ───────────────────────────── Tunables ───────────────────────────── */
 
@@ -259,7 +275,8 @@ export async function checkAlarmsOnForeground(): Promise<void> {
   const native = await alarmAdapter.takeNativeActions().catch((): NativeAlarmAction[] => []);
   if (native.length) {
     enqueueDoseActions(userId, openNativeActions(userId, native).map(fromNative));
-    requestAlarmSync('action', { delayMs: 300 });
+    // Forced: a native Snooze set its own re-ring, which must go if its dose turned out to be handled already.
+    requestAlarmSync('action', { delayMs: 300, force: true });
     return;
   }
   const status = await alarmAdapter.status().catch(() => null);
@@ -270,9 +287,19 @@ export async function checkAlarmsOnForeground(): Promise<void> {
   if (isDirty() || Date.now() - (state.lastSyncAt ?? 0) > FOREGROUND_THROTTLE_MS) {
     requestAlarmSync('foreground', { delayMs: 800 });
   } else if (pendingDoseActions(userId).length) {
-    void flushDoseQueue({ userId, queryClient: foreground?.queryClient ?? null }).then((r) => {
-      if (r.kept > 0) retryQueuedActions(userId);
-    });
+    void flushDoseQueue({ userId, queryClient: foreground?.queryClient ?? null }).then((r) => afterFlush(userId, r));
+  }
+}
+
+/**
+ * After a queue flush outside a sync: presses still waiting are retried; snoozes ÖRZA already had as taken lose their
+ * re-ring (withdrawn, then a forced re-plan — an unchanged plan would leave it on the phone).
+ */
+function afterFlush(userId: string, r: FlushResult): void {
+  if (r.kept > 0) retryQueuedActions(userId);
+  if (r.settled.length) {
+    withdrawSnoozes(r.settled);
+    requestAlarmSync('action', { force: true, delayMs: 300 });
   }
 }
 
@@ -291,9 +318,7 @@ function retryQueuedActions(userId: string): void {
     queueRetry = null;
     const app = foreground;
     if (app?.user.id !== userId || AppState.currentState !== 'active' || !pendingDoseActions(userId).length) return;
-    void flushDoseQueue({ userId, queryClient: app.queryClient }).then((r) => {
-      if (r.kept > 0) retryQueuedActions(userId);
-    });
+    void flushDoseQueue({ userId, queryClient: app.queryClient }).then((r) => afterFlush(userId, r));
   }, QUEUE_RETRY_MS);
 }
 
@@ -312,7 +337,8 @@ export function recordAlarmAction(event: AlarmActionEvent): boolean {
     userId,
     doses.map((d) => ({ medId: d.medId, scheduledFor: d.scheduledFor, action, snoozeMinutes: event.snoozeMinutes, createdAt: event.at }))
   );
-  requestAlarmSync('action', { delayMs: 300 });
+  // Forced when some doses were left out: the platform's own snooze re-ring covered them too.
+  requestAlarmSync('action', { delayMs: 300, force: doses.length < event.doses.length });
   return true;
 }
 
@@ -389,6 +415,38 @@ function recentInAppSnoozes(now: number): AlarmPlanItem[] {
   return [...inAppSnoozes.values()].map((s) => s.item);
 }
 
+/**
+ * Takes back the snooze re-rings this phone set for these doses (ÖRZA has them taken / skipped): the in-app ones
+ * (`ringAgainAfterSnooze`) and a native Snooze's single-medicine re-ring. The caller re-plans (forced).
+ */
+function withdrawSnoozes(doses: DoseRef[]): void {
+  if (!doses.length) return;
+  const ids = new Set(doses.map((d) => doseStateKey(d.medId, d.scheduledFor)));
+  const keys = new Set(doses.map((d) => snoozeAlarmKey(d.scheduledFor, [d.medId])));
+  for (const [key, s] of inAppSnoozes) {
+    if (!(s.item.doses ?? []).some((d) => ids.has(doseStateKey(d.medId, d.scheduledFor)))) continue;
+    inAppSnoozes.delete(key);
+    keys.add(key);
+  }
+  void alarmAdapter.withdraw([...keys]).catch(() => undefined);
+}
+
+/**
+ * ÖRZA answered a Skip / Snooze done in the app with 409 "already taken": the dose is taken. Keep that for the planner
+ * (and the alarm buttons' filter), drop queued presses for it, take back its snooze re-ring and re-plan.
+ */
+function dosesAlreadyTaken(doses: DoseRef[]): void {
+  const userId = foreground?.user.id;
+  if (!userId || !doses.length) return;
+  const now = Date.now();
+  for (const d of doses) {
+    noteSavedDoseLog(userId, takenDoseLog(d.medId, d.scheduledFor), now);
+    supersedeQueuedDose(userId, d.medId, d.scheduledFor, now);
+  }
+  withdrawSnoozes(doses);
+  requestAlarmSync('action', { force: true, delayMs: 300 });
+}
+
 /** ÖRZA confirmed a dose action done in the app: keep its log for the planner, drop older queued presses for it. */
 function doseActionSaved(log: SavedDoseLog, pressedAt: number): void {
   const userId = foreground?.user.id;
@@ -452,11 +510,12 @@ async function resolveSession(): Promise<Session | null> {
   return user?.id ? { userId: user.id, user } : null;
 }
 
-async function declare(alarmsLocal: boolean, reason: SyncReason, stale: () => boolean) {
+/** `until`: with `alarmsLocal`, the end of the medicine alarms on the phone (null = not cut short). */
+async function declare(alarmsLocal: boolean, reason: SyncReason, stale: () => boolean, until: number | null = null) {
   // Signed out meanwhile: the device registration was reset for the next account — don't leave this one's claim in it.
   if (stale() || !getSessionToken()) return;
   setState({ alarmsLocal });
-  const registration = registerDevice({ alarmsLocal });
+  const registration = registerDevice(alarmsLocal ? { alarmsLocal, alarmsLocalUntil: until } : { alarmsLocal });
   // A headless run must finish the request before the OS ends the task; the app doesn't need to wait.
   if (reason === 'background') await registration;
 }
@@ -484,6 +543,10 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
     if (native.length) enqueueDoseActions(userId, openNativeActions(userId, native).map(fromNative));
     const flushed = await flushDoseQueue({ userId, queryClient });
     if (flushed.kept > 0) retryQueuedActions(userId);
+    // Presses dropped (e.g. a snooze ÖRZA had as taken): their re-ring may be on the phone although this plan equals
+    // the last one — take it back and schedule anyway.
+    withdrawSnoozes(flushed.settled);
+    const force = !!opts.force || flushed.dropped > 0 || native.length > 0;
 
     // 2. Can this phone ring alarms at all? A status that can't be read right now changes nothing: the alarms and the
     //    last declaration stay (taking it for "not allowed" would cancel every alarm).
@@ -563,7 +626,7 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
     );
     const hash = planHash(items);
     const unchanged =
-      !opts.force && !!lastScheduled && lastScheduled.hash === hash && lastScheduled.statusKey === statusKey && now - lastScheduled.at < RESCHEDULE_EVERY_MS;
+      !force && !!lastScheduled && lastScheduled.hash === hash && lastScheduled.statusKey === statusKey && now - lastScheduled.at < RESCHEDULE_EVERY_MS;
     let scheduled = lastScheduled?.count ?? 0;
     if (!unchanged) {
       try {
@@ -598,7 +661,7 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
 
     // 9. Tell the server whether this phone rings the medicine alarms (it then skips their Web Push). Silenced alarms
     //    (shade / Notification Center only) don't count: nobody would notice them.
-    await declare(status.exact !== false && !status.silenced && scheduled > 0, opts.reason, stale);
+    await declare(status.exact !== false && !status.silenced && scheduled > 0, opts.reason, stale, plan.doseCoveredUntil);
     return result({ ok: true, scheduled, offline: data.offline, ...(unchanged ? { skipped: 'unchanged' as const } : {}) });
   } catch (e) {
     return result({ ok: false, scheduled: state.scheduled, error: errorMessage(e, "Couldn't update the alarms.") });
@@ -738,21 +801,15 @@ async function loadData(session: Session, cache: AlarmCache, stale: () => boolea
   });
   dirty.all = false;
   for (const d of toFetch) dirty.dates.delete(d);
-  let next = 0;
-  const worker = async () => {
-    while (next < toFetch.length) {
-      const date = toFetch[next++];
-      try {
-        const res = await medsApi.today(date);
-        cache.days[date] = { at: now, doses: actedStates(res.doses ?? []) };
-      } catch {
-        dirty.dates.add(date); // try again next time
-        if (date === today) offline = true;
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(DAY_FETCH_CONCURRENCY, toFetch.length) }, worker));
+  const fetched = toFetch.length ? await fetchDayLogs(toFetch, settings.tz, now) : {};
   if (stale()) return { error: 'stale' };
+  // The range brings the days between the asked ones too: every day of the window it returned is fresh now.
+  for (const [date, doses] of Object.entries(fetched)) if (dates.includes(date)) cache.days[date] = { at: now, doses };
+  for (const date of toFetch) {
+    if (fetched[date]) continue;
+    dirty.dates.add(date); // try again next time
+    if (date === today) offline = true;
+  }
   // Logs ÖRZA confirmed after a day was fetched (or while its fetch failed) win over that day's older copy.
   mergeRecentDoseLogs(cache, (iso) => utcToZoned(new Date(iso), settings.tz).date);
   for (const d of Object.keys(cache.days)) if (!dates.includes(d)) delete cache.days[d];
@@ -760,6 +817,45 @@ async function loadData(session: Session, cache: AlarmCache, stale: () => boolea
 
   const doseStates = dates.flatMap((d) => cache.days[d]?.doses ?? []);
   return { data: { meds, reminders, settings, doseStates, offline } };
+}
+
+/** An older server (no `?from=&to=`) is asked again after this long — it may be updated while the app runs. */
+const RANGE_RETRY_MS = 6 * 3_600_000;
+let rangeUnsupportedUntil = 0;
+
+/**
+ * The acted dose logs of these local days: one `GET /meds/doses?from=&to=` (every day of its span comes back, empty or
+ * not). An older server — 400 / 404, or the "due now" answer without from / to — gets one `/meds/today?date=` per
+ * day instead (3 at a time). Days that couldn't be fetched are left out (fetched again next time).
+ */
+async function fetchDayLogs(dates: string[], tz: string, now: number): Promise<Record<string, PlanDoseState[]>> {
+  const span = now >= rangeUnsupportedUntil ? doseRangeSpan(dates) : null;
+  if (span) {
+    try {
+      const res = await api.get<unknown>(`/meds/doses?from=${span.from}&to=${span.to}`, { timeoutMs: 20_000 });
+      const days = parseDoseRange(res, span, (iso) => utcToZoned(new Date(iso), tz).date);
+      if (days) return days;
+    } catch (e) {
+      // Offline / server trouble: nothing this time (the per-day calls would fail the same way).
+      if (!(e instanceof ApiError && (e.status === 400 || e.status === 404))) return {};
+    }
+    rangeUnsupportedUntil = now + RANGE_RETRY_MS;
+  }
+  const out: Record<string, PlanDoseState[]> = {};
+  let next = 0;
+  const worker = async () => {
+    while (next < dates.length) {
+      const date = dates[next++];
+      try {
+        const res = await medsApi.today(date);
+        out[date] = actedStates(res.doses ?? []);
+      } catch {
+        // left out: fetched again next time
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(DAY_FETCH_CONCURRENCY, dates.length) }, worker));
+  return out;
 }
 
 /** Refill alerts the last schedule put on the phone whose time has come = delivered (once per local day). */
@@ -782,7 +878,7 @@ function photoIdsToKeep(meds: PlanMedication[]): string[] {
 
 // Dose presses from the medicine screens (`./bridge`) and the doses an alarm's buttons may still act on (iOS filters
 // before it schedules a Snooze's re-ring). Registered when the engine loads — the app entry loads it at start.
-setAlarmDoseHandlers({ snoozed: ringAgainAfterSnooze, saved: doseActionSaved });
+setAlarmDoseHandlers({ snoozed: ringAgainAfterSnooze, saved: doseActionSaved, taken: dosesAlreadyTaken });
 alarmAdapter.setActionFilter((action, doses) => {
   const userId = foreground?.user.id;
   return userId ? openDosesFor(userId, action, doses) : doses;

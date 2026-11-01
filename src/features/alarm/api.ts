@@ -8,16 +8,20 @@
  * phone (`recordAlarmAction`) and sent as soon as ÖRZA is reachable again. A press whose POST fails for lack of a
  * connection is queued the same way, so it is never lost.
  * Snooze sets the re-ring on the phone at once (`alarmSnoozePressed`), before the POST — the screen closes itself and
- * the phone may lock (and the app be suspended) long before the next alarm sync would get there.
+ * the phone may lock (and the app be suspended) long before the next alarm sync would get there. Every press goes to
+ * ÖRZA with its own time (`acted_at`, and `snooze_until` = press + 10 min).
+ * A Skip / Snooze ÖRZA refuses because the dose was already taken elsewhere (409 `dose_already_taken`) settles the
+ * dose as taken (calm toast, no error) and the alarm engine takes back the re-ring it set.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 
-import { isStaleDoseError, medsApi, medsKeys } from '@/features/meds/api';
+import { isDoseAlreadyTaken, isStaleDoseError, medsApi, medsKeys } from '@/features/meds/api';
 import { emitDoseEvent } from '@/features/meds/events';
-import { clockIn, doseKey, SNOOZE_MINUTES, withAction } from '@/features/meds/shared';
+import { asTaken, clockIn, doseKey, SNOOZE_MINUTES, withAction } from '@/features/meds/shared';
 import type { DoseAction, DoseItem, DueResponse } from '@/features/meds/types';
-import { alarmDoseSaved, alarmSnoozePressed } from '@/lib/alarms/bridge';
+import { alarmDoseAlreadyTaken, alarmDoseSaved, alarmSnoozePressed } from '@/lib/alarms/bridge';
+import { snoozeEndOf } from '@/lib/alarms/doses';
 import { recordAlarmAction } from '@/lib/alarms/sync';
 import { doseAlarmKey } from '@/lib/alarms/types';
 import { api, ApiError, errorMessage } from '@/lib/api';
@@ -173,12 +177,12 @@ export function useAlarmActions(tz: string, offline = false) {
     if (inflight.current.has(key)) return false;
     const pressedAt = Date.now();
     // The re-ring goes on the phone now — online or not, whatever happens to the request.
-    if (action === 'snooze') alarmSnoozePressed([{ medId: d.medication_id, scheduledFor: d.scheduled_for }], pressedAt + SNOOZE_MINUTES * 60_000);
+    if (action === 'snooze') alarmSnoozePressed([{ medId: d.medication_id, scheduledFor: d.scheduled_for }], snoozeEndOf(pressedAt, SNOOZE_MINUTES));
     if (offline) return queued(d, action, opts.quiet);
     inflight.current.add(key);
     setPending((p) => ({ ...p, [key]: action }));
     try {
-      const log = await medsApi.dose(d, action);
+      const log = await medsApi.dose(d, action, { pressedAt });
       alarmDoseSaved(log, pressedAt);
       const updated = withAction(d, action, log);
       setHandled((h) => ({ ...h, [key]: updated }));
@@ -198,6 +202,18 @@ export function useAlarmActions(tz: string, offline = false) {
     } catch (e) {
       // No connection: keep the press on the phone (sent later) rather than lose it.
       if (isNoConnection(e)) return queued(d, action, opts.quiet);
+      if (isDoseAlreadyTaken(e)) {
+        // Taken elsewhere meanwhile (web, Today screen, another phone): it collapses as taken — no error.
+        setHandled((h) => ({ ...h, [key]: asTaken(d) }));
+        alarmDoseAlreadyTaken([{ medId: d.medication_id, scheduledFor: d.scheduled_for }]);
+        refreshScreens(d, 'take');
+        emitDoseEvent({ type: 'dose-updated', medId: d.medication_id, at: d.scheduled_for });
+        if (!opts.quiet) {
+          haptics.soft();
+          toast.info(`${d.name} — already marked as taken`);
+        }
+        return true;
+      }
       if (isStaleDoseError(e)) {
         setHandled((h) => ({ ...h, [key]: { ...d, gone: true } }));
         emitDoseEvent({ type: 'meds-changed', medId: d.medication_id });

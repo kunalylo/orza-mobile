@@ -46,13 +46,14 @@ internal object AlarmExecutor {
 /** What happens when an alarm is due, stops ringing, or is handled elsewhere. */
 internal object AlarmFiring {
   /**
-   * AlarmManager fired `key` (scheduled for `at`). Ignored if it was cancelled or re-scheduled meanwhile. Much too late
-   * (held back for hours): a dose alarm no longer rings but shows silently as missed, so the dose isn't lost unseen.
+   * AlarmManager fired `key` (scheduled for `at`). Ignored if it was cancelled or re-scheduled meanwhile. More than
+   * RING_LATE_MS late (process dead / Doze for long, the phone asleep or off): the dose is missed on ÖRZA's terms — a
+   * dose alarm no longer rings but shows silently as missed (up to MISSED_SHOW_MS), so the dose isn't lost unseen.
    */
   fun fire(context: Context, key: String, at: Long) {
     val item = AlarmStore.takePending(context, key, at) ?: return
     val late = System.currentTimeMillis() - item.at
-    if (late > AlarmConst.MAX_LATE_MS) {
+    if (late > AlarmConst.RING_LATE_MS) {
       Log.w(AlarmConst.TAG, "$key fired ${late / 60_000} min late — shown as missed")
       if (late <= AlarmConst.MISSED_SHOW_MS) showMissed(context, item)
       return

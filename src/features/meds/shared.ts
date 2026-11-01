@@ -112,6 +112,18 @@ export function formatDateShort(date: string, refYear?: number): string {
   return refYear && refYear !== y ? `${base} ${y}` : base;
 }
 
+/**
+ * The day of a dose for texts that read "at 9:00 pm …": '' on `today`, "yesterday", "tomorrow", else
+ * "on Mon, 27 Oct" (with the year when it isn't `today`'s). Alarm screens show it whenever a dose isn't from today.
+ */
+export function doseDayText(date: string, today: string): string {
+  if (!isISODate(date) || !isISODate(today) || date === today) return '';
+  const diff = daysBetweenISO(today, date);
+  if (diff === -1) return 'yesterday';
+  if (diff === 1) return 'tomorrow';
+  return `on ${WEEKDAYS[weekdayOf(date)]}, ${formatDateShort(date, Number(today.slice(0, 4)))}`;
+}
+
 /** "2026-09-30" → "Wednesday, 30 September" */
 export function formatDateLong(date: string): string {
   const [y, m, d] = (date || '').split('-').map(Number);
@@ -255,6 +267,14 @@ export function withAction(d: DoseItem, action: DoseAction, log?: Partial<DoseLo
     acted_at: log?.acted_at || new Date().toISOString(),
     snooze_until: action === 'snooze' ? log?.snooze_until || new Date(Date.now() + SNOOZE_MINUTES * 60000).toISOString() : undefined,
   };
+}
+
+/**
+ * A dose ÖRZA says is already taken (a Skip / Snooze refused with 409 `dose_already_taken`). When it was taken isn't
+ * known here: no `acted_at` — the row reads "Taken" until the refetch brings the time.
+ */
+export function asTaken(d: DoseItem): DoseItem {
+  return { ...d, status: 'taken', acted_at: undefined, snooze_until: undefined };
 }
 
 /** "Taken at 8:04 pm", "Snoozed until 8:20 pm", "Due now"… */

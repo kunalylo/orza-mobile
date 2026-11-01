@@ -6,12 +6,14 @@
  * - Idempotent on the server: the dose log is an upsert and "take" lowers the stock only once.
  * - Kept on network trouble / 5xx / 401 / 408 / 429 (sent later, in order); dropped on any other 4xx (the dose or the
  *   medicine changed — `isStaleDoseError` — or the action is invalid), and after 72 h.
+ * - Sent with the press time (`acted_at`) and, for a snooze, its end (`snooze_until` = press + 10 min) — see
+ *   `./doses` `doseActionBody`: a Snooze pressed with the app asleep and synced 8 min later still re-rings 10 min after
+ *   the press (the plan follows the server's `snooze_until`). An older server ignores both; it gets the minutes still
+ *   left (`snooze_minutes`, at least 5) and starts the snooze on arrival.
  * - A snooze that couldn't be sent before its 10 minutes were up is dropped: the phone already re-rang it, and sending
  *   it late would make the server start a fresh snooze (and the phone ring again later).
- * - A snooze sent later than it was pressed asks only for the minutes still left (the server starts the snooze when it
- *   receives it and can't take the press time): otherwise a Snooze pressed with the app asleep and synced 8 min later
- *   would re-ring 18 min after the press instead of 10 (the plan follows the server's `snooze_until`). At least 5 min —
- *   the server's minimum.
+ * - 409 `dose_already_taken` (a Skip / Snooze that lost to a Take made elsewhere): the dose is taken — the press is
+ *   dropped, the taken log is kept for the planner (`./recent`), so the next plan drops its snooze re-ring.
  * - A snooze / skip is checked against ÖRZA first (`GET /api/meds/doses?at=`): it is dropped when the dose was taken or
  *   skipped meanwhile (the server would overwrite that — a taken dose turning "snoozed" rings again and invites a second
  *   dose), or when ÖRZA's log is clearly newer than the press (`pendingWins`).
@@ -27,7 +29,8 @@ import { emitDoseEvent } from '@/features/meds/events';
 import type { DoseItem, DueResponse } from '@/features/meds/types';
 import { api, ApiError } from '@/lib/api';
 
-import { DEFAULT_SNOOZE_MINUTES, pendingWins, serverDoseState } from './plan';
+import { isDoseAlreadyTaken, snoozeEndOf, snoozeMinutesOf, takenDoseLog } from './doses';
+import { pendingWins, serverDoseState } from './plan';
 import { noteSavedDoseLog } from './recent';
 import { deleteJsonFile, readJsonFile, writeJsonFile } from './store';
 import { isoOf, type PendingDoseAction } from './types';
@@ -35,15 +38,6 @@ import { isoOf, type PendingDoseAction } from './types';
 const QUEUE_FILE = 'orza-alarm-queue.json';
 const MAX_AGE_MS = 72 * 3_600_000;
 const MAX_ENTRIES = 200;
-const MIN_SNOOZE_MINUTES = 5;
-const MAX_SNOOZE_MINUTES = 60;
-
-/** Minutes of a queued snooze still to run at `now` (to the nearest whole minute, within the server's 5–60). */
-export function remainingSnoozeMinutes(a: Pick<PendingDoseAction, 'snoozeMinutes' | 'createdAt'>, now: number): number {
-  const total = a.snoozeMinutes ?? DEFAULT_SNOOZE_MINUTES;
-  const left = Number.isFinite(a.createdAt) ? Math.round((a.createdAt + total * 60_000 - now) / 60_000) : total;
-  return Math.min(MAX_SNOOZE_MINUTES, Math.max(MIN_SNOOZE_MINUTES, Math.min(total, left)));
-}
 
 interface QueueFile {
   version: 1;
@@ -87,7 +81,7 @@ export function enqueueDoseActions(userId: string, actions: PendingDoseAction[])
       medId: a.medId,
       scheduledFor: isoOf(a.scheduledFor),
       action: a.action,
-      ...(a.action === 'snooze' ? { snoozeMinutes: Math.min(60, Math.max(5, Math.round(a.snoozeMinutes ?? DEFAULT_SNOOZE_MINUTES))) } : {}),
+      ...(a.action === 'snooze' ? { snoozeMinutes: snoozeMinutesOf(a.snoozeMinutes) } : {}),
       createdAt: Number.isFinite(a.createdAt) ? a.createdAt : Date.now(),
     };
     const prev = byDose.get(doseId(entry));
@@ -125,6 +119,11 @@ export interface FlushResult {
   sent: number;
   dropped: number;
   kept: number;
+  /**
+   * Snooze / Skip presses dropped because ÖRZA already has the dose taken (or skipped): a snooze re-ring this phone set
+   * for them must go (the engine withdraws it and re-plans).
+   */
+  settled: { medId: string; scheduledFor: string }[];
 }
 
 let flushing: Promise<FlushResult> | null = null;
@@ -140,7 +139,7 @@ export function flushDoseQueue(opts: { userId: string; queryClient?: QueryClient
 }
 
 async function doFlush({ userId, queryClient }: { userId: string; queryClient?: QueryClient | null }): Promise<FlushResult> {
-  const result: FlushResult = { sent: 0, dropped: 0, kept: 0 };
+  const result: FlushResult = { sent: 0, dropped: 0, kept: 0, settled: [] };
   const q = load(userId);
   if (!q.actions.length) return result;
   const sentEvents: { medId: string; at: string }[] = [];
@@ -164,7 +163,7 @@ async function doFlush({ userId, queryClient }: { userId: string; queryClient?: 
 
   for (const a of q.actions) {
     const now = Date.now();
-    const snoozeOver = a.action === 'snooze' && now - a.createdAt > (a.snoozeMinutes ?? DEFAULT_SNOOZE_MINUTES) * 60_000;
+    const snoozeOver = a.action === 'snooze' && now > snoozeEndOf(a.createdAt, a.snoozeMinutes);
     if (now - a.createdAt > MAX_AGE_MS || snoozeOver) {
       done.add(a);
       result.dropped++;
@@ -179,17 +178,30 @@ async function doFlush({ userId, queryClient }: { userId: string; queryClient?: 
           // Taken / skipped meanwhile, or done again later elsewhere: sending it would undo that.
           done.add(a);
           result.dropped++;
+          if (server.finished) result.settled.push({ medId: a.medId, scheduledFor: a.scheduledFor });
           sentEvents.push({ medId: a.medId, at: a.scheduledFor });
           continue;
         }
       }
-      const minutes = a.action === 'snooze' ? remainingSnoozeMinutes(a, Date.now()) : (a.snoozeMinutes ?? DEFAULT_SNOOZE_MINUTES);
-      const log = await medsApi.dose({ medication_id: a.medId, scheduled_for: a.scheduledFor }, a.action, minutes);
+      const log = await medsApi.dose({ medication_id: a.medId, scheduled_for: a.scheduledFor }, a.action, {
+        pressedAt: a.createdAt,
+        snoozeMinutes: a.snoozeMinutes,
+      });
       noteSavedDoseLog(userId, log);
       done.add(a);
       result.sent++;
       sentEvents.push({ medId: a.medId, at: a.scheduledFor });
     } catch (e) {
+      if (isDoseAlreadyTaken(e)) {
+        // Taken elsewhere meanwhile (web, Today screen, another phone): it IS taken — say so to the planner (its
+        // snooze re-ring goes with the next plan) and the screens; nothing to retry.
+        noteSavedDoseLog(userId, takenDoseLog(a.medId, a.scheduledFor));
+        done.add(a);
+        result.dropped++;
+        result.settled.push({ medId: a.medId, scheduledFor: a.scheduledFor });
+        sentEvents.push({ medId: a.medId, at: a.scheduledFor });
+        continue;
+      }
       if (keepForLater(e)) break; // offline / server trouble: the rest waits too, in order
       done.add(a); // the dose or medicine changed, or the action is invalid — nothing to retry
       result.dropped++;

@@ -36,8 +36,15 @@ internal object AlarmConst {
   const val RING_LIMIT_MS = 10 * 60_000L
 
   /**
-   * An alarm that fires later than this (deep Doze / inexact fallback) no longer rings — it is shown silently as
-   * missed. Also how long a due alarm that hasn't been delivered yet is kept when the plan is replaced.
+   * An alarm handled later than this after its time (a dose's time, or a snooze's end) no longer rings — it is shown
+   * silently as missed. ÖRZA counts an unanswered dose as missed 60 min after its time (web `MISSED_AFTER_MIN`, JS
+   * `MISSED_AFTER_MS`), so a phone that was off / asleep for hours never rings a chain of old doses.
+   */
+  const val RING_LATE_MS = 60 * 60_000L
+
+  /**
+   * How long a due alarm that hasn't been delivered yet (deep Doze / inexact fallback) is kept when the plan is replaced
+   * or the clock changes — set again, it fires at once and rings (≤ RING_LATE_MS late) or shows as missed.
    */
   const val MAX_LATE_MS = 3 * 60 * 60_000L
 

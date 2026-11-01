@@ -211,6 +211,10 @@ function createAndroidAdapter(): PlatformAdapter {
       await OrzaAlarms.scheduleOne(toNativeAlarm(item));
     },
 
+    // No single-alarm cancel in the module: `scheduleAll` (the engine's forced re-plan right after) never keeps a
+    // `scheduleOne` re-ring the plan doesn't carry.
+    withdraw: async () => undefined,
+
     cancelAll: () => OrzaAlarms.cancelAll(),
 
     dismiss: (key: string) => OrzaAlarms.dismiss(key),
