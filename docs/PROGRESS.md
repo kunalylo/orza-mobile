@@ -539,3 +539,9 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
   health data" (#phone-app) + settings copy — describes the v2 app → USER REVIEW before push, publish with v2; B7
   `scripts/check-steps-modes.mjs` 25/25 on the local server (`ORZA_CHECK_TOKEN` to reuse an account). localtest now runs `a3e3c0e`
   (DB backup scratchpad backend/orza-db.before-steps-b.json). Not pushed (plan V4).
+- 2026-11-01: Phase J review fixes DONE (`1b47a39`, 13/13 findings real and fixed, test:steps 241/241). Plan ticks B1–B7 (`963c513`).
+  Running now: `wf_bb87f5d9-a6e` = (1) phone adaptation to the LIVE web batch 1 (acted_at/snooze_until, 409 = taken, one doses-range
+  read, alarms_local_until, no ringing for doses already missed + date on non-today alarms, rebalance floor tile/note), (2) steps v2
+  Phase N (native Android N1–N5 + Expo patch updates, rebuild in the build copy, install the DEV build on the emulator — replaces the
+  release-type test build — smoke test incl. the batch-1 changes), (3) two reviewers, (4) fix. Metro + localtest started by the
+  coordinator (preview_start orza-mobile-metro-local / orza-localtest); safety gate SAFE.
