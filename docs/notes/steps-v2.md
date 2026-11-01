@@ -1129,9 +1129,54 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
   - Known limit: a stepTracking phone on the phone path that grants HC later reads its still-pending past days from HC
     alone (S-A3 unsubscribes); where HC holds only another app's part of such a day, a reconcile can lower this phone's
     own earlier save. Small window: phone-only past days settle an hour after midnight.
-- [ ] **R3.** iOS config: app.json healthkit (`background: true`, `NSHealthUpdate… false`, share text), the motion
+- [x] **R3.** iOS config: app.json healthkit (`background: true`, `NSHealthUpdate… false`, share text), the motion
   string, `ios.privacyManifests`; `bridge.ios.ts` P5 types, `requestSteps`, `configureStepsBackground`.
-- [ ] **R4.** `reader.ios.ts`: HealthKit primary, the CMPedometer fallback by consent, `sinceAt`, health-empty detection.
+  - app.json exactly per §4.3 / §6 (iOS only: needs an iOS native build — D2 — and no Android rebuild). `expo config
+    --type introspect`: entitlements `healthkit` + `healthkit.background-delivery`, no `NSHealthUpdateUsageDescription`,
+    the §6 share / motion strings, the UserDefaults CA92.1 manifest; `expo-doctor` 21/21. P10 stays open for V5: the
+    first upload may get ITMS-90683 (the HealthKit binary references share APIs) → restore §6's update string. Also
+    for §9 / D3: `UIBackgroundModes` is `fetch` (expo-task-manager's plugin) + `processing`, not `processing` alone.
+  - `bridge.ios.ts`: `READ_TYPES` = StepCount, RestingHeartRate, BodyMass, SleepAnalysis; `readDays` reads those four
+    and `requestAccess` reports them; `requestSteps()` → StepCount only, `{granted: sheet answered, background: false}`;
+    `configureStepsBackground(on)` → kingstinct `configureBackgroundTypes([StepCount], hourly)` / `clearBackgroundTypes()`,
+    never throws. Deviations (shared contract, so every platform compiles): `requestSteps` is now required (R1's
+    note; `reader.android.ts` loses its existence check); new required `stepsGranted()` (iOS: the StepCount sheet was
+    answered — R4 needs "store ON" without a query; Android: `READ_STEPS` readable) and `configureStepsBackground` (false
+    on Android / web). The bridge keeps no prefs: R4's reader keeps `hkBackground` and calls it only on a change —
+    kingstinct's `configure` tears the observer down and drops the JS `subscribeToChanges` callback.
+- [x] **R4.** `reader.ios.ts`: HealthKit primary, the CMPedometer fallback by consent, `sinceAt`, health-empty detection.
+  - Every decision is in a new pure `iosSources.ts` (`iosFeatures`, `iosStoreAccess`, `healthAsks`/`pedometerAsks`,
+    `askRanges`/`askAnswers`, `healthReading`/`pedometerReading`, `readingsByDate`, `iosDays`, `backgroundChange`; new
+    `steps-ios.test.ts`, 26 tests, listed in `test:steps`); `dayPlans` / `sinceRange` / `withSince` / `DayPlan` moved
+    from `androidSources.ts` to `shared.ts` (re-exported there, Android unchanged). The reader: ON per `plan.sourcesOn`
+    (consent = `ReadOptions.consent`, `{store: healthConnected, phone: true}` until R5a; "store granted" = the StepCount
+    sheet answered, `healthBridge.stepsGranted`). Apple Health: one `stepsBetween` batch per read (each day's total
+    over its read range — the whole day, or from the M9 floor — plus a base's count since, today and past days); 0 → no
+    reading (M0); a failed / skipped read → `storeUnread`. CMPedometer: the days whose read range starts within 7 days,
+    a real 0 kept, `complete` at e + 60 min, since per base. `access()` adds `firstAsk` / `store` / `features`;
+    `requestPermission('healthkit')` → `bridge.requestSteps` (`granted` = answered, `undetermined` when the sheet
+    couldn't open, never "denied": HealthKit can't tell). Health empty: `plan.healthEmpty` now treats a day read with
+    `storeUnread` (a locked phone) as no proof.
+  - Deviations: (1) a failed CMPedometer query also marks the day `storeUnread` (R2's rule for the Recording API: the
+    same lower bound). (2) The reader owns Apple Health's background delivery, like R2's Recording API subscription:
+    `prepare(tz, opts)` and every `readDays` set it up while the store is ON and clear it when it isn't (switch off, no
+    consent), HealthKit called only on a change (`backgroundChange` vs the prefs' `hkBackground`, kept only when HealthKit
+    took it); `reset()` (sign-out) clears it unconditionally after any decision in flight. So R5a/R5b never call
+    `configureStepsBackground` themselves. (3) Interim until R5a/R5b: an iPhone that connected Apple Health on the
+    Health screen (v1 consent default) gets background delivery set up before R5b's observer exists — those wake-ups do
+    nothing yet.
+  - For R5a / R5b / U2: `healthEmpty` means something only while Apple Health is ON (gate it on `sourcesOn` holding
+    `store`); R5b's observer subscribes at start when `hkBackground()` is true AND whenever it flips true in a running
+    session (store listeners: `subscribeStepsStore`), and drops its subscription when it flips false — a configure
+    after a clear tears the native observer down and loses the earlier JS callback. AI coach (coordinator decision,
+    header): the server builds the coach prompt from `tracking.steps` (`web:src/lib/coach.ts` `buildContext` →
+    `contextForPrompt`, and the coach's own "Steps today: X / Y" replies go back to the AI as chat history), so every
+    HealthKit-derived step this build saves reaches the AI provider. Needed before any iOS build goes to testers: a web
+    change (provenance — the phone sends `source` with each auto / reconcile save, which today's zod body already
+    strips harmlessly; the server keeps `steps_source` and the coach leaves the count out of the prompt and the
+    history for `apple_health` days — or B5 / a per-platform rule), or, if the web can't change first, R5a holds back
+    iOS automatic saves of Apple Health values behind a flag until the app-wide AI consent ships; R6's import without
+    `steps` closes the v1 path (`/api/health/import` → `mirrorIntoTracking`).
 - [ ] **R5a.** `sync.ts`: consent gate, `firstAsk`, the new save flow wiring, `setAutoSteps`.
 - [ ] **R5b.** `sync.ts`: background (snapshot refresh, past-day cap), sign-out (unsubscribe, `clearBackgroundTypes`,
   `deleteUserDays`); `healthkitObserver(.ios).ts` + the `index.ts` import.

@@ -64,7 +64,8 @@ export interface DayReading {
    * `READ_HEALTH_DATA_IN_BACKGROUND`, a locked iPhone, a failed query) — not the same as "no data": the day may be
    * missing the store's count. A past day then saves nothing and isn't final (§2.9); today still raises. Android also
    * sets it when the phone's Recording API is ON (subscribed) but its read failed or Play services couldn't answer
-   * (R2): the same lower bound, for the phone's count.
+   * (R2), and the iPhone when CMPedometer is ON but its query failed (R4): the same lower bound, for the phone's count.
+   * Never proof that Apple Health is empty (`plan.healthEmpty`).
    */
   storeUnread?: boolean;
 }
@@ -134,7 +135,10 @@ export interface StepsAccess {
   phonePermission: StepPermission;
   /** Steps v2, filled by the readers from R2 / R4 on: what Today asks first. */
   firstAsk?: FirstAsk;
-  /** Steps v2 (R2 / R4): the health store's steps access. */
+  /**
+   * Steps v2 (R2 / R4): the health store's steps access. iPhone: `granted` = the StepCount sheet was answered (HealthKit
+   * never says whether reading was allowed); never `needs_install`.
+   */
   store?: StoreAccess;
   /** Steps v2, Android (R2): the Recording API's status. */
   recording?: RecordingStatus;
@@ -196,7 +200,7 @@ export interface ReadOptions {
   sinceAt?: Record<string, number>;
   /**
    * Steps v2 (R2 / R4 / R5a): the member's consents; nothing is read for a kind without one. Until R5a passes it, the
-   * Android reader takes `{store: healthConnected, phone: true}` (the v1 behaviour).
+   * readers take `{store: healthConnected, phone: true}` (the v1 behaviour).
    */
   consent?: ReadConsent;
   /** Steps v2 (M9): no source reads before this instant (a shared phone: this member's consent). */
@@ -212,17 +216,22 @@ export interface StepsReader {
   access(): Promise<StepsAccess>;
   /**
    * Shows the system permission prompt (when it still can) for `kind` — default `phone`, the phone's own counter
-   * (Android `hc`: Health Connect's steps + background, R2; iPhone `healthkit`: R4). Only the OS permission: the
-   * member's consent is the caller's (R5a). A kind this platform doesn't have → `unavailable`.
+   * (Android `hc`: Health Connect's steps + background, R2; iPhone `healthkit`: Apple Health's StepCount sheet,
+   * `granted` = answered, `undetermined` when it couldn't open, R4). Only the OS permission: the member's consent is the
+   * caller's (R5a). A kind this platform doesn't have → `unavailable`.
    */
   requestPermission(kind?: StepsAsk): Promise<StepPermission>;
   /**
    * Starts background counting where the platform needs it. Android: the next read subscribes to the Recording API
    * again (once per prepare); with `opts` the phone's counter is set up now (Recording API or sampler, S-A2…S-A4),
-   * else by that read. Cheap, never throws.
+   * else by that read. iPhone: with `opts`, Apple Health's background delivery is set up while the store is ON for the
+   * member and cleared otherwise (§4.3) — every read does the same. Cheap, never throws.
    */
   prepare(timeZone: string, opts?: Pick<ReadOptions, 'consent' | 'healthConnected'>): Promise<void>;
-  /** Stops background counting and forgets raw samples — Android: also the Recording API subscription (sign-out). Never throws. */
+  /**
+   * Sign-out: stops background counting and forgets raw samples — Android: also the Recording API subscription;
+   * iPhone: Apple Health's background delivery (`clearBackgroundTypes`). Never throws.
+   */
   reset(): Promise<void>;
   /**
    * Every source's reading for each of `dates` (a date nothing could read has no sources, or no `DayReading`). Which

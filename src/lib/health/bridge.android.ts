@@ -287,6 +287,20 @@ export const healthBridge: HealthBridge = {
     }
   },
 
+  /** `READ_STEPS` is granted (the steps reader uses `healthFeatures().stepsGranted`, one native call for all). */
+  async stepsGranted() {
+    try {
+      return (await readableTypes(await client())).has('Steps');
+    } catch {
+      return false;
+    }
+  },
+
+  /** Nothing to set up: Health Connect's background reading is a permission, asked with `requestSteps`. */
+  async configureStepsBackground() {
+    return false;
+  },
+
   /**
    * Health screen › Disconnect: every ÖRZA permission in Health Connect goes. Takes effect when the app process restarts
    * (RNHC 4.1: until then `getGrantedPermissions` and reads go on as before) — so the member's consent is what stops

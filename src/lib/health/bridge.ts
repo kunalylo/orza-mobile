@@ -27,6 +27,12 @@ export const healthBridge: HealthBridge = {
   async requestSteps() {
     return { granted: false, background: false };
   },
+  async stepsGranted() {
+    return false;
+  },
+  async configureStepsBackground() {
+    return false;
+  },
   async revokeAll() {
     return false;
   },

@@ -16,10 +16,13 @@
 import type { HealthAvailability, StepRange, StepsTotal } from '../health/types';
 
 import { coversWholeDay, dailyStepCounts, dayComplete, stepsInRange, type StepSample } from './counter';
-import { applyCoverFloor, hcCoverFrom } from './merge';
+import { hcCoverFrom } from './merge';
 import { recordingDays, recordingRange, recordingWindow, type RecordingBucket, type RecordingRange } from './recording';
-import { dayBounds } from './shared';
+import { sinceRange, withSince, type DayPlan } from './shared';
 import type { DayReading, RecordingStatus, SinceCount, SourceReading, StepFeatures, StoreAccess } from './types';
+
+/** The member days to read and a base's count since (moved to `shared.ts` for the iPhone reader too). */
+export { dayPlans, sinceRange, withSince, type DayPlan } from './shared';
 
 /**
  * Health Connect data origins that record this phone's own steps all day: Health Connect's on-device count
@@ -27,44 +30,6 @@ import type { DayReading, RecordingStatus, SinceCount, SourceReading, StepFeatur
  * steps (M4) — elsewhere it may hold only a watch worn part of the day or a running app's workouts.
  */
 export const HC_PHONE_ORIGINS: ReadonlySet<string> = new Set(['android', 'com.sec.android.app.shealth', 'com.google.android.apps.fitness']);
-
-/* ───────────────────────────── Days ───────────────────────────── */
-
-/** One member day to read: [start, end) in the profile zone, and the part of it this member's steps come from. */
-export interface DayPlan {
-  date: string;
-  start: number;
-  end: number;
-  /**
-   * [from, to): from the day's start — or the shared phone's coverage floor (M9) — to its end or now. Null: nothing of
-   * the day may be read (it ended by the floor, or hasn't begun).
-   */
-  read: { from: number; to: number } | null;
-}
-
-export function dayPlans(dates: readonly string[], timeZone: string, now: number, coverFloor?: number | null): DayPlan[] {
-  return dates.map((date) => {
-    const day = dayBounds(date, timeZone);
-    const range = applyCoverFloor(day, coverFloor);
-    const to = Math.min(day.end, now);
-    return { date, ...day, read: range && to > range.start ? { from: range.start, to } : null };
-  });
-}
-
-/**
- * What a base's count since `at` needs (M5, S-R4) for a source covering `day` from `coverFrom`: nothing when there is
- * no base or the source covers only from `at` on (all of its count is after it); `range` null when nothing can be
- * after it (at or after the end of what is read: 0); else the range [at, to).
- */
-export function sinceRange(day: DayPlan, coverFrom: number, at: number | null | undefined): { at: number; range: StepRange | null } | null {
-  if (at == null || !Number.isFinite(at) || !day.read || at <= coverFrom) return null;
-  return { at, range: at < day.read.to ? { start: at, end: day.read.to } : null };
-}
-
-/** `reading` with its count since a base (`ReadOptions.sinceAt`). */
-export function withSince(reading: SourceReading, since: SinceCount): SourceReading {
-  return { ...reading, since };
-}
 
 /* ───────────────────────────── What this phone has (§2.2) ───────────────────────────── */
 

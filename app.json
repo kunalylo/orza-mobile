@@ -24,6 +24,14 @@
       },
       "infoPlist": {
         "NSCalendarsWriteOnlyAccessUsageDescription": "ÖRZA adds your medicine and wellness reminders to your calendar."
+      },
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          }
+        ]
       }
     },
     "android": {
@@ -118,7 +126,7 @@
       [
         "expo-sensors",
         {
-          "motionPermission": "ÖRZA counts your steps with your iPhone's motion sensors, so Today shows them without you typing anything."
+          "motionPermission": "ÖRZA uses your iPhone's motion data to count your steps when Apple Health has none, and saves each day's total to your ÖRZA account."
         }
       ],
       [
@@ -135,9 +143,9 @@
       [
         "@kingstinct/react-native-healthkit",
         {
-          "NSHealthShareUsageDescription": "ÖRZA reads steps, activity, sleep, heart rate, weight and water from Apple Health to personalise your targets and reports.",
-          "NSHealthUpdateUsageDescription": "ÖRZA only reads from Apple Health today. If it ever saves something, such as a weight you log, it will ask you first.",
-          "background": false
+          "NSHealthShareUsageDescription": "ÖRZA reads your steps, sleep, resting heart rate and weight from Apple Health to fill in Today and your Health trends. Only daily totals are saved to your ÖRZA account.",
+          "NSHealthUpdateUsageDescription": false,
+          "background": true
         }
       ]
     ],

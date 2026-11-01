@@ -85,7 +85,10 @@ export interface StepsTotal {
 export interface StepsGrant {
   /** Steps may be read (Health Connect `READ_STEPS`; on iPhone: the sheet was answered — HealthKit hides denials). */
   granted: boolean;
-  /** Android: reading in the background (`READ_HEALTH_DATA_IN_BACKGROUND`) is granted too. */
+  /**
+   * Android: reading in the background (`READ_HEALTH_DATA_IN_BACKGROUND`) is granted too. iPhone: always false — there
+   * is no such permission; background delivery is ÖRZA's own setup (`configureStepsBackground`).
+   */
   background: boolean;
 }
 
@@ -128,10 +131,24 @@ export interface HealthBridge {
    */
   stepsBetween(ranges: readonly StepRange[]): Promise<(StepsTotal | null)[]>;
   /**
-   * Steps v2: asks for steps only (P5) — Android: `READ_STEPS`, plus background reading where Health Connect offers it.
-   * Never throws (a store that can't be asked: nothing granted). Optional until the iPhone bridge has it (R3).
+   * Steps v2: asks for steps only (P5) — Android: `READ_STEPS`, plus background reading where Health Connect offers it;
+   * iPhone: Apple Health's StepCount (`granted` = the sheet was answered). Never throws (a store that can't be asked:
+   * nothing granted).
    */
-  requestSteps?(): Promise<StepsGrant>;
+  requestSteps(): Promise<StepsGrant>;
+  /**
+   * Steps may be read now, without asking (no UI): Android `READ_STEPS` is granted; iPhone the StepCount sheet was
+   * answered (HealthKit hides a refusal: its reads then simply find nothing). False when the store is missing / not
+   * ready. Never throws.
+   */
+  stepsGranted(): Promise<boolean>;
+  /**
+   * iPhone (§4.3): Apple Health wakes ÖRZA when new steps arrive, at most hourly, also after the app was closed
+   * (`on`: StepCount background delivery, kept natively across launches; off: cleared). True when HealthKit took the
+   * request. Android / elsewhere: false — there is nothing to set up (Health Connect's background reading is a
+   * permission, asked by `requestSteps`). Never throws.
+   */
+  configureStepsBackground(on: boolean): Promise<boolean>;
   /**
    * Removes every permission ÖRZA holds in the store (Health screen › Disconnect). Android: Health Connect revokes at
    * once, but this app process keeps reading as before until it restarts (a platform limit) — so the app's own

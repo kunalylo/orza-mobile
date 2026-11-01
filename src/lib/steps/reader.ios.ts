@@ -1,20 +1,45 @@
 /**
- * iPhone steps: Apple Health (when the member connected it on the Health screen — a statistics sum, iPhone + Apple
- * Watch counted once) and the iPhone's motion coprocessor through CMPedometer (expo-sensors; it records all day by
- * itself and keeps 7 days). Each source's reading goes out as is; `merge.ts` decides the day. Metro picks this file
- * on iOS only.
+ * iPhone steps (`docs/notes/steps-v2.md` §2.1): the sources that are ON for the member, each read for the member's days
+ * (profile zone) and handed on as is — `merge.ts` decides the day. The decisions are `iosSources.ts` (pure, tested);
+ * this file does the native calls. Metro picks it on iOS only.
+ *
+ * - S-I1 Apple Health (`health/bridge.ios.ts`, the primary source): with the member's store consent once the StepCount
+ *   sheet was answered — a statistics sum per day (iPhone + Apple Watch counted once, like the Health app) and a base's
+ *   count since its instant. A failed read (the phone locked: the store is encrypted) leaves the days unread (M5f).
+ * - S-I2 CMPedometer (expo-sensors, the motion coprocessor): only with the member's phone consent — the one-time
+ *   fallback offer when Apple Health has no steps, or an iPhone without HealthKit — and Motion & Fitness. 7 days.
+ * - §4.3: while Apple Health is ON, it wakes ÖRZA when new steps arrive (hourly at most, also after the app was
+ *   closed): set up when the store comes ON, cleared when it goes off and at sign-out (`reset`). The prefs keep what is
+ *   set up (`hkBackground`; R5b's observer subscribes by it).
+ * - M9: nothing from before a shared iPhone's coverage floor (`ReadOptions.coverFloor`).
+ * The member's consent comes in `ReadOptions.consent` (R5a); until then `{store: healthConnected, phone: true}`.
  */
 import { PermissionStatus } from 'expo';
 import { Pedometer } from 'expo-sensors';
 import { Linking } from 'react-native';
 
+import { safeTimeZone } from '../alarms/schedule';
 import { healthBridge } from '../health/bridge';
+import type { StepRange } from '../health/types';
 
-import { dayBounds, dayRanges } from './shared';
-import type { DayReading, SourceReading, StepPermission, StepsAccess, StepsReader } from './types';
-
-/** CMPedometer keeps this many days (older ranges return only what is left). */
-const PEDOMETER_DAYS_MS = 7 * 24 * 3_600_000;
+import {
+  askAnswers,
+  askRanges,
+  backgroundChange,
+  healthAsks,
+  healthReading,
+  iosDays,
+  iosFeatures,
+  iosStoreAccess,
+  pedometerAsks,
+  pedometerReading,
+  readingsByDate,
+  type DayRead,
+} from './iosSources';
+import { firstAsk, sourcesOn } from './plan';
+import { dayPlans, type DayPlan } from './shared';
+import { hkBackground, setHkBackground } from './store';
+import type { ReadConsent, ReadOptions, StepPermission, StepsAccess, StepsReader } from './types';
 
 async function phoneAvailable(): Promise<boolean> {
   try {
@@ -35,8 +60,68 @@ async function permission(): Promise<StepPermission> {
   }
 }
 
-async function pedometerSteps(range: { start: number; end: number }, now: number): Promise<number | null> {
-  if (!(range.end > range.start) || now - range.start > PEDOMETER_DAYS_MS) return null;
+async function healthAvailable(): Promise<boolean> {
+  try {
+    return (await healthBridge.availability()) === 'available';
+  } catch {
+    return false;
+  }
+}
+
+/** Everything the iPhone says about its step sources right now (never throws: each call has its default). */
+async function probe() {
+  const [store, answered, counter] = await Promise.all([healthAvailable(), healthBridge.stepsGranted(), phoneAvailable()]);
+  const phonePermission: StepPermission = counter ? await permission() : 'unavailable';
+  return { store, answered: store && answered, counter, phonePermission, features: iosFeatures(store, counter) };
+}
+
+const consentOf = (opts: Pick<ReadOptions, 'consent' | 'healthConnected'>): ReadConsent =>
+  opts.consent ?? { store: !!opts.healthConnected, phone: true };
+
+/* ───────────────────────────── Which sources run ───────────────────────────── */
+
+/** Bumped by `reset` (sign-out): a decision in flight stops before setting anything up again. */
+let generation = 0;
+/** Decisions (and sign-out's clearing) run one at a time: HealthKit's background setup must never race itself. */
+let deciding: Promise<unknown> = Promise.resolve();
+
+interface SourceState {
+  /** Apple Health is ON (S-I1). */
+  store: boolean;
+  /** CMPedometer is ON (S-I2). */
+  pedometer: boolean;
+}
+
+const NOTHING_ON: SourceState = { store: false, pedometer: false };
+
+/** Decide the sources that are ON for `consent` (§2.1) and set Apple Health's background delivery to match. Never throws. */
+function decideSources(consent: ReadConsent): Promise<SourceState> {
+  const run = deciding.then(() => decide(consent)).catch(() => NOTHING_ON);
+  deciding = run;
+  return run;
+}
+
+async function decide(consent: ReadConsent): Promise<SourceState> {
+  const gen = generation;
+  const p = await probe();
+  if (gen !== generation) return NOTHING_ON;
+  const on = sourcesOn(p.features, { consent, storeGranted: p.answered, phoneGranted: p.phonePermission === 'granted' });
+  const state = { store: on.includes('store'), pedometer: on.includes('pedometer') };
+  await applyBackground(state.store, gen);
+  return gen === generation ? state : NOTHING_ON;
+}
+
+/** §4.3: Apple Health's background delivery on while the store is ON — HealthKit is called only when that changes. */
+async function applyBackground(storeOn: boolean, gen: number) {
+  const change = backgroundChange(storeOn, hkBackground());
+  if (!change || gen !== generation) return;
+  // Kept only when HealthKit took it: a failed clear is tried again on the next decision.
+  if (await healthBridge.configureStepsBackground(change === 'configure')) setHkBackground(change === 'configure');
+}
+
+/* ───────────────────────────── Reading ───────────────────────────── */
+
+async function pedometerSteps(range: StepRange): Promise<number | null> {
   try {
     const r = await Pedometer.getStepCountAsync(new Date(range.start), new Date(range.end));
     return typeof r?.steps === 'number' && Number.isFinite(r.steps) ? r.steps : null;
@@ -45,18 +130,56 @@ async function pedometerSteps(range: { start: number; end: number }, now: number
   }
 }
 
+/** Apple Health's readings (S-I1, since): one batch of statistics sums for every day. */
+async function readHealth(days: readonly DayPlan[], opts: ReadOptions, now: number): Promise<Map<string, DayRead>> {
+  const asks = healthAsks(days, opts.sinceAt);
+  if (!asks.length) return new Map();
+  const totals = await healthBridge.stepsBetween(askRanges(asks)).catch(() => null);
+  const answers = askAnswers(asks, totals ? totals.map((t) => t?.steps ?? null) : null);
+  return readingsByDate(days, asks, answers, healthReading, now);
+}
+
+/** CMPedometer's readings (S-I2, since): the days it still holds. */
+async function readPedometer(days: readonly DayPlan[], opts: ReadOptions, now: number): Promise<Map<string, DayRead>> {
+  const asks = pedometerAsks(days, now, opts.sinceAt);
+  if (!asks.length) return new Map();
+  const counts = await Promise.all(askRanges(asks).map(pedometerSteps));
+  return readingsByDate(days, asks, askAnswers(asks, counts), pedometerReading, now);
+}
+
+/* ───────────────────────────── The reader ───────────────────────────── */
+
 export const stepsReader: StepsReader = {
   platform: 'ios',
   permissionName: 'Motion & Fitness',
   settingsPath: 'Settings › ÖRZA › Motion & Fitness',
 
   async access(): Promise<StepsAccess> {
-    if (!(await phoneAvailable())) return { phoneAvailable: false, phonePermission: 'unavailable' };
-    return { phoneAvailable: true, phonePermission: await permission() };
+    try {
+      const p = await probe();
+      return {
+        phoneAvailable: p.counter,
+        phonePermission: p.phonePermission,
+        firstAsk: firstAsk(p.features),
+        store: iosStoreAccess(p.store, p.answered),
+        features: p.features,
+      };
+    } catch {
+      return { phoneAvailable: false, phonePermission: 'unavailable' };
+    }
   },
 
-  async requestPermission() {
-    if (!(await phoneAvailable())) return 'unavailable';
+  /**
+   * `healthkit`: Apple Health's sheet with Steps only. `granted` = the sheet was answered — HealthKit never says whether
+   * reading was allowed (a refusal shows up as "Health has no steps", §2.2). A sheet that couldn't open: `undetermined`
+   * (nothing was asked). `phone`: Motion & Fitness. Android's `hc`: `unavailable`.
+   */
+  async requestPermission(kind = 'phone') {
+    if (kind === 'healthkit') {
+      if (!(await healthAvailable())) return 'unavailable';
+      return (await healthBridge.requestSteps()).granted ? 'granted' : 'undetermined';
+    }
+    if (kind !== 'phone' || !(await phoneAvailable())) return 'unavailable';
     try {
       await Pedometer.requestPermissionsAsync();
     } catch {
@@ -65,33 +188,37 @@ export const stepsReader: StepsReader = {
     return permission();
   },
 
-  async prepare() {
-    // The motion coprocessor counts on its own; nothing to start.
+  async prepare(_timeZone, opts) {
+    // The motion coprocessor and Apple Health count on their own; with the member's consent, Apple Health's background
+    // delivery is set up (or cleared) to match.
+    if (opts) await decideSources(consentOf(opts));
   },
 
   async reset() {
-    // Nothing stored on the phone by ÖRZA.
+    // Sign-out: Apple Health no longer wakes ÖRZA for this member's steps — after any decision in flight, so it can't
+    // set it up again afterwards. Cleared whatever the prefs say (they may be behind HealthKit's own record).
+    generation += 1;
+    const run = deciding.then(async () => {
+      if (await healthBridge.configureStepsBackground(false)) setHkBackground(false);
+    });
+    deciding = run.catch(() => undefined);
+    await deciding;
   },
 
   async readDays(dates, opts) {
-    const now = Date.now();
-    const ranges = dayRanges(dates, opts.timeZone, now);
-    const usePedometer = (await phoneAvailable()) && (await permission()) === 'granted';
-    const [health, phone] = await Promise.all([
-      opts.healthConnected ? healthBridge.stepsBetween(ranges).catch(() => ranges.map(() => null)) : Promise.resolve(ranges.map(() => null)),
-      usePedometer ? Promise.all(ranges.map((r) => pedometerSteps(r, now))) : Promise.resolve(ranges.map(() => null)),
-    ]);
-    return dates.map((date, i): DayReading => {
-      const day = dayBounds(date, opts.timeZone);
-      const sources: SourceReading[] = [];
-      // 0 from Apple Health also means "nothing readable" (HealthKit hides a denied read as no data, M0).
-      const hk = health[i]?.steps;
-      if (hk) sources.push({ source: 'apple_health', steps: hk, coverFrom: day.start, complete: now >= day.end });
-      // CMPedometer answers for the whole range it was asked (it records all day by itself).
-      const p = phone[i];
-      if (p != null) sources.push({ source: 'phone', counter: 'pedometer', steps: p, coverFrom: day.start, complete: now >= day.end });
-      return { date, ...day, sources };
-    });
+    try {
+      const now = Date.now();
+      const days = dayPlans(dates, safeTimeZone(opts.timeZone), now, opts.coverFloor);
+      const state = await decideSources(consentOf(opts));
+      // A read that throws all the same (each call has its own fallback) leaves every day it would read unread.
+      const [health, phone] = await Promise.all([
+        state.store ? readHealth(days, opts, now).catch(() => readingsByDate(days, healthAsks(days), [], healthReading, now)) : null,
+        state.pedometer ? readPedometer(days, opts, now).catch(() => readingsByDate(days, pedometerAsks(days, now), [], pedometerReading, now)) : null,
+      ]);
+      return iosDays(days, { health: health ?? undefined, phone: phone ?? undefined });
+    } catch {
+      return [];
+    }
   },
 };
 

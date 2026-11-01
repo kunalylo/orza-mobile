@@ -291,7 +291,7 @@ export const stepsReader: StepsReader = {
 
   async requestPermission(kind = 'phone') {
     if (kind === 'hc') {
-      if ((await availability()) !== 'available' || !healthBridge.requestSteps) return 'unavailable';
+      if ((await availability()) !== 'available') return 'unavailable';
       const grant = await healthBridge.requestSteps();
       if (!grant.granted) return 'denied'; // a refusal, or Health Connect's lockout after two (it can't be told apart)
       noteHcGrant();

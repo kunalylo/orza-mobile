@@ -218,7 +218,8 @@ export function sourcesOn(f: StepFeatures, s: SourceInputs): CountingSource[] {
  * readings; a 0 is no count, M0). A past day no longer read (final, M7 — after the first run only the newest few are)
  * counts by its record (`recordOf`): final with no store count when it settled (`noStore`). Then Today offers "Log
  * steps" and, once, the iPhone's motion — never "you denied": HealthKit hides a denied read as no data. A day neither
- * read nor settled that way isn't proof: false.
+ * read nor settled that way isn't proof: false — nor is a day read while Apple Health couldn't be (`storeUnread`: the
+ * phone was locked, a query failed; R4).
  */
 export function healthEmpty(today: string, days: readonly DayReading[], recordOf?: (date: string) => DayRecord | undefined): boolean {
   const byDate = new Map(days.map((d) => [d.date, d]));
@@ -226,7 +227,7 @@ export function healthEmpty(today: string, days: readonly DayReading[], recordOf
     const date = addDays(today, -i);
     const day = byDate.get(date);
     if (day) {
-      if (storeReading(day.sources)) return false;
+      if (day.storeUnread || storeReading(day.sources)) return false;
       continue;
     }
     const rec = i > 0 ? recordOf?.(date) : undefined;

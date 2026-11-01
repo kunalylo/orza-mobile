@@ -5,6 +5,13 @@
  *
  * HealthKit never tells an app whether *reading* was allowed (privacy): denied types simply return no samples. So
  * "connected" means the permission sheet was answered, and an empty first sync is reported to the user honestly.
+ *
+ * Steps v2 (`docs/notes/steps-v2.md`): ÖRZA reads only Steps, Sleep, Resting heart rate and Weight (P5) and writes
+ * nothing (no share types: app.json's `NSHealthUpdateUsageDescription` is off, P10). The Health screen asks for the
+ * four (`requestAccess`), Today's steps card for StepCount alone (`requestSteps`). Automatic steps read `stepsBetween`
+ * (a statistics sum per instant range: iPhone + Apple Watch counted once, like the Health app) and set up background
+ * delivery of new steps (`configureStepsBackground`, §4.3; the app.json entitlement comes from the plugin's
+ * `background: true`).
  */
 import type {
   QuantityTypeIdentifier,
@@ -15,7 +22,7 @@ import type {
 import { Linking } from 'react-native';
 
 import { DayCollector, datesSince, localDate, rangeStart, sleepMinutesByWakeDate, type SleepInterval } from './aggregate';
-import { HEALTH_METRICS, HealthNotAuthorizedError, type HealthBridge, type HealthMetric } from './types';
+import { HealthNotAuthorizedError, type HealthBridge, type HealthMetric, type StepsGrant } from './types';
 
 type HealthKit = typeof import('@kingstinct/react-native-healthkit');
 
@@ -31,16 +38,15 @@ function healthKit(): Promise<HealthKit> {
 const SLEEP = 'HKCategoryTypeIdentifierSleepAnalysis' as const;
 const STEPS = 'HKQuantityTypeIdentifierStepCount' as const;
 
-const READ_TYPES = [
-  'HKQuantityTypeIdentifierStepCount',
-  'HKQuantityTypeIdentifierActiveEnergyBurned',
-  'HKQuantityTypeIdentifierDistanceWalkingRunning',
-  'HKQuantityTypeIdentifierRestingHeartRate',
-  'HKQuantityTypeIdentifierHeartRate',
-  'HKQuantityTypeIdentifierBodyMass',
-  'HKQuantityTypeIdentifierDietaryWater',
-  SLEEP,
-] as const;
+/**
+ * What ÖRZA reads (P5). Active energy, distance, heart rate and water are no longer asked for or read: they were
+ * uploaded and shown nowhere. A member who answered the old, longer sheet has answered these four too.
+ */
+const READ_TYPES = [STEPS, 'HKQuantityTypeIdentifierRestingHeartRate', 'HKQuantityTypeIdentifierBodyMass', SLEEP] as const;
+/** The metrics READ_TYPES feed (HealthKit can't say which were allowed: all of them, `HealthAccessResult`). */
+const METRICS: HealthMetric[] = ['steps', 'resting_hr', 'weight_kg', 'sleep_minutes'];
+
+const NOTHING_GRANTED: StepsGrant = { granted: false, background: false };
 
 /** Sleep that ended on the first day of the window started the evening before. */
 const SLEEP_LOOKBACK_MS = 18 * 60 * 60 * 1000;
@@ -88,6 +94,11 @@ async function sleepIntervals(hk: HealthKit, start: Date, end: Date): Promise<Sl
   return out;
 }
 
+/** The StepCount sheet was answered (HealthKit throws / crashes on queries for a type that was never asked). */
+async function stepsAnswered(hk: HealthKit): Promise<boolean> {
+  return (await hk.getRequestStatusForAuthorization({ toRead: [STEPS] })) === hk.AuthorizationRequestStatus.unnecessary;
+}
+
 export const healthBridge: HealthBridge = {
   platform: 'ios',
   name: 'Apple Health',
@@ -115,7 +126,7 @@ export const healthBridge: HealthBridge = {
   async requestAccess() {
     const hk = await healthKit();
     const shown = await hk.requestAuthorization({ toRead: READ_TYPES });
-    return { granted: !!shown, metrics: shown ? [...HEALTH_METRICS] : [] };
+    return { granted: !!shown, metrics: shown ? [...METRICS] : [] };
   },
 
   async readDays(days) {
@@ -134,13 +145,9 @@ export const healthBridge: HealthBridge = {
     const latest: Pick = (r) => r.mostRecentQuantity?.quantity;
 
     const jobs: Promise<unknown>[] = [
-      dailyStatistic(hk, collector, 'steps', 'HKQuantityTypeIdentifierStepCount', 'cumulativeSum', 'count', sum, start, end),
-      dailyStatistic(hk, collector, 'active_kcal', 'HKQuantityTypeIdentifierActiveEnergyBurned', 'cumulativeSum', 'kcal', sum, start, end),
-      dailyStatistic(hk, collector, 'distance_km', 'HKQuantityTypeIdentifierDistanceWalkingRunning', 'cumulativeSum', 'km', sum, start, end),
+      dailyStatistic(hk, collector, 'steps', STEPS, 'cumulativeSum', 'count', sum, start, end),
       dailyStatistic(hk, collector, 'resting_hr', 'HKQuantityTypeIdentifierRestingHeartRate', 'discreteAverage', 'count/min', avg, start, end),
-      dailyStatistic(hk, collector, 'avg_hr', 'HKQuantityTypeIdentifierHeartRate', 'discreteAverage', 'count/min', avg, start, end),
       dailyStatistic(hk, collector, 'weight_kg', 'HKQuantityTypeIdentifierBodyMass', 'mostRecent', 'kg', latest, start, end),
-      dailyStatistic(hk, collector, 'water_ml', 'HKQuantityTypeIdentifierDietaryWater', 'cumulativeSum', 'mL', sum, start, end),
       sleepIntervals(hk, start, end).then((intervals) => {
         for (const [date, minutes] of sleepMinutesByWakeDate(intervals)) collector.set(date, 'sleep_minutes', minutes);
       }),
@@ -158,13 +165,13 @@ export const healthBridge: HealthBridge = {
     try {
       const hk = await healthKit();
       // Never query a type whose permission sheet wasn't answered (HealthKit throws / crashes on those).
-      const status = await hk.getRequestStatusForAuthorization({ toRead: [STEPS] });
-      if (status === hk.AuthorizationRequestStatus.shouldRequest) return none;
+      if (!(await stepsAnswered(hk))) return none;
       return await Promise.all(
         ranges.map(async (r) => {
           if (!(r.end > r.start)) return { steps: 0, origins: [] };
           try {
-            // A statistics sum: iPhone + Apple Watch steps counted once, like the Health app.
+            // A statistics sum: iPhone + Apple Watch steps counted once, like the Health app. No data → an empty
+            // response (0); a locked phone (the store is encrypted) → the query fails → null, never 0.
             const res = await hk.queryStatisticsForQuantity(STEPS, ['cumulativeSum'], {
               filter: { date: { startDate: new Date(r.start), endDate: new Date(r.end) } },
               unit: 'count',
@@ -178,6 +185,44 @@ export const healthBridge: HealthBridge = {
       );
     } catch {
       return none;
+    }
+  },
+
+  /**
+   * Today's steps card (§2.2 `healthkit`): the HealthKit sheet with Steps only (P5). `granted` = the sheet was
+   * answered — HealthKit never says whether reading was allowed (a refusal reads as "no steps", §2.2's "Health empty").
+   * Never throws.
+   */
+  async requestSteps() {
+    try {
+      const hk = await healthKit();
+      return { granted: !!(await hk.requestAuthorization({ toRead: [STEPS] })), background: false };
+    } catch {
+      return NOTHING_GRANTED; // Expo Go / a build without the module, or HealthKit unavailable (iPad)
+    }
+  },
+
+  async stepsGranted() {
+    try {
+      return await stepsAnswered(await healthKit());
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * §4.3: StepCount background delivery, hourly (iOS never delivers steps more often). kingstinct keeps the types in
+   * UserDefaults and registers the observer query natively at every launch (no AppDelegate change), calling
+   * HealthKit's completion handler itself; JS hears of a delivery through `subscribeToChanges` (R5b's observer).
+   * Configuring again tears the observer down and drops that JS callback: call it only when the setting changes.
+   * Off clears the stored types and stops the observer. Never throws.
+   */
+  async configureStepsBackground(on) {
+    try {
+      const hk = await healthKit();
+      return on ? await hk.configureBackgroundTypes([STEPS], hk.UpdateFrequency.hourly) : await hk.clearBackgroundTypes();
+    } catch {
+      return false;
     }
   },
 
