@@ -20,8 +20,8 @@ import type { TrackingDay } from '../../src/features/today/types';
 import { addDays, zonedToUtc } from '../../src/lib/alarms/schedule';
 import { dayStartMs } from '../../src/lib/steps/counter';
 import type { DayRecord } from '../../src/lib/steps/policy';
-import { applyManualSteps, saveDay, saveManualDay, type SaveDeps, type StepsAnswer, type StepsMode } from '../../src/lib/steps/save';
-import { forgetServerObservations, observeServerSteps } from '../../src/lib/steps/serverSeen';
+import { applyManualSteps, saveDay, saveManualDay, syncDay, type SaveDeps, type StepsAnswer, type StepsMode } from '../../src/lib/steps/save';
+import { forgetServerObservations, markerOf, markerRowOf, observeServerRow, observeServerSteps } from '../../src/lib/steps/serverSeen';
 import { dayBounds } from '../../src/lib/steps/shared';
 import type { DayReading, SourceReading } from '../../src/lib/steps/types';
 
@@ -46,6 +46,16 @@ const recording = (steps: number, coverFrom = S, extra: Partial<SourceReading> =
   coverFrom,
   ...extra,
 });
+const health = (steps: number, coverFrom = S): SourceReading => ({ source: 'apple_health', steps, coverFrom });
+const pedometer = (steps: number, coverFrom = S, extra: Partial<SourceReading> = {}): SourceReading => ({
+  source: 'phone',
+  counter: 'pedometer',
+  steps,
+  coverFrom,
+  ...extra,
+});
+/** A source's count after a base's `at` (what the reader measures for `ReadOptions.sinceAt`). */
+const after = (at: number, steps: number) => ({ since: { at, steps } });
 
 /** Day D read with this phone's sampler (`partialFrom`: it covers the day from then; `since`: its count after a base). */
 const phoneDay = (
@@ -72,56 +82,73 @@ let fakeIds = 0;
 /**
  * One member's step days on a fake server (`modes`: the v2 modes, else the old server) + a clock shared by the server
  * and the member's phones. `website(date, steps)` is a manual save made elsewhere; `set(date, steps)` a raw write by
- * another writer (on the old server, the website too: it has no marker).
+ * another writer (on the old server, the website too: it has no marker). With the modes a row carries its marker and
+ * `updated_at` (every write sets it), and — `editValue` — the edit's own number (`steps_edited_value`, B2).
  */
-function fakeServer(modes: boolean, start: number, initial: Record<string, number> = {}) {
+function fakeServer(modes: boolean, start: number, initial: Record<string, number> = {}, opts: { editValue?: boolean } = {}) {
   let clock = start;
   let hasModes = modes;
   let failure: unknown = null;
-  const rows = new Map<string, { steps: number; marker: string | null }>(Object.entries(initial).map(([d, steps]) => [d, { steps, marker: null }]));
+  type Row = { steps: number; marker: string | null; edited?: number; updated?: number };
+  const rows = new Map<string, Row>(Object.entries(initial).map(([d, steps]) => [d, { steps, marker: null }]));
   const posts: Post[] = [];
   const reads: string[] = [];
 
-  const row = (date: string) => rows.get(date) ?? { steps: 0, marker: null };
-  const tracking = (date: string): TrackingDay => ({
-    date,
-    steps: row(date).steps,
-    water_glasses: 0,
-    ...(hasModes ? { steps_edited_at: row(date).marker } : {}),
-  });
+  const row = (date: string): Row => rows.get(date) ?? { steps: 0, marker: null };
+  const write = (date: string, patch: Partial<Row>) => rows.set(date, { ...row(date), ...patch, updated: clock });
+  const tracking = (date: string): TrackingDay => {
+    const r = row(date);
+    if (!hasModes) return { date, steps: r.steps, water_glasses: 0 };
+    return {
+      date,
+      steps: r.steps,
+      water_glasses: 0,
+      steps_edited_at: r.marker,
+      ...(opts.editValue && r.marker ? { steps_edited_value: r.edited ?? null } : {}),
+      ...(r.updated != null ? { updated_at: new Date(r.updated).toISOString() } : {}),
+    };
+  };
 
   function answer(date: string, steps: number, mode: StepsMode, editRef: string | null, expect?: number): StepsAnswer {
     const r = row(date);
     if (!hasModes) {
-      rows.set(date, { ...r, steps }); // the old server: whatever the body says, it sets the count
+      write(date, { steps }); // the old server: whatever the body says, it sets the count
       return { tracking: tracking(date) };
     }
     if (mode === 'manual') {
-      rows.set(date, { steps, marker: new Date(clock).toISOString() });
+      write(date, { steps, marker: new Date(clock).toISOString(), edited: steps });
       return { tracking: tracking(date), applied: true };
     }
     if (r.marker !== editRef) return { tracking: tracking(date), applied: false, reason: 'edited' };
     if (mode === 'auto' && !(r.steps < steps)) return { tracking: tracking(date), applied: false, reason: 'not_higher' };
     if (mode === 'reconcile' && r.steps !== expect) return { tracking: tracking(date), applied: false, reason: 'changed' };
-    rows.set(date, { ...r, steps });
+    write(date, { steps });
     return { tracking: tracking(date), applied: true };
   }
 
-  /** One phone of the member: its own day records; its server observations are kept under its own id. */
+  /**
+   * One phone of the member: its own day records (`signOut` deletes them, as a sign-out or a purged cache does) and its
+   * prefs' last automatic save (kept); its server observations are kept under its own id.
+   */
   function phone(name = 'A') {
     const userId = `member-${++fakeIds}-${name}`;
     const records = new Map<string, DayRecord>();
+    let lastSave: number | null = null;
     const deps: SaveDeps = {
       getRecord: (u, d) => records.get(`${u}|${d}`),
       updateRecord: (u, d, patch) => {
         records.set(`${u}|${d}`, { ...records.get(`${u}|${d}`), ...patch });
       },
+      lastAutoSave: () => lastSave,
+      noteAutoSave: (_u, at) => {
+        lastSave = Math.max(lastSave ?? at, at);
+      },
       async fetchServerDay(date) {
         clock += 200;
         if (failure) throw failure;
         reads.push(`${name} ${date}`);
-        const r = row(date);
-        return hasModes ? { steps: r.steps, marker: r.marker } : { steps: r.steps };
+        const t = tracking(date);
+        return hasModes ? { steps: t.steps, marker: markerOf(t), ...markerRowOf(t) } : { steps: t.steps };
       },
       async postSteps(date, steps, mode, editRef, expect) {
         clock += 300;
@@ -132,7 +159,16 @@ function fakeServer(modes: boolean, start: number, initial: Record<string, numbe
       isPermanent: (e) => e === 'permanent',
       now: () => clock,
     };
-    return { name, userId, deps, record: (date: string) => records.get(`${userId}|${date}`) };
+    return {
+      name,
+      userId,
+      deps,
+      record: (date: string) => records.get(`${userId}|${date}`),
+      /** The day records are gone (sign-out, P16; a purged cache); the prefs stay. */
+      signOut: () => records.clear(),
+      /** Today's dashboard read of `date` on this phone (it carries the row's marker, B2). */
+      todayRead: (date = D) => observeServerRow(userId, date, tracking(date), clock),
+    };
   }
 
   return {
@@ -146,7 +182,9 @@ function fakeServer(modes: boolean, start: number, initial: Record<string, numbe
     /** A manual save made elsewhere (the website): the modes' marker with it. */
     website: (date: string, steps: number) => answer(date, steps, 'manual', null),
     /** A raw write by another writer (the old server's website, a reconcile on another phone). */
-    set: (date: string, steps: number) => rows.set(date, { ...row(date), steps }),
+    set: (date: string, steps: number) => write(date, { steps }),
+    /** Another field of the day's row written (a glass of water): `updated_at` moves, the steps don't. */
+    touch: (date = D) => write(date, {}),
     /** B1 deployed. */
     upgrade: () => {
       hasModes = true;
@@ -448,6 +486,275 @@ describe('the old server (no `applied`, T39)', () => {
     assert.deepEqual(a.record(D)?.base, { kind: 'start', steps: 4_000, at: srv.now(), editRef: null });
     assert.equal(a.record(D)?.serverModes, false);
     assert.equal(srv.sent().at(-1), 'A manual 4000 ref null');
+  });
+});
+
+/* ───────────────────────────── Phase J review: the save flow's gaps ───────────────────────────── */
+
+describe('a taken edit leaves a past day open (T36 on a settled day, M7)', () => {
+  test('an “edited” answer on a settled past day: not final; the next run saves the edit + what was counted since', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '20:00'));
+    const a = srv.phone('A'); // the Recording API only (no store)
+    await syncDay(a.deps, a.userId, dayOf([recording(7_000)]), true, false, { tz: IST });
+    srv.advance(3 * H); // 23:00: the member raises the day to 9 000 on the website
+    srv.website(D, 9_000);
+    const m = srv.marker() ?? assert.fail('marker');
+    // 01:30: the background task ran late (Doze). The past day is complete and an hour past: this run could settle it.
+    srv.advance(2.5 * H);
+    assert.equal(await syncDay(a.deps, a.userId, dayOf([recording(7_800, S, { complete: true })]), false, false, { tz: IST }), 'edited');
+    assert.equal(srv.sent().at(-1), 'A auto 7800 ref null');
+    assert.deepEqual(a.record(D)?.base, { kind: 'edit', steps: 9_000, at: Date.parse(m), editRef: m });
+    assert.equal(a.record(D)?.final, undefined, 'not final: the 800 steps after the edit aren’t saved yet');
+    srv.advance(30 * MIN);
+    const next = dayOf([recording(7_800, S, { complete: true, ...after(Date.parse(m), 800) })]);
+    assert.equal(await syncDay(a.deps, a.userId, next, false, false, { tz: IST }), 'done');
+    assert.equal(srv.sent().at(-1), `A auto 9800 ref ${m}`);
+    assert.equal(srv.steps(), 9_800);
+    assert.equal(a.record(D)?.final, true);
+  });
+
+  test('an edit taken from Today’s read or from the read before a save: the same — saved on, then final', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '20:00'));
+    const a = srv.phone('A');
+    await syncDay(a.deps, a.userId, dayOf([recording(7_000)]), true, false);
+    srv.advance(3 * H);
+    srv.website(D, 9_000);
+    a.todayRead(); // the member opened Today: the marker is seen before any save
+    srv.advance(2.5 * H);
+    assert.equal(await syncDay(a.deps, a.userId, dayOf([recording(7_800, S, { complete: true })]), false, false), 'edited');
+    assert.equal(srv.posts.length, 1, 'nothing to save until the count since the edit is read');
+    assert.equal(a.record(D)?.final, undefined);
+    // The old server (no `applied` yet for the day): its read before the save shows a lower count — the edit.
+    forgetServerObservations();
+    const old = fakeServer(false, ist(D, '20:00'));
+    const b = old.phone('B');
+    await syncDay(b.deps, b.userId, dayOf([recording(7_000)]), true, false);
+    old.advance(3 * H);
+    old.set(D, 6_000);
+    old.advance(2.5 * H);
+    assert.equal(await syncDay(b.deps, b.userId, dayOf([recording(7_800, S, { complete: true })]), false, false), 'edited');
+    assert.equal(b.record(D)?.base?.kind, 'edit');
+    assert.equal(b.record(D)?.final, undefined);
+  });
+
+  test('an edit made after the day ended is the member’s number for good: final at once', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '20:00'));
+    const a = srv.phone('A');
+    await syncDay(a.deps, a.userId, dayOf([recording(7_000)]), true, false);
+    srv.advance(5 * H); // 01:00: the website edit is made after the day ended
+    srv.website(D, 9_000);
+    srv.advance(30 * MIN);
+    assert.equal(await syncDay(a.deps, a.userId, dayOf([recording(7_800, S, { complete: true })]), false, false), 'done');
+    assert.equal(a.record(D)?.final, true);
+    assert.equal(srv.steps(), 9_000);
+  });
+});
+
+describe('an edit taken after another phone raised it is never counted twice (M5c2)', () => {
+  /** 12:00 the website sets 5 000; phone B sees it at once and raises the day to 7 000 by 14:00 (the marker stays). */
+  async function raisedByB(editValue: boolean) {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '11:58'), {}, { editValue });
+    const a = srv.phone('A');
+    const b = srv.phone('B');
+    await syncDay(a.deps, a.userId, dayOf([recording(4_000)]), true, false);
+    await syncDay(b.deps, b.userId, dayOf([recording(4_100)]), true, false);
+    srv.advance(2 * MIN);
+    srv.website(D, 5_000);
+    const markedAt = Date.parse(srv.marker() ?? assert.fail('marker'));
+    b.todayRead();
+    srv.advance(2 * H);
+    await syncDay(b.deps, b.userId, dayOf([recording(6_100, S, after(markedAt, 2_000))]), true, false);
+    assert.equal(srv.steps(), 7_000);
+    return { srv, a, markedAt };
+  }
+
+  /** A's own count after `at` at 14:45: 2 200 since the edit at 12:00, 200 of them after B's raise at 14:00. */
+  const aSince = (at: number, markedAt: number) => (at <= markedAt ? 2_200 : 200);
+
+  test('without the edit’s own number: the day’s count taken from its last write on (7 000 + 200, not + 2 200)', async () => {
+    const { srv, a, markedAt } = await raisedByB(false);
+    const raisedAt = srv.now();
+    srv.advance(30 * MIN); // 14:30: A's raise is refused, the edit taken
+    await syncDay(a.deps, a.userId, dayOf([recording(6_300)]), true, false);
+    assert.equal(srv.sent().at(-1), 'A auto 6300 ref null');
+    assert.equal(a.record(D)?.base?.steps, 7_000);
+    const at = a.record(D)?.base?.at ?? assert.fail('the edit is the day’s base');
+    assert.ok(at >= raisedAt - 300 && at <= raisedAt, 'anchored at B’s raise, not at the marker');
+    srv.advance(15 * MIN);
+    await syncDay(a.deps, a.userId, dayOf([recording(6_500, S, after(at, aSince(at, markedAt)))]), true, false);
+    assert.equal(srv.steps(), 7_200);
+  });
+
+  test('with the edit’s own number (B2): the edit at its marker, and each phone’s count since it compared, never summed', async () => {
+    const { srv, a, markedAt } = await raisedByB(true);
+    srv.advance(30 * MIN);
+    await syncDay(a.deps, a.userId, dayOf([recording(6_300)]), true, false);
+    assert.deepEqual(a.record(D)?.base, { kind: 'edit', steps: 5_000, at: markedAt, editRef: srv.marker() });
+    assert.equal(a.record(D)?.server, 7_000);
+    srv.advance(15 * MIN);
+    await syncDay(a.deps, a.userId, dayOf([recording(6_500, S, after(markedAt, aSince(markedAt, markedAt)))]), true, false);
+    assert.equal(srv.steps(), 7_200);
+  });
+
+  test('one phone whose day record was lost takes the marker again: the steps it saved on top aren’t added twice', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '12:00'));
+    const a = srv.phone('A');
+    await syncDay(a.deps, a.userId, dayOf([recording(8_000)]), true, false);
+    srv.advance(MIN);
+    srv.website(D, 9_000);
+    const markedAt = Date.parse(srv.marker() ?? assert.fail('marker'));
+    a.todayRead();
+    srv.advance(H);
+    await syncDay(a.deps, a.userId, dayOf([recording(8_800, S, after(markedAt, 800))]), true, false);
+    assert.equal(srv.steps(), 9_800);
+    const raisedAt = srv.now();
+    srv.advance(MIN);
+    a.signOut(); // the cache was purged
+    forgetServerObservations();
+    a.todayRead();
+    srv.advance(15 * MIN);
+    await syncDay(a.deps, a.userId, dayOf([recording(8_900)]), true, false);
+    const at = a.record(D)?.base?.at ?? assert.fail('the marker taken again');
+    assert.ok(at >= raisedAt - 300 && at <= raisedAt);
+    // 950 counted since the edit, 150 of them since this phone's raise.
+    await syncDay(a.deps, a.userId, dayOf([recording(8_950, S, after(at, at <= markedAt ? 950 : 150))]), true, false);
+    assert.equal(srv.steps(), 9_950, 'not 9 800 + 950');
+  });
+});
+
+describe('counting that starts after this phone’s own save (M5c3)', () => {
+  test('the switch off and on again (the Recording API re-subscribed at 15:00): the morning’s count stays, the new one adds on', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '11:50'));
+    const a = srv.phone('A');
+    await syncDay(a.deps, a.userId, dayOf([recording(5_000)]), true, false);
+    srv.advance(3 * H + 10 * MIN); // 15:00: back on; the new subscription covers the day from then
+    const back = srv.now();
+    srv.advance(4 * H);
+    await syncDay(a.deps, a.userId, dayOf([recording(6_000, back)]), true, false);
+    assert.equal(srv.steps(), 11_000);
+  });
+
+  test('Health Connect from its grant at 14:00, signed out at 18:05 and back: the day stays what HC counted (not 6 400)', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '14:30'));
+    const a = srv.phone('A');
+    const grant = ist(D, '14:00');
+    const hcFrom = (steps: number, extra: Partial<SourceReading> = {}) => dayOf([hc(steps, grant, { includesPhone: true, ...extra })]);
+    await syncDay(a.deps, a.userId, hcFrom(500), true, true);
+    srv.advance(3.5 * H); // 18:00
+    await syncDay(a.deps, a.userId, hcFrom(3_000), true, true);
+    assert.equal(srv.steps(), 3_000);
+    srv.advance(5 * MIN);
+    a.signOut(); // the day records go (P16); the prefs keep when this phone last saved
+    forgetServerObservations();
+    srv.advance(55 * MIN); // 19:00
+    await syncDay(a.deps, a.userId, hcFrom(3_400), true, true);
+    assert.equal(srv.steps(), 3_400);
+    const lastSave = a.record(D)?.base?.at ?? assert.fail('a start at this phone’s last save');
+    srv.advance(30 * MIN);
+    await syncDay(a.deps, a.userId, hcFrom(3_600, after(lastSave, 600)), true, true);
+    assert.equal(srv.steps(), 3_600);
+  });
+});
+
+describe('the member’s number saved before the first read finished (M5c1 without a reading)', () => {
+  test('today, while this phone counts: an edit — the next run doesn’t put the higher count back', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '12:00'));
+    const a = srv.phone('A');
+    await syncDay(a.deps, a.userId, dayOf([recording(8_000)]), true, false);
+    srv.advance(H);
+    // A cold start: the member corrects the day before the first read returns.
+    await saveManualDay(a.deps, a.userId, D, 5_000, null, { end: dayBounds(D, IST).end, counting: false });
+    const m = srv.marker() ?? assert.fail('marker');
+    assert.equal(a.record(D)?.base?.kind, 'edit', 'this phone saved the day automatically: something counts here');
+    srv.advance(MIN);
+    await syncDay(a.deps, a.userId, dayOf([recording(8_010)]), true, false);
+    assert.equal(srv.steps(), 5_000, 'not 8 010');
+    srv.advance(15 * MIN);
+    const at = a.record(D)?.base?.at ?? assert.fail('base');
+    await syncDay(a.deps, a.userId, dayOf([recording(8_300, S, after(at, 290))]), true, false);
+    assert.equal(srv.sent().at(-1), `A auto 5290 ref ${m}`);
+  });
+
+  test('a past day corrected right after launch: the member’s number for good (not undone by the launch’s read)', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '22:00'));
+    const a = srv.phone('A');
+    await syncDay(a.deps, a.userId, dayOf([recording(8_000)]), true, false);
+    srv.advance(11 * H); // 09:00 the next day
+    await saveManualDay(a.deps, a.userId, D, 5_000, null, { end: dayBounds(D, IST).end, counting: false });
+    assert.equal(a.record(D)?.base?.kind, 'edit');
+    srv.advance(MIN);
+    assert.equal(await syncDay(a.deps, a.userId, dayOf([recording(8_000, S, { complete: true })]), false, false), 'done');
+    assert.equal(srv.steps(), 5_000);
+    assert.equal(a.record(D)?.final, true);
+  });
+
+  test('a source that is ON is something counting too; with nothing at all: a start', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '12:00'));
+    const a = srv.phone('A');
+    await saveManualDay(a.deps, a.userId, D, 3_000, null, { end: dayBounds(D, IST).end, counting: true });
+    assert.equal(a.record(D)?.base?.kind, 'edit');
+    const b = srv.phone('B');
+    await saveManualDay(b.deps, b.userId, D, 3_000, null, { end: dayBounds(D, IST).end, counting: false });
+    assert.equal(b.record(D)?.base?.kind, 'start');
+  });
+});
+
+describe('the run that settles a past day checks the server once more (M7)', () => {
+  test('a count below the one last seen is sent before the day goes final: another phone’s reconcile may have lowered it', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '22:00'));
+    const iphone = srv.phone('A'); // Apple Health holds its steps: past days follow it
+    const pixel = srv.phone('B'); // the Recording API only
+    await syncDay(pixel.deps, pixel.userId, dayOf([recording(8_000)]), true, false);
+    srv.advance(MIN);
+    await syncDay(iphone.deps, iphone.userId, dayOf([health(11_000), pedometer(12_000)]), true, true); // the live tail
+    srv.advance(30 * MIN);
+    await syncDay(pixel.deps, pixel.userId, dayOf([recording(9_100)]), true, false);
+    assert.equal(srv.sent().at(-1), 'B auto 9100 ref null');
+    assert.equal(pixel.record(D)?.server, 12_000, '“not_higher”');
+    srv.advance(9 * H); // the next morning: the iPhone follows Apple Health
+    await syncDay(iphone.deps, iphone.userId, dayOf([health(9_000), pedometer(12_000, S, { complete: true })]), false, true);
+    assert.equal(srv.steps(), 9_000);
+    srv.advance(MIN);
+    // The Pixel's run that makes the day final (complete, an hour past): one more raise, which applies.
+    assert.equal(await syncDay(pixel.deps, pixel.userId, dayOf([recording(9_100, S, { complete: true })]), false, false), 'done');
+    assert.equal(srv.sent().at(-1), 'B auto 9100 ref null');
+    assert.equal(srv.steps(), 9_100);
+    assert.equal(pixel.record(D)?.final, true);
+  });
+
+  test('a day made final without a health-store count is marked so (Apple Health’s “no steps” state looks back at it)', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(addDays(D, 4), '09:00'));
+    const a = srv.phone('A');
+    assert.equal(await syncDay(a.deps, a.userId, dayOf([]), false, true), 'done');
+    assert.deepEqual(a.record(D), { final: true, noStore: true });
+    await syncDay(a.deps, a.userId, dayOf([health(3_000)], PREV), false, true);
+    assert.equal(a.record(PREV)?.final, true);
+    assert.equal(a.record(PREV)?.noStore, undefined);
+  });
+
+  test('a health store that is ON but wasn’t read: a past day saves nothing and stays open', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '23:00'));
+    const a = srv.phone('A');
+    await syncDay(a.deps, a.userId, dayOf([hc(11_000), recording(9_000)]), true, true);
+    srv.advance(80 * H); // a background run past e + 72 h without READ_HEALTH_DATA_IN_BACKGROUND
+    const unread: DayReading = { ...dayOf([recording(9_200, S, { complete: true })]), storeUnread: true };
+    assert.equal(await syncDay(a.deps, a.userId, unread, false, true), 'done');
+    assert.equal(srv.posts.length, 1);
+    assert.equal(srv.steps(), 11_000);
+    assert.equal(a.record(D)?.final, undefined);
   });
 });
 

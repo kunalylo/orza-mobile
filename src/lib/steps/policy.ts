@@ -12,7 +12,11 @@
  *   at once;
  * - a past day whose number is now LOWER than the server's, while the server still holds exactly this phone's own last
  *   automatic save (today's live tail, above the store until the store caught up): `reconcile` to it — past days follow
- *   the store (M4). Never a number somebody else saved, and never on a server without the modes;
+ *   the store (M4). Never a number somebody else saved, never on a server without the modes, and never with a number
+ *   that may be missing steps (`DayValue.sinceUnknown`: a lower bound only raises);
+ * - a past day read while a health store that is ON wasn't (`storeUnread`): nothing (§2.9) — the next run decides;
+ * - the run that may make a past day final (`settling`, M7): `auto` T once more even when the server's count last seen
+ *   was higher — another phone's reconcile may have lowered the day since (the atomic raise refuses it otherwise);
  * - else nothing.
  * Today shows the higher of the day's number and the server's (it never drops below what the website shows); a past
  * day shows the server's — the reconciled truth.
@@ -21,7 +25,7 @@
  * is saved the old raise-only way (`save.ts`): the server read right before each save, a lower read taken as an edit
  * (`editedOnServer`), no reconcile. That branch goes once B1 is deployed (V4).
  */
-import { clampSteps, type DayValue } from './merge';
+import { clampSteps, type DayValue, type MarkerRow } from './merge';
 import type { DayBase, StepSource } from './types';
 
 /** The server's day limit and the clamp to it live with the merge rules (M5 clamps the day's number). */
@@ -53,10 +57,12 @@ export interface DayRecord {
   tz?: string;
   /** A past day that is final: no longer read (M7). */
   final?: boolean;
+  /** Final, and the read that made it so had no health-store count (Apple Health's "no steps" state, `plan.healthEmpty`). */
+  noStore?: boolean;
 }
 
 /** A real read of the day's count on the server: the value and when the request STARTED. */
-export interface ServerObservation {
+export interface ServerObservation extends MarkerRow {
   steps: number;
   requestedAt: number;
   /**
@@ -114,16 +120,20 @@ export function saveTarget(value: DayValue | null | undefined, isToday: boolean)
  * M6: what to save for the day now (null: nothing). `value` is the day's number (`merge.dayValue`), `rec` what this
  * phone knows of the day, `marker` the server's edit marker as last read (undefined: not read). A marker this phone
  * hasn't taken yet means nothing is saved: the edit comes first (M5c2) — the server would refuse either save.
+ * `settling`: this run may make the past day final (`plan.isFinal`) — the last chance to save it.
  */
 export function savePlan(
   value: DayValue | null | undefined,
   rec: DayRecord | undefined,
   isToday: boolean,
   now: number,
-  marker?: string | null
+  marker?: string | null,
+  opts: { settling?: boolean } = {}
 ): SavePlan | null {
   const target = saveTarget(value, isToday);
-  if (target == null) return null;
+  if (target == null || !value) return null;
+  // A past day without the store's count it follows (M4): nothing either way until the store is read.
+  if (!isToday && value.storeUnread) return null;
   const editRef = rec?.editRef ?? null;
   if (marker && marker !== editRef) return null;
   const floor = knownFloor(rec);
@@ -131,12 +141,16 @@ export function savePlan(
     const throttled = isToday && rec?.autoAt != null && target - floor < POST_MIN_CHANGE && now - rec.autoAt < POST_MIN_INTERVAL_MS;
     return throttled ? null : { mode: 'auto', steps: target, editRef };
   }
-  // A past day below the server: only this phone's own automatic save is corrected, and only with the modes.
-  const server = rec?.server;
-  if (!isToday && server != null && target < server && rec?.autoSent === server && rec.serverModes === true) {
+  if (isToday || rec?.serverModes !== true) return null;
+  // A past day below the server: only this phone's own automatic save is corrected — and never with a number that may
+  // be missing steps.
+  const server = rec.server;
+  if (server != null && target < server && rec.autoSent === server && !value.sinceUnknown) {
     return { mode: 'reconcile', steps: target, expect: server, editRef };
   }
-  return null;
+  // The day goes final after this run: the server's count last seen may be stale (another phone's reconcile lowers a
+  // day, and only answers to this phone's own saves tell it) — one atomic raise, refused when it isn't higher.
+  return opts.settling && target > 0 ? { mode: 'auto', steps: target, editRef } : null;
 }
 
 /* ───────────────────────────── Today's number (§2.4) ───────────────────────────── */

@@ -196,6 +196,44 @@ describe('savePlan — a past day: raise at once, or reconcile this phone’s ow
   test('equal → nothing', () => {
     assert.equal(savePlan(store(12_000), { autoSent: 12_000, autoAt: now - 10 * H, server: 12_000, serverModes: true }, false, now), null);
   });
+
+  test('an edit whose count since can’t be seen is a lower bound → raise only, never a reconcile', () => {
+    // 10:00 the member typed 3 000 while the Recording API counted; today's reads (with `since`) saved 10 000. The
+    // next morning the past day is read without a count since 10:00: 3 000 is not the day.
+    const edit: DayBase = { kind: 'edit', steps: 3_000, at: ist(D, '10:00'), editRef: 'm1' };
+    const rec: DayRecord = { base: edit, editRef: 'm1', autoSent: 10_000, autoAt: ist(D, '22:00'), server: 10_000, serverModes: true };
+    const blind = value([recording(10_000, S, { complete: true })], false, edit);
+    assert.equal(blind?.sinceUnknown, true);
+    assert.equal(savePlan(blind, rec, false, now), null);
+    // With the count since 10:00 it is the day again: a raise, or a reconcile of this phone's own save.
+    assert.equal(plan(savePlan(value([recording(10_400, S, after(ist(D, '10:00'), 7_400))], false, edit), rec, false, now)), 'auto 10400 ref m1');
+    assert.equal(plan(savePlan(value([recording(9_800, S, after(ist(D, '10:00'), 6_800))], false, edit), rec, false, now)), 'reconcile 9800 expect 10000 ref m1');
+  });
+
+  test('a health store that is ON but wasn’t read this run → nothing for a past day (§2.9); today still raises', () => {
+    // A background run without READ_HEALTH_DATA_IN_BACKGROUND: only the Recording API's 9 200 (HC had 11 000).
+    const unread = (isToday: boolean) => dayValue({ ...dayOf([recording(9_200, S, { complete: true })]), storeUnread: true }, null, isToday);
+    const rec: DayRecord = { autoSent: 11_000, autoAt: now - 10 * H, server: 11_000, serverModes: true };
+    assert.equal(savePlan(unread(false), rec, false, now), null, 'no reconcile to the phone’s count');
+    assert.equal(savePlan(unread(false), { server: 8_000, serverModes: true }, false, now), null, 'no raise either: the store decides a past day');
+    assert.equal(plan(savePlan(unread(true), { server: 8_000, serverModes: true }, true, now)), 'auto 9200 ref null');
+  });
+
+  test('the run that may make the day final checks once more: `auto` even below the count last seen (another phone may have lowered it)', () => {
+    // This phone's 9 100 was answered "not_higher" (12 000: the other phone's live tail), which that phone reconciled
+    // to 9 000 since.
+    const rec: DayRecord = { autoSent: 8_000, autoAt: now - 12 * H, server: 12_000, serverModes: true };
+    const mine = value([recording(9_100, S, { complete: true })], false);
+    assert.equal(savePlan(mine, rec, false, now), null, 'not on every run');
+    assert.equal(plan(savePlan(mine, rec, false, now, undefined, { settling: true })), 'auto 9100 ref null');
+    assert.equal(plan(savePlan(mine, { ...rec, autoSent: 9_100, server: 9_100 }, false, now, undefined, { settling: true })), 'auto 9100 ref null', 'even its own number');
+    // Not on the old server (no reconcile there, and its read before each save guards it), not for nothing to save.
+    assert.equal(savePlan(mine, { ...rec, serverModes: false }, false, now, undefined, { settling: true }), null);
+    assert.equal(savePlan(value([recording(0, S, { complete: true })], false), rec, false, now, undefined, { settling: true }), null);
+    // A reconcile still comes first; today is never settling.
+    assert.equal(plan(savePlan(mine, { autoSent: 12_000, autoAt: now - 12 * H, server: 12_000, serverModes: true }, false, now, undefined, { settling: true })), 'reconcile 9100 expect 12000 ref null');
+    assert.equal(savePlan(value([recording(9_100)], true), { ...rec, autoAt: now - H }, true, now, undefined, { settling: true }), null);
+  });
 });
 
 /* ───────────────────────────── T26: display ───────────────────────────── */
@@ -338,6 +376,24 @@ describe('isFinal — phone only (T28, M7)', () => {
   });
 });
 
+describe('isFinal — never on a count that may be missing steps', () => {
+  test('a health store that is ON but wasn’t read this run: not final, not even after 72 h', () => {
+    const unread: DayReading = { ...dayOf([recording(9_200, S, { complete: true })]), storeUnread: true };
+    assert.equal(isFinal(unread, undefined, E + 2 * H, false), false);
+    assert.equal(isFinal(unread, undefined, E + 80 * H, true), false);
+    assert.equal(isFinal(unread, { final: true }, E + 2 * H, true), true, 'a day already final stays so');
+  });
+
+  test('an edit whose count since can’t be seen: not final before 72 h (a later read may have it), then final', () => {
+    const at = ist(D, '10:00');
+    const edit: DayBase = { kind: 'edit', steps: 3_000, at, editRef: 'm1' };
+    const day = dayOf([recording(10_000, S, { complete: true })]);
+    assert.equal(isFinal(day, { base: edit }, E + 2 * H, false), false);
+    assert.equal(isFinal(dayOf([recording(10_000, S, { complete: true, ...after(at, 7_000) })]), { base: edit }, E + 2 * H, false), true);
+    assert.equal(isFinal(day, { base: edit }, E + SETTLE_STORE_MS, false), true);
+  });
+});
+
 /* ───────────────────────────── T29–T30: which past days are read ───────────────────────────── */
 
 describe('lookback and pending past days (T29)', () => {
@@ -449,6 +505,16 @@ describe('backfill on a shared phone (T31, M9)', () => {
     assert.equal(backfill(again, 'amy'), null);
   });
 
+  test('a member who agreed and has since deleted their account still makes the install a shared one', () => {
+    // Amy agreed, then deleted her account (her record removed, the install remembers that someone had agreed).
+    const c = grantConsent({}, 'cat', 'store', t3, true);
+    assert.deepEqual(c.cat, { store: { at: t3 }, sharedAtConsent: true });
+    assert.equal(backfill(c, 'cat'), t3, 'no backfill of the phone’s history: it was Amy’s walking');
+    assert.equal(grantConsent({}, 'cat', 'store', t3, false).cat.sharedAtConsent, false);
+    // Decided once: a member who already agreed keeps their flag.
+    assert.equal(grantConsent(grantConsent({}, 'amy', 'store', t1), 'amy', 'phone', t2, true).amy.sharedAtConsent, false);
+  });
+
   test('a member who only said “Not now” has no consent record; no consent → no floor', () => {
     const c = grantConsent({ amy: { notNowUntil: t1, sharedAtConsent: false } }, 'ben', 'store', t2);
     assert.equal(c.ben.sharedAtConsent, false);
@@ -537,5 +603,18 @@ describe('healthEmpty (T33, §2.2)', () => {
   test('a day that wasn’t read → not proven empty', () => {
     assert.equal(healthEmpty(today, week(() => []).slice(0, 7)), false);
     assert.equal(healthEmpty(today, []), false);
+  });
+
+  test('days no longer read (final): empty when Apple Health had nothing for them when they went final', () => {
+    // The first run after consent read 30 days and made days 4–30 back final; later runs read today and days 1–3 only.
+    const recent = week(() => []).slice(0, 4);
+    const records: Record<string, DayRecord> = {};
+    for (let i = 4; i <= 7; i++) records[addDays(today, -i)] = { final: true, noStore: true };
+    assert.equal(healthEmpty(today, recent, (d) => records[d]), true);
+    records[addDays(today, -6)] = { final: true, autoSent: 4_000 };
+    assert.equal(healthEmpty(today, recent, (d) => records[d]), false, 'Health had that day');
+    records[addDays(today, -6)] = { noStore: true };
+    assert.equal(healthEmpty(today, recent, (d) => records[d]), false, 'not final: it should have been read');
+    assert.equal(healthEmpty(today, recent), false, 'without the records: not proven');
   });
 });

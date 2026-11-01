@@ -14,7 +14,7 @@
 import { addDays } from '../alarms/schedule';
 
 import { dayStartMs } from './counter';
-import { autoCount, storeReading } from './merge';
+import { autoCount, dayValue, storeReading } from './merge';
 import type { DayRecord } from './policy';
 import type { DayReading, FirstAsk, PhoneCounter, ReadConsent, RefreshReason, StepFeatures, StepsConsent } from './types';
 
@@ -80,13 +80,20 @@ export function mergeDays<T extends { date: string }>(older: readonly T[], newer
  *   settle it early).
  * - Phone only: when the winning count is complete (the sampler: read past midnight with no uncertain reboot gap; the
  *   Recording API: read an hour after the day ended; CMPedometer: always) and the day ended an hour ago.
+ * - Never on a read that may be missing steps: a health store that is ON but wasn't read (`storeUnread`) — not even
+ *   after 72 h; the day's base with a count since it that a source couldn't give (`sinceUnknown`) — not before 72 h.
  */
 export function isFinal(day: DayReading, rec: DayRecord | undefined, now: number, storeOn: boolean): boolean {
   if (rec?.final) return true;
-  if (!(now >= day.end)) return false;
+  if (!(now >= day.end) || day.storeUnread) return false;
   if (now >= day.end + SETTLE_STORE_MS) return true;
-  if (storeOn) return false;
+  if (storeOn || dayValue(day, rec?.base, false)?.sinceUnknown) return false;
   return !!autoCount(day, false)?.complete && now >= day.end + SETTLE_PHONE_MS;
+}
+
+/** The record patch that makes `day` final: noting whether the read that settled it had a health-store count. */
+export function finalPatch(day: DayReading): Partial<DayRecord> {
+  return storeReading(day.sources) ? { final: true } : { final: true, noStore: true };
 }
 
 /* ───────────────────────────── Which past days are read ───────────────────────────── */
@@ -133,18 +140,22 @@ const agreed = (c: StepsConsent | undefined) => !!(c?.store || c?.phone);
 /**
  * `userId` agreed at `at` to ÖRZA reading `kind` (the steps disclosure): the install's consent records with it added
  * (unchanged when already agreed). At the member's first consent, `sharedAtConsent` = another member on this install
- * already agreed — a shared phone: nothing from before this consent is read for them (`backfill`). A member coming
- * back keeps their record, so neither flag nor floor moves.
+ * already agreed — a shared phone: nothing from before this consent is read for them (`backfill`). That includes a
+ * member who agreed and has since deleted their account (`formerConsent`, the prefs' install flag: their record is
+ * gone, their walking is still in the phone's history). A member coming back keeps their record, so neither flag nor
+ * floor moves.
  */
 export function grantConsent(
   consents: Readonly<Record<string, StepsConsent>>,
   userId: string,
   kind: keyof ReadConsent,
-  at: number
+  at: number,
+  formerConsent = false
 ): Record<string, StepsConsent> {
   const mine = consents[userId];
   if (mine?.[kind]) return consents as Record<string, StepsConsent>;
-  const shared = mine && agreed(mine) ? mine.sharedAtConsent : Object.entries(consents).some(([id, c]) => id !== userId && agreed(c));
+  const shared =
+    mine && agreed(mine) ? mine.sharedAtConsent : formerConsent || Object.entries(consents).some(([id, c]) => id !== userId && agreed(c));
   return { ...consents, [userId]: { ...mine, [kind]: { at }, sharedAtConsent: shared } };
 }
 
@@ -204,14 +215,22 @@ export function sourcesOn(f: StepFeatures, s: SourceInputs): CountingSource[] {
 
 /**
  * §2.2, iPhone: Apple Health has no steps for today nor any of the `HEALTH_EMPTY_DAYS` days before it (`days`: their
- * readings; a 0 is no count, M0). Then Today offers "Log steps" and, once, the iPhone's motion — never "you denied":
- * HealthKit hides a denied read as no data. A day not read isn't proof: false.
+ * readings; a 0 is no count, M0). A past day no longer read (final, M7 — after the first run only the newest few are)
+ * counts by its record (`recordOf`): final with no store count when it settled (`noStore`). Then Today offers "Log
+ * steps" and, once, the iPhone's motion — never "you denied": HealthKit hides a denied read as no data. A day neither
+ * read nor settled that way isn't proof: false.
  */
-export function healthEmpty(today: string, days: readonly DayReading[]): boolean {
+export function healthEmpty(today: string, days: readonly DayReading[], recordOf?: (date: string) => DayRecord | undefined): boolean {
   const byDate = new Map(days.map((d) => [d.date, d]));
   for (let i = 0; i <= HEALTH_EMPTY_DAYS; i++) {
-    const day = byDate.get(addDays(today, -i));
-    if (!day || storeReading(day.sources)) return false;
+    const date = addDays(today, -i);
+    const day = byDate.get(date);
+    if (day) {
+      if (storeReading(day.sources)) return false;
+      continue;
+    }
+    const rec = i > 0 ? recordOf?.(date) : undefined;
+    if (!rec?.final || !rec.noStore) return false;
   }
   return true;
 }

@@ -16,6 +16,7 @@ import {
   autoCount,
   baseForEdit,
   baseFromMarker,
+  baseWithoutReading,
   counted,
   dayValue,
   hcCoverFrom,
@@ -84,14 +85,27 @@ describe('merge — today: the live tail (T8, M3)', () => {
 /* ───────────────────────────── M4: past days ───────────────────────────── */
 
 describe('merge — past days follow the store (T9, T10, M4, C3)', () => {
-  test('T9: the store wins a past day it covers from as early as the phone, even when the phone is higher', () => {
-    // Samsung Health (watch prioritised) 8 000, the sampler 8 700 on a bumpy ride: the day is what Samsung Health shows.
-    assert.equal(pick(autoCount(dayOf([hc(8_000), sampler(8_700)]), false)), 'health_connect 8000');
+  /** Health Connect counting this phone itself (Android 14+, extension 20): its count holds the phone's steps. */
+  const hcWithPhone = (steps: number, coverFrom = S) => hc(steps, coverFrom, { includesPhone: true });
+
+  test('T9: a store that holds the phone’s steps wins a past day it covers from as early as the phone, even when the phone is higher', () => {
+    // The Watch prioritised in Apple Health 8 000, the iPhone's motion count 8 700: the day is what Health shows.
     assert.equal(pick(autoCount(dayOf([health(8_000), pedometer(8_700)]), false)), 'apple_health 8000');
+    assert.equal(pick(autoCount(dayOf([hcWithPhone(8_000), sampler(8_700)]), false)), 'health_connect 8000');
     // The same readings today: the live tail takes the phone's higher count.
-    assert.equal(pick(autoCount(dayOf([hc(8_000), sampler(8_700)]), true)), 'phone/sampler 8700');
+    assert.equal(pick(autoCount(dayOf([health(8_000), pedometer(8_700)]), true)), 'phone/pedometer 8700');
     // A phone that only covers part of the day can't overrule a whole-day store either.
-    assert.equal(pick(autoCount(dayOf([hc(8_000), recording(9_000, ist(D, '06:00'))]), false)), 'health_connect 8000');
+    assert.equal(pick(autoCount(dayOf([hcWithPhone(8_000), recording(9_000, ist(D, '06:00'))]), false)), 'health_connect 8000');
+  });
+
+  test('Health Connect that doesn’t count this phone (Android 9–13) never overrules it: the higher by real steps', () => {
+    // "Include your watch or fitness app": Strava wrote 4 000 steps for a run, the Recording API counted 12 000.
+    assert.equal(pick(autoCount(dayOf([hc(4_000), recording(12_000, S, { complete: true })]), false)), 'phone/recording 12000');
+    // A watch worn part of the day: the higher count all the same; a store above the phone still wins.
+    assert.equal(pick(autoCount(dayOf([hc(6_000), sampler(8_700)]), false)), 'phone/sampler 8700');
+    assert.equal(pick(autoCount(dayOf([hc(9_000), sampler(8_700)]), false)), 'health_connect 9000');
+    // Never by an estimate (C7).
+    assert.equal(pick(autoCount(dayOf([hc(4_000), sampler(10_000, S, { estimated: 9_000 })]), false)), 'health_connect 4000');
   });
 
   test('T10: on the store’s partial first day (HC granted at 14:00, nothing before) the larger by real steps wins', () => {
@@ -109,8 +123,8 @@ describe('merge — past days follow the store (T9, T10, M4, C3)', () => {
   test('a store that covers less of the day than the phone does not get the past day by default', () => {
     // Recording subscribed at 08:00, HC on-device from 14:00: both partial, the earlier coverage decides by real steps.
     assert.equal(pick(autoCount(dayOf([hc(4_000, ist(D, '14:00')), recording(7_000, ist(D, '08:00'))]), false)), 'phone/recording 7000');
-    // HC covering from 08:00 too (the same instant): store-authoritative again.
-    assert.equal(pick(autoCount(dayOf([hc(4_000, ist(D, '08:00')), recording(7_000, ist(D, '08:00'))]), false)), 'health_connect 4000');
+    // HC covering from 08:00 too (the same instant): store-authoritative again (when it holds the phone's steps).
+    assert.equal(pick(autoCount(dayOf([hcWithPhone(4_000, ist(D, '08:00')), recording(7_000, ist(D, '08:00'))]), false)), 'health_connect 4000');
   });
 });
 
@@ -248,9 +262,11 @@ describe('counted — what the sources counted after a base’s instant (M5)', (
   });
 
   test('the M3 / M4 selection over those counts: today the higher, a past day the store’s', () => {
-    const day = dayOf([hc(9_000, S, after(at, 400)), recording(9_500, S, after(at, 600))]);
+    const day = dayOf([hc(9_000, S, { includesPhone: true, ...after(at, 400) }), recording(9_500, S, after(at, 600))]);
     assert.equal(pick(counted(day, at, true)), 'phone/recording 600');
     assert.equal(pick(counted(day, at, false)), 'health_connect 400');
+    // A store without this phone's steps: the higher on a past day too.
+    assert.equal(pick(counted(dayOf([hc(9_000, S, after(at, 400)), recording(9_500, S, after(at, 600))]), at, false)), 'phone/recording 600');
     // A store's 0 after `at` is nothing synced yet (M0): the phone's count stands.
     assert.equal(pick(counted(dayOf([hc(9_000, S, after(at, 0)), recording(9_500, S, after(at, 600))]), at, false)), 'phone/recording 600');
   });
@@ -291,8 +307,8 @@ describe('dayValue — an edit counts on in time, not in value (T16, T17, M5a, C
       `never goes down: ${values.join(', ')}`
     );
     assert.equal(values[values.length - 1], 10_350, 'not frozen at 9 100 (a base re-anchored on every switch)');
-    // Read the next morning, the store's count since the edit decides (M4).
-    const lastPair = dayOf([hc(13_030, S, after(at, 1_080)), recording(13_100, S, after(at, 1_100))]);
+    // Read the next morning, the store's count since the edit decides (M4: HC counting this phone too).
+    const lastPair = dayOf([hc(13_030, S, { includesPhone: true, ...after(at, 1_080) }), recording(13_100, S, after(at, 1_100))]);
     assert.equal(val(dayValue(lastPair, edit, false)), 'edit 10080 ← health_connect');
   });
 
@@ -361,6 +377,39 @@ describe('dayValue — a start: counting adds on, a higher whole-day count repla
   });
 });
 
+describe('dayValue — a lower bound: a count since the base it can’t see, a store it didn’t read', () => {
+  const at = ist(D, '10:00');
+  const edit: DayBase = { kind: 'edit', steps: 3_000, at, editRef: 'm' };
+
+  test('a source covering from before the base with no count since it → `sinceUnknown` (the day may hold more)', () => {
+    // Typed at 10:00 while counting; the next morning the past day is read without a count since 10:00.
+    const v = dayValue(dayOf([recording(10_000, S, { complete: true })]), edit, false);
+    assert.equal(val(v), 'edit 3000');
+    assert.equal(v?.sinceUnknown, true);
+    // Its count since the base read for that very instant, or coverage only from after it: known.
+    assert.equal(dayValue(dayOf([recording(10_000, S, after(at, 7_000))]), edit, false)?.sinceUnknown, false);
+    assert.equal(dayValue(dayOf([recording(7_000, ist(D, '11:00'))]), edit, false)?.sinceUnknown, false);
+    // One measured for another instant is no count since this base.
+    assert.equal(dayValue(dayOf([recording(10_000, S, after(at - H, 7_000))]), edit, false)?.sinceUnknown, true);
+    // A store with nothing (0) has no steps to miss; no base → the whole-day count, nothing unknown.
+    assert.equal(dayValue(dayOf([hc(0)]), edit, false)?.sinceUnknown, false);
+    assert.equal(dayValue(dayOf([recording(10_000)]), null, false)?.sinceUnknown, false);
+  });
+
+  test('a start too (a higher count since could still beat the whole day); a base at or after the day’s end misses nothing', () => {
+    assert.equal(dayValue(dayOf([recording(6_000)]), { kind: 'start', steps: 5_000, at }, false)?.sinceUnknown, true);
+    assert.equal(dayValue(dayOf([recording(6_000)]), { kind: 'start', steps: 5_000, at: E + H }, false)?.sinceUnknown, false);
+    assert.equal(dayValue(dayOf([recording(6_000)]), { kind: 'edit', steps: 5_000, at: E + H, editRef: 'm' }, false)?.sinceUnknown, false, 'fixed');
+  });
+
+  test('a health store that is ON but wasn’t read this run comes with the day’s value (`storeUnread`)', () => {
+    const unread: DayReading = { ...dayOf([recording(9_200, S, { complete: true })]), storeUnread: true };
+    assert.equal(dayValue(unread, null, false)?.storeUnread, true);
+    assert.equal(dayValue(unread, edit, false)?.storeUnread, true);
+    assert.equal(dayValue(dayOf([recording(9_200)]), null, false)?.storeUnread, false);
+  });
+});
+
 describe('baseForEdit — the member’s number saved on this phone (T19, M5c1)', () => {
   const at = ist(D, '15:00');
 
@@ -382,6 +431,18 @@ describe('baseForEdit — the member’s number saved on this phone (T19, M5c1)'
     assert.equal(baseForEdit(250_000, at, dayOf([]), null).steps, 100_000);
     assert.equal(baseForEdit(-4, at, dayOf([]), null).steps, 0);
     assert.equal(baseForEdit(9_000, at, dayOf([]), undefined).editRef, null);
+  });
+
+  test('no reading at hand (the first read hasn’t finished): an edit once the day ended or while something counts here, else a start', () => {
+    // A past day corrected right after launch: the member's number for good (M5d), never replaced by the read after it.
+    assert.deepEqual(baseWithoutReading(5_000, E + H, { end: E, counting: false }, 'm1'), { kind: 'edit', steps: 5_000, at: E + H, editRef: 'm1' });
+    // Today, while this phone counts the member's steps (it saved the day automatically, or a source is ON).
+    assert.equal(baseWithoutReading(5_000, at, { end: E, counting: true }, null).kind, 'edit');
+    // Nothing counts here (no permission, no store): a start, like a reading with no source.
+    assert.equal(baseWithoutReading(5_000, at, { end: E, counting: false }, null).kind, 'start');
+    assert.equal(baseWithoutReading(5_000, at, { counting: false }, undefined).kind, 'start', 'the day’s end unknown');
+    assert.equal(baseWithoutReading(250_000, at, { counting: true }, undefined).steps, 100_000);
+    assert.equal(baseWithoutReading(5_000, at, { counting: true }, undefined).editRef, null);
   });
 });
 
@@ -406,6 +467,25 @@ describe('baseFromMarker — an edit seen on the server (T20, M5c2)', () => {
     assert.equal(baseFromMarker(null, 7_500, day, now, at16), null);
     assert.equal(baseFromMarker(undefined, 7_500, day, now, null), null);
     assert.equal(baseFromMarker('', 7_500, day, now, null), null);
+  });
+
+  test('a count raised on top of the edit since is never counted again: the edit’s own number at its marker, else from the row’s last write', () => {
+    // 16:00 the website sets 7 500; the member's other phone took it and raised the day to 8 300 by 17:00 (same marker).
+    const raisedAt = ist(D, '17:00');
+    assert.deepEqual(baseFromMarker(at16, 8_300, day, now, null, { editedSteps: 7_500, updatedAt: raisedAt }), {
+      kind: 'edit',
+      steps: 7_500,
+      at: ist(D, '16:00'),
+      editRef: at16,
+    });
+    // A server that doesn't send the edit's own number: the count as it is, anchored where it was last written.
+    const fromRow = baseFromMarker(at16, 8_300, day, now, null, { updatedAt: raisedAt });
+    assert.deepEqual(fromRow, { kind: 'edit', steps: 8_300, at: raisedAt, editRef: at16 });
+    // This phone's own count since the marker (900, 800 of them before 17:00) isn't added to the raise again.
+    assert.equal(val(dayValue(dayOf([hc(10_900, S, after(raisedAt, 100))]), fromRow, true)), 'edit 8400 ← health_connect');
+    // Never before the marker, never after now.
+    assert.equal(baseFromMarker(at16, 7_500, day, now, null, { updatedAt: ist(D, '15:00') })?.at, ist(D, '16:00'));
+    assert.equal(baseFromMarker(at16, 7_500, day, now, null, { updatedAt: now + H })?.at, now);
   });
 
   test('the same test as on the phone: nothing counting at the marker’s instant → a start', () => {
@@ -471,8 +551,39 @@ describe('implicitStart — counting began partway through a day that already ha
     assert.equal(implicitStart(dayOf([]), true, { server: 5_000 }), null, 'nothing counts');
   });
 
+  test('a source that began counting after this phone’s last automatic save of the day → a start (switched off and on, a new source)', () => {
+    // 5 000 saved at 11:50; the switch back on at 15:00 re-subscribes the Recording API: 6 000 since.
+    const back = ist(D, '15:00');
+    const day = dayOf([recording(6_000, back)]);
+    const base = implicitStart(day, true, { server: 5_000, autoSent: 5_000, autoAt: ist(D, '11:50') });
+    assert.deepEqual(base, { kind: 'start', steps: 5_000, at: back });
+    assert.equal(val(dayValue(day, base, true)), 'start 11000 ← phone/recording');
+    // Health Connect granted at 14:00 (S-A3 turns the phone off): the morning's 4 000 stay, HC adds on.
+    const hcDay = dayOf([hc(5_000, ist(D, '14:00'))]);
+    const hcBase = implicitStart(hcDay, true, { server: 4_000, autoSent: 4_000, autoAt: ist(D, '13:55') });
+    assert.equal(val(dayValue(hcDay, hcBase, true)), 'start 9000 ← health_connect');
+    // Saved after the coverage began (the same source's partial first day): the server already holds these steps.
+    assert.equal(implicitStart(day, true, { server: 5_000, autoSent: 5_000, autoAt: ist(D, '15:10') }), null);
+  });
+
+  test('no automatic save of the day on record (deleted at sign-out, the cache purged): never from before this phone’s last save', () => {
+    // HC granted at 14:00 with nothing before it; 3 000 saved by 18:00; signed out at 18:05 and back at 19:00.
+    const grant = ist(D, '14:00');
+    const lastSave = ist(D, '18:00');
+    const day = dayOf([hc(3_400, grant)]);
+    const base = implicitStart(day, true, { server: 3_000, lastAutoSave: lastSave });
+    assert.deepEqual(base, { kind: 'start', steps: 3_000, at: lastSave });
+    assert.equal(val(dayValue(day, base, true)), 'auto 3400 ← health_connect', 'not 3 000 + 3 400');
+    assert.equal(val(dayValue(dayOf([hc(3_500, grant, after(lastSave, 500))]), base, true)), 'auto 3500 ← health_connect');
+    // A last save from before the coverage began changes nothing.
+    assert.deepEqual(implicitStart(day, true, { server: 3_000, lastAutoSave: ist(D, '09:00') }), { kind: 'start', steps: 3_000, at: grant });
+    // A past day, last saved after it ended: the whole-day count, or the server's.
+    const past = implicitStart(day, false, { server: 3_000, lastAutoSave: E + H });
+    assert.equal(val(dayValue(day, past, false)), 'auto 3400 ← health_connect');
+  });
+
   test('the winner decides: a whole-day store on a past day, a partial phone count today', () => {
-    const both = dayOf([hc(4_000), recording(4_500, from)]);
+    const both = dayOf([hc(4_000, S, { includesPhone: true }), recording(4_500, from)]);
     assert.equal(implicitStart(both, false, { server: 5_000 }), null);
     assert.deepEqual(implicitStart(both, true, { server: 5_000 }), { kind: 'start', steps: 5_000, at: from });
   });

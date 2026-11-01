@@ -18,6 +18,11 @@ export interface TrackingDay {
    * when there is none. Missing from the old server's answers.
    */
   steps_edited_at?: string | null;
+  /**
+   * The member's own number at that marker (backend B2, `docs/notes/steps-v2.md` §2.5): the day's `steps` may have been
+   * raised on top of it since. Missing where the server doesn't send it.
+   */
+  steps_edited_value?: number | null;
   weight_kg?: number;
   updated_at?: string;
 }

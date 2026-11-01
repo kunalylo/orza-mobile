@@ -1,7 +1,8 @@
 /**
  * Per-phone step-sync memory, in two small JSON files (shapes and rules: `storeData.ts`, tested):
  * - the prefs, in the documents folder (kept with the app): per install the Android permission history ("blocked"),
- *   Health Connect's first grant time and Apple Health's background setup; per member the steps consent (M9);
+ *   Health Connect's first grant time, Apple Health's background setup and whether a member who had agreed deleted
+ *   their account; per member the steps consent (M9) and when this phone last saved their steps automatically (M5c3);
  * - the day records, in the cache folder (never backed up; the system may purge it — the server is the record of
  *   truth): per member and day, what this phone saved and read on the server, the day's base (`policy.ts`), whether a
  *   past day is final. A member's are deleted at sign-out (`deleteUserDays`).
@@ -20,6 +21,7 @@ import {
   loadPrefs,
   STEPS_FILES,
   withConsentPatch,
+  withAutoSave,
   withConsents,
   withDayRecord,
   withHcGrant,
@@ -124,12 +126,6 @@ export function updateDayRecord(userId: string, date: string, patch: Partial<Day
   setDays(withDayRecord(days(), userId, date, patch));
 }
 
-/** A past day's final count was saved (it is no longer read). */
-export function markDayFinal(userId: string, date: string) {
-  if (getDayRecord(userId, date)?.final) return;
-  updateDayRecord(userId, date, { final: true });
-}
-
 /** Sign-out (P16): forget every day record of `userId` on this phone. */
 export function deleteUserDays(userId: string) {
   setDays(withoutUserDays(days(), userId));
@@ -163,7 +159,7 @@ export function getStepsConsent(userId: string): StepsConsent | undefined {
 /** `userId` agreed to ÖRZA reading `kind` (the steps disclosure; `plan.grantConsent`: the shared-phone flag). */
 export function grantStepsConsent(userId: string, kind: keyof ReadConsent, at = Date.now()) {
   const p = prefs();
-  setPrefs(withConsents(p, grantConsent(p.consents, userId, kind, at)));
+  setPrefs(withConsents(p, grantConsent(p.consents, userId, kind, at, !!p.formerConsent)));
 }
 
 /** The member's other steps choices: the switch (`off`), "Not now", the one-time motion offer (`withConsentPatch`). */
@@ -171,9 +167,18 @@ export function updateStepsConsent(userId: string, patch: ConsentChoices) {
   setPrefs(withConsentPatch(prefs(), userId, patch));
 }
 
-/** Account deletion: `userId`'s consent record goes too. */
+/** Account deletion: `userId`'s consent record goes too (and their last-save time; the install keeps `formerConsent`). */
 export function removeStepsConsent(userId: string) {
   setPrefs(withoutConsent(prefs(), userId));
+}
+
+/** When this phone last had an automatic save of `userId`'s steps applied (null: never) — survives sign-out (M5c3). */
+export function lastAutoSave(userId: string): number | null {
+  return prefs().autoSavedAt?.[userId] ?? null;
+}
+
+export function noteAutoSave(userId: string, at = Date.now()) {
+  setPrefs(withAutoSave(prefs(), userId, at));
 }
 
 /* ───────────────────────────── Per install ───────────────────────────── */

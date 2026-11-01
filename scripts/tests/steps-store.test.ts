@@ -22,6 +22,7 @@ import {
   withConsentPatch,
   withConsents,
   withDayRecord,
+  withAutoSave,
   withHcGrant,
   withoutConsent,
   withoutUserDays,
@@ -117,14 +118,30 @@ describe('prefs: consents, Health Connect’s first grant, the v1 file', () => {
       blocked: false,
       hcGrantAt: 1_700_000_000_000,
       hkBackground: true,
+      formerConsent: true,
       consents: {
         a: { store: { at: 1 }, phone: { at: 2 }, off: { at: 3 }, notNowUntil: 4, motionOffered: true, sharedAtConsent: false },
         b: { phone: { at: 9 }, sharedAtConsent: true },
       },
+      autoSavedAt: { a: 1_700_000_100_000 },
     };
     assert.deepEqual(loadPrefs(JSON.parse(JSON.stringify(prefs)), null).prefs, prefs);
-    const odd = loadPrefs({ version: 2, hcGrantAt: 'soon', consents: { a: { store: true, phone: { at: 'x' }, off: { at: 3 } }, b: 'yes' } }, null).prefs;
-    assert.deepEqual(odd, { version: 2, consents: { a: { off: { at: 3 }, sharedAtConsent: false } } });
+    const odd = loadPrefs(
+      { version: 2, hcGrantAt: 'soon', formerConsent: 'yes', consents: { a: { store: true, phone: { at: 'x' }, off: { at: 3 } }, b: 'yes' }, autoSavedAt: { a: 'x', b: 5 } },
+      null
+    ).prefs;
+    assert.deepEqual(odd, { version: 2, consents: { a: { off: { at: 3 }, sharedAtConsent: false } }, autoSavedAt: { b: 5 } });
+  });
+
+  test('when this phone last saved a member’s steps automatically: kept through sign-out and a cache purge (a time, no steps)', () => {
+    let prefs = withAutoSave(loadPrefs(null, null).prefs, 'a', 1_000);
+    prefs = withAutoSave(prefs, 'b', 1_500);
+    assert.deepEqual(prefs.autoSavedAt, { a: 1_000, b: 1_500 });
+    assert.equal(withAutoSave(prefs, 'a', 900), prefs, 'never moves back');
+    assert.equal(withAutoSave(prefs, 'a', Number.NaN), prefs);
+    assert.deepEqual(withAutoSave(prefs, 'a', 2_000).autoSavedAt, { a: 2_000, b: 1_500 });
+    // Sign-out deletes the day records only (`withoutUserDays`); account deletion removes this too.
+    assert.deepEqual(withoutConsent(prefs, 'a').autoSavedAt, { b: 1_500 });
   });
 
   test('consent records per member: written with `plan.grantConsent`; account deletion removes only that member’s', () => {
@@ -142,6 +159,19 @@ describe('prefs: consents, Health Connect’s first grant, the v1 file', () => {
     const left = withoutConsent(prefs, 'a');
     assert.deepEqual(left.consents, { b: { phone: { at: 20 }, sharedAtConsent: true } });
     assert.equal(withoutConsent(left, 'a'), left, 'nothing to remove → unchanged');
+  });
+
+  test('account deletion of a member who had agreed leaves the install flag: the next member’s first consent is a shared phone’s', () => {
+    let prefs = loadPrefs(null, null).prefs;
+    prefs = withConsents(prefs, grantConsent(prefs.consents, 'a', 'store', 10));
+    const gone = withoutConsent(prefs, 'a');
+    assert.deepEqual(gone.consents, {});
+    assert.equal(gone.formerConsent, true);
+    const c = grantConsent(gone.consents, 'c', 'store', 50, gone.formerConsent);
+    assert.equal(c.c.sharedAtConsent, true, 'no backfill of the deleted member’s walking');
+    // A member who never agreed ("Not now" only) leaves nothing behind.
+    const notNow = withoutConsent(withConsentPatch(loadPrefs(null, null).prefs, 'd', { notNowUntil: 40 }), 'd');
+    assert.equal(notNow.formerConsent, undefined);
   });
 
   test('S-H2: Health Connect’s first grant time is kept from the first time it was seen', () => {

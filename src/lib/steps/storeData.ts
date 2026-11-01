@@ -4,7 +4,9 @@
  *
  * - **Prefs** (`orza-steps-prefs.json`, the documents folder — kept, backed up): not health data. Per install: the
  *   Android "Physical activity" history (asked / refused for good), when ÖRZA first saw Health Connect's steps read
- *   granted (S-H2), whether Apple Health's background delivery is set up (§4.3). Per member: the steps consent (M9).
+ *   granted (S-H2), whether Apple Health's background delivery is set up (§4.3), whether a member who had agreed has
+ *   deleted their account (M9). Per member: the steps consent (M9), and when this phone last saved their steps
+ *   automatically (a time, no steps: M5c3).
  * - **Day records** (`orza-steps-days.json`, the cache folder — out of iCloud / Android backups, and the system may
  *   purge it): per member and day, what this phone saved and saw on the server (`policy.DayRecord`). Safe to lose: the
  *   server is the record of truth (its edit marker and modes). Deleted per member at sign-out.
@@ -35,8 +37,19 @@ export interface StepsPrefs {
   hcGrantAt?: number;
   /** iPhone: Apple Health's background delivery of steps is configured (the observer subscribes at launch). */
   hkBackground?: boolean;
+  /**
+   * A member who had agreed deleted their account (their consent record is gone): a later member's first consent is
+   * still a shared phone's (M9) — the phone's history holds the deleted member's walking.
+   */
+  formerConsent?: boolean;
   /** Per member: their steps consent (M9). */
   consents: Record<string, StepsConsent>;
+  /**
+   * Per member: when this phone last had an automatic save of their steps applied (epoch ms; any day — a time, no
+   * steps). It outlives the day records (deleted at sign-out, the cache purged): a start made with no record of the
+   * day never counts again what such a save may hold (M5c3).
+   */
+  autoSavedAt?: Record<string, number>;
 }
 
 export interface StepsDays {
@@ -76,7 +89,16 @@ function flags(x: Record<string, unknown>): Omit<StepsPrefs, 'version' | 'consen
   if (typeof x.blocked === 'boolean') out.blocked = x.blocked;
   if (isTime(x.hcGrantAt)) out.hcGrantAt = x.hcGrantAt;
   if (typeof x.hkBackground === 'boolean') out.hkBackground = x.hkBackground;
+  if (x.formerConsent === true) out.formerConsent = true;
   return out;
+}
+
+/** The per-member times of the last automatic save, keeping only well-formed ones (none → undefined). */
+function savedTimes(x: unknown): Record<string, number> | undefined {
+  if (!isObject(x)) return undefined;
+  const out: Record<string, number> = {};
+  for (const [userId, at] of Object.entries(x)) if (userId && isTime(at)) out[userId] = at;
+  return Object.keys(out).length ? out : undefined;
 }
 
 const emptyPrefs = (): StepsPrefs => ({ version: 2, consents: {} });
@@ -95,7 +117,8 @@ export function loadPrefs(prefs: unknown, legacy: unknown): { prefs: StepsPrefs;
         if (userId && c) consents[userId] = c;
       }
     }
-    return { prefs: { version: 2, ...flags(prefs), consents }, migrated: false };
+    const autoSavedAt = savedTimes(prefs.autoSavedAt);
+    return { prefs: { version: 2, ...flags(prefs), consents, ...(autoSavedAt ? { autoSavedAt } : {}) }, migrated: false };
   }
   if (isObject(legacy) && legacy.version === 1) {
     const out = emptyPrefs();
@@ -164,11 +187,30 @@ export function withConsentPatch(prefs: StepsPrefs, userId: string, patch: Conse
   return { ...prefs, consents: { ...prefs.consents, [userId]: next as unknown as StepsConsent } };
 }
 
-/** Account deletion: `userId`'s consent record removed (unchanged when there is none). */
+/**
+ * Account deletion: `userId`'s consent record and last-save time removed (unchanged when there is neither). A member
+ * who had agreed leaves `formerConsent` behind (no id, no data): the next member's first consent is a shared phone's.
+ */
 export function withoutConsent(prefs: StepsPrefs, userId: string): StepsPrefs {
-  if (!(userId in prefs.consents)) return prefs;
+  const mine = prefs.consents[userId];
+  const saved = !!prefs.autoSavedAt && userId in prefs.autoSavedAt;
+  if (!mine && !saved) return prefs;
   const { [userId]: _gone, ...consents } = prefs.consents;
-  return { ...prefs, consents };
+  const { [userId]: _savedAt, ...autoSavedAt } = prefs.autoSavedAt ?? {};
+  const { autoSavedAt: _all, ...rest } = prefs;
+  return {
+    ...rest,
+    ...(mine && (mine.store || mine.phone) ? { formerConsent: true } : {}),
+    consents,
+    ...(Object.keys(autoSavedAt).length ? { autoSavedAt } : {}),
+  };
+}
+
+/** This phone's automatic save of `userId`'s steps was applied at `at` (kept only when later than the one known). */
+export function withAutoSave(prefs: StepsPrefs, userId: string, at: number): StepsPrefs {
+  const known = prefs.autoSavedAt?.[userId];
+  if (!userId || !isTime(at) || (known != null && known >= at)) return prefs;
+  return { ...prefs, autoSavedAt: { ...prefs.autoSavedAt, [userId]: at } };
 }
 
 /** S-H2: Health Connect's steps read seen granted at `at` — kept only the first time (unchanged after). */

@@ -526,3 +526,6 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
 - 2026-11-01: **Steps v2 phase J (pure core) done** — J6 save.ts on the server modes (feature-detects `applied`; old-server branch
   behind the per-day GET guard until V4), J7 store split (prefs in documents, day records in cache, v1 flags migrated). test:steps
   208/208, test:alarms 34/34. Next: phase B (backend) / N (native Android), first unticked step in §10.
+- 2026-11-01: **Web batch 1 LIVE** — user OK'd; main fast-forwarded c3e234c → `47897ad` and pushed; Vercel production deployment
+  "Deployment has completed" (05:58 UTC). Phase J review + fix resumed (`wf_743ae41a-b53`). Steps v2 Phase B (web) started on branch
+  `steps-v2-backend` in `E:\aylo\orza-backend` (`wf_8fb330bb-494`, local only; the B6 privacy copy needs the user's review before any push).

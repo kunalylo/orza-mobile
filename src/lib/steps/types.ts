@@ -27,6 +27,12 @@ export interface SourceReading {
   /** The source has read up to the day's end (a past day can become final, M7). */
   complete?: boolean;
   /**
+   * Health Connect only: its count holds this phone's own steps — HC counts the phone itself (Android 14+ with SDK
+   * extension 20, `stepTracking`; the reader sets it). Only then does it decide a past day over the phone's count (M4).
+   * Apple Health always holds the iPhone's steps.
+   */
+  includesPhone?: boolean;
+  /**
    * What the source counted after a base's `at` (M5): its count over [max(at, coverFrom), min(e, now)), read for the
    * day's `ReadOptions.sinceAt`. Not needed when `coverFrom >= at` (then it is all of `steps`).
    */
@@ -50,6 +56,12 @@ export interface DayReading {
   end: number;
   /** One reading per source that has data for the day; a source without data has none (M0). */
   sources: SourceReading[];
+  /**
+   * A health store is ON for the member but wasn't read this run (Android in the background without
+   * `READ_HEALTH_DATA_IN_BACKGROUND`, a locked iPhone, a failed query) — not the same as "no data": the day may be
+   * missing the store's count. A past day then saves nothing and isn't final (§2.9); today still raises.
+   */
+  storeUnread?: boolean;
 }
 
 /**
