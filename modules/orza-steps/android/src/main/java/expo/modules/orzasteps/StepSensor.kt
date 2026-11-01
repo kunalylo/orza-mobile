@@ -262,6 +262,6 @@ internal class StepShutdownReceiver : BroadcastReceiver() {
     if (intent.action != Intent.ACTION_SHUTDOWN) return
     val app = context.applicationContext
     if (!StepStore.isEnabled(app) || !StepSensor.hasPermission(app)) return
-    sampleAsync(app, "shutdown")
+    sampleAsync(app, StepConst.REASON_SHUTDOWN)
   }
 }

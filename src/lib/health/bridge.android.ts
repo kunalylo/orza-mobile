@@ -1,7 +1,9 @@
 /**
  * Health Connect reader — Android only. Metro picks this file on Android, so the Health Connect module is never loaded
- * on iPhone. Permissions are declared in app.json (`android.permission.health.READ_*`); the library's config plugin adds
- * the permissions-rationale intent filter + activity alias Health Connect requires.
+ * on iPhone. Permissions are declared in app.json (`android.permission.health.READ_*`); the permissions-rationale intent
+ * filter + activity alias Health Connect requires open ÖRZA's privacy policy (`modules/orza-steps`, HealthPrivacyActivity;
+ * the library's config plugin is not used). Until steps v2 R1, READ_TYPES still lists the four types app.json no longer
+ * declares (P5) — Health Connect can't grant those, and `readableTypes` only reads granted ones.
  */
 import Constants from 'expo-constants';
 import { Linking, Platform } from 'react-native';

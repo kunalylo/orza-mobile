@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Raw samples (a bounded ring buffer: KEEP_MS / MAX_SAMPLES) and the sampler's settings (on / off, the member's time
- * zone), as two small JSON files in `noBackupFilesDir` — never part of Auto Backup or a device transfer, so a new phone
+ * zone, when the Recording API subscription began), as two small JSON files in `noBackupFilesDir` — never part of Auto Backup or a device transfer, so a new phone
  * never inherits another phone's counter readings or an "on" switch. Written through AtomicFile (synced, then renamed:
  * a shutdown sample survives the power-off that follows it). Every read-modify-write happens under one lock (receivers,
  * the sensor thread and JS calls overlap).
@@ -89,13 +89,16 @@ internal object StepStore {
    * last stored sample of the same boot:
    * - a read the app asked for (`force` false) within MIN_STORE_GAP_MS is not stored;
    * - a forced sample within DUPLICATE_MS replaces it (dropped when the counter didn't move) — cumulative counter, so
-   *   no step is lost, and a burst of broadcasts can't flood the buffer.
-   * Then drops samples older than KEEP_MS and the oldest beyond MAX_SAMPLES. True when stored.
+   *   no step is lost, and a burst of broadcasts can't flood the buffer. A `shutdown` tag survives either way: the kept
+   *   sample is then the last reading before the power-off, and the app trusts a reboot only after a `shutdown` one
+   *   (`src/lib/steps/counter.ts`).
+   * Then drops samples older than KEEP_MS and the oldest beyond MAX_SAMPLES. True when stored (or re-tagged).
    */
   fun add(context: Context, sample: StepSample, force: Boolean): Boolean {
     synchronized(lock) {
       val samples = readUnlocked(context)
       val last = samples.lastOrNull()
+      var next = sample
       if (last != null && last.boot == sample.boot) {
         val gap = if (last.elapsed >= 0L && sample.elapsed >= last.elapsed) {
           sample.elapsed - last.elapsed
@@ -105,12 +108,18 @@ internal object StepStore {
         if (gap >= 0L && gap < StepConst.MIN_STORE_GAP_MS) {
           if (!force) return false
           if (gap < StepConst.DUPLICATE_MS) {
-            if (last.counter == sample.counter) return false
+            val shutdown = sample.reason == StepConst.REASON_SHUTDOWN || last.reason == StepConst.REASON_SHUTDOWN
+            if (last.counter == sample.counter) {
+              if (!shutdown || last.reason == StepConst.REASON_SHUTDOWN) return false
+              samples[samples.size - 1] = last.copy(reason = StepConst.REASON_SHUTDOWN)
+              return writeUnlocked(context, samples)
+            }
             samples.removeAt(samples.size - 1)
+            if (shutdown) next = sample.copy(reason = StepConst.REASON_SHUTDOWN)
           }
         }
       }
-      samples.add(sample)
+      samples.add(next)
       val cutoff = sample.ts - StepConst.KEEP_MS
       samples.removeAll { it.ts < cutoff }
       while (samples.size > StepConst.MAX_SAMPLES) samples.removeAt(0)
@@ -192,4 +201,27 @@ internal object StepStore {
   fun setEnabled(context: Context, enabled: Boolean) {
     updateState(context) { it.put("enabled", enabled) }
   }
+
+  /** When the Recording API subscription began (epoch ms), null when not subscribed. */
+  fun recordingSubscribedAt(context: Context): Long? {
+    synchronized(lock) {
+      val at = readState(context).optLong(RECORDING_SUBSCRIBED_AT, 0L)
+      return if (at > 0L) at else null
+    }
+  }
+
+  /**
+   * A subscribe call worked: keeps the FIRST subscription time (`at` only when none is stored — subscribing again
+   * changes nothing, and the API's data starts at the first one).
+   */
+  fun markRecordingSubscribed(context: Context, at: Long) {
+    updateState(context) { if (it.optLong(RECORDING_SUBSCRIBED_AT, 0L) <= 0L) it.put(RECORDING_SUBSCRIBED_AT, at) }
+  }
+
+  /** Unsubscribed: the API's data is gone, so the next subscription starts a new coverage. */
+  fun clearRecordingSubscribed(context: Context) {
+    updateState(context) { it.remove(RECORDING_SUBSCRIBED_AT) }
+  }
+
+  private const val RECORDING_SUBSCRIBED_AT = "recordingSubscribedAt"
 }

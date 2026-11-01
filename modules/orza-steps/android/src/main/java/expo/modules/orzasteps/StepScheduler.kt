@@ -18,8 +18,9 @@ import java.time.ZoneId
  * - periodic: inexact, about every hour — spaced out in stricter App Standby buckets, none in Restricted (see
  *   StepConst.PERIODIC_MS);
  * - midnight: just before and just after local midnight in the member's time zone, so each day's total splits cleanly.
- *   Exact when the member allowed "Alarms & reminders" (ÖRZA asks for it for medicine alarms; no new permission),
- *   otherwise an inexact chain whose latest possible delivery still lands before midnight (see nextInexactMidnightSample).
+ *   Always an inexact chain whose latest possible delivery still lands before midnight (see nextInexactMidnightSample):
+ *   step sampling isn't a user-facing timed function, so it never uses the exact alarms ("Alarms & reminders") that
+ *   ÖRZA holds for medicine reminders (P14).
  */
 internal object StepScheduler {
   /** UsageStatsManager.STANDBY_BUCKET_* values (API 28+). */
@@ -36,7 +37,10 @@ internal object StepScheduler {
     return PendingIntent.getBroadcast(context, requestCode, intent, flags)
   }
 
-  /** Exact alarms are allowed ("Alarms & reminders"; always below Android 12) — same rule as orza-alarms. */
+  /**
+   * Exact alarms are allowed ("Alarms & reminders"; always below Android 12) — same rule as orza-alarms. Diagnostics
+   * only (`getStatus`): the sampler's own alarms are all inexact.
+   */
   fun canScheduleExact(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
     val am = alarmManager(context) ?: return false
@@ -95,19 +99,8 @@ internal object StepScheduler {
     }
     val pi = pendingIntent(context, StepConst.ACTION_MIDNIGHT, StepConst.REQUEST_MIDNIGHT, true) ?: return
     val now = System.currentTimeMillis()
-    val zone = zone(context)
-    if (canScheduleExact(context)) {
-      try {
-        am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextMidnightSample(now, zone), pi)
-        return
-      } catch (e: SecurityException) {
-        Log.w(StepConst.TAG, "Exact midnight sample refused — using the inexact chain", e)
-      } catch (e: Exception) {
-        Log.w(StepConst.TAG, "Couldn't set the exact midnight step sample", e)
-      }
-    }
     val capped = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val at = nextInexactMidnightSample(now, zone, capped, refine = bucket < BUCKET_FREQUENT)
+    val at = nextInexactMidnightSample(now, zone(context), capped, refine = bucket < BUCKET_FREQUENT)
     try {
       am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
     } catch (e: Exception) {
@@ -154,19 +147,8 @@ internal object StepScheduler {
   private fun midnightAfter(now: Long, zone: ZoneId, days: Long): Long =
     Instant.ofEpochMilli(now).atZone(zone).toLocalDate().plusDays(days).atStartOfDay(zone).toInstant().toEpochMilli()
 
-  /** Exact: the next of "midnight − 5 min" / "midnight + 5 min" in `zone` that is at least a minute away. */
-  fun nextMidnightSample(now: Long, zone: ZoneId): Long {
-    val offset = StepConst.MIDNIGHT_OFFSET_MS
-    for (days in 0L..2L) {
-      val midnight = midnightAfter(now, zone, days)
-      if (midnight - offset > now + 60_000L) return midnight - offset
-      if (midnight + offset > now + 60_000L) return midnight + offset
-    }
-    return now + StepConst.PERIODIC_MS
-  }
-
   /**
-   * Inexact: Android delivers an allow-while-idle alarm set `x` ahead up to 0.75·x late (at most 1 h late from Android
+   * Android delivers an allow-while-idle alarm set `x` ahead up to 0.75·x late (at most 1 h late from Android
    * 12, `capped`). Before each midnight the alarm goes to the latest time whose worst-case delivery is still
    * PRE_MIDNIGHT_MARGIN_MS before midnight; each run re-arms from its own time (shorter lead = smaller window) until a
    * run lands within CHAIN_FINAL_GAP_MS of that deadline (CHAIN_COARSE_GAP_MS when `refine` is false: fewer alarms in

@@ -5,6 +5,9 @@ import org.json.JSONObject
 internal object StepConst {
   const val TAG = "OrzaSteps"
 
+  /** The sample reason of the last reading before a power-off (the app trusts a reboot only after one). */
+  const val REASON_SHUTDOWN = "shutdown"
+
   /**
    * Everything lives in noBackupFilesDir: never in Auto Backup or a device-to-device transfer (another phone's counter
    * readings must never be bridged to this phone's). Earlier builds used SharedPreferences "orza_steps", which ARE
@@ -58,12 +61,10 @@ internal object StepConst {
   const val PERIODIC_FREQUENT_MS = 3L * 60 * 60 * 1000
   const val PERIODIC_RARE_MS = 4L * 60 * 60 * 1000
 
-  /** Exact midnight samples ("Alarms & reminders" allowed): this long before and after local midnight. */
-  const val MIDNIGHT_OFFSET_MS = 5L * 60 * 1000
-
   /**
-   * Inexact midnight samples (no "Alarms & reminders"): Android may deliver an inexact alarm up to 75 % of its lead time
-   * late (capped at 1 h from Android 12). The pre-midnight alarm is therefore set so that even its latest delivery is
+   * Midnight samples are always inexact (P14: step sampling isn't a user-facing timed function, so it never uses the
+   * "Alarms & reminders" exact alarms medicine reminders need). Android may deliver an inexact alarm up to 75 % of its
+   * lead time late (capped at 1 h from Android 12). The pre-midnight alarm is therefore set so that even its latest delivery is
    * PRE_MIDNIGHT_MARGIN_MS before midnight, and each run re-arms a closer one (a shorter lead = a smaller window) until
    * a sample lands within CHAIN_FINAL_GAP_MS of that deadline; then one sample POST_MIDNIGHT_OFFSET_MS after midnight.
    * In the Frequent / Rare buckets one pre-midnight sample within CHAIN_COARSE_GAP_MS is enough (fewer alarms).

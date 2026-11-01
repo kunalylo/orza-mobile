@@ -34,7 +34,7 @@ class StepBootReceiver : BroadcastReceiver() {
     when (action) {
       Intent.ACTION_SHUTDOWN -> {
         if (!StepStore.isEnabled(app) || !StepSensor.hasPermission(app)) return
-        sampleAsync(app, "shutdown")
+        sampleAsync(app, StepConst.REASON_SHUTDOWN)
       }
       Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
         if (!StepSampler.shouldRun(app)) return

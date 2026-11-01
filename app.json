@@ -47,13 +47,10 @@
         "android.permission.READ_CALENDAR",
         "android.permission.WRITE_CALENDAR",
         "android.permission.health.READ_STEPS",
-        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
-        "android.permission.health.READ_DISTANCE",
         "android.permission.health.READ_SLEEP",
         "android.permission.health.READ_RESTING_HEART_RATE",
-        "android.permission.health.READ_HEART_RATE",
         "android.permission.health.READ_WEIGHT",
-        "android.permission.health.READ_HYDRATION"
+        "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
       ],
       "blockedPermissions": [
         "android.permission.READ_MEDIA_IMAGES",
@@ -135,7 +132,6 @@
           }
         }
       ],
-      "react-native-health-connect",
       [
         "@kingstinct/react-native-healthkit",
         {

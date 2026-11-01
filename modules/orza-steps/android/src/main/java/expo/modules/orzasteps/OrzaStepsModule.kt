@@ -3,14 +3,17 @@ package expo.modules.orzasteps
 import android.content.Context
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.Exceptions
+import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import org.json.JSONArray
 
 /**
- * JS API of the step sampler (`modules/orza-steps/src/index.ts`). Native code only records raw counter samples; the
- * app turns them into daily totals in the member's time zone (`src/lib/steps/counter.ts`). Everything that must work
- * with the app closed lives in the receivers + StepStore, not here.
+ * JS API of the phone's step sources (`modules/orza-steps/src/index.ts`): the step sampler (raw counter samples), the
+ * Recording API on mobile (StepRecording: Play services' step buckets) and Health Connect's step features
+ * (HealthFeatures). Native code only reads raw data; the app turns it into daily totals in the member's time zone
+ * (`src/lib/steps/counter.ts`, `src/lib/steps/recording.ts`). Everything that must work with the app closed lives in
+ * the receivers + StepStore, not here.
  */
 class OrzaStepsModule : Module() {
   private val context: Context
@@ -83,8 +86,67 @@ class OrzaStepsModule : Module() {
         "standbyBucket" to StepScheduler.standbyBucket(ctx),
         "samples" to StepStore.count(ctx),
         "timeZone" to StepStore.timeZone(ctx),
-        "bootCount" to StepSensor.bootCount(ctx)
+        "bootCount" to StepSensor.bootCount(ctx),
+        "recording" to StepRecording.status(ctx),
+        "subscribedAt" to StepStore.recordingSubscribedAt(ctx)?.toDouble()
       )
+    }
+
+    /* ─────────── Recording API on mobile (Google Play services; see StepRecording) ─────────── */
+
+    /** "available" | "update_required" | "missing" | "disabled" | "unavailable" | "no_sensor". */
+    AsyncFunction("recordingStatus") {
+      StepRecording.status(context)
+    }
+
+    /**
+     * Subscribes to step recording. Resolves `{ok, subscribedAt, error}`: subscribedAt = the FIRST successful
+     * subscription (epoch ms, null when none), error = exception class + status code when it failed (logs only).
+     */
+    AsyncFunction("recordingSubscribe") { promise: Promise ->
+      val ctx = context
+      StepRecording.subscribe(ctx) { ok, error ->
+        promise.resolve(
+          mapOf(
+            "ok" to ok,
+            "subscribedAt" to StepStore.recordingSubscribedAt(ctx)?.toDouble(),
+            "error" to error
+          )
+        )
+      }
+    }
+
+    /** Unsubscribes; the subscription time is always forgotten. Resolves whether Play services agreed. */
+    AsyncFunction("recordingUnsubscribe") { promise: Promise ->
+      StepRecording.unsubscribe(context) { ok, _ -> promise.resolve(ok) }
+    }
+
+    /**
+     * Steps over [startMs, lastMs] (both inclusive: `recordingRange()` already ends at end − 1, so it is passed as is)
+     * in `bucketMinutes` buckets, as JSON `[[bucketStartMs, bucketEndMs, steps], …]` (non-zero buckets only). Rejects
+     * ERR_RECORDING_READ with the exception class + status code.
+     */
+    AsyncFunction("recordingRead") { startMs: Double, lastMs: Double, bucketMinutes: Int, promise: Promise ->
+      StepRecording.read(
+        context,
+        startMs.toLong(),
+        lastMs.toLong(),
+        bucketMinutes,
+        ok = { json -> promise.resolve(json) },
+        failed = { message, cause -> promise.reject("ERR_RECORDING_READ", message, cause) }
+      )
+    }
+
+    /** When the subscription began (epoch ms), null when not subscribed. */
+    AsyncFunction("recordingSubscribedAt") {
+      StepStore.recordingSubscribedAt(context)?.toDouble()
+    }
+
+    /* ─────────── Health Connect features (see HealthFeatures) ─────────── */
+
+    /** `{stepTracking, extension, backgroundRead: "available" | "unavailable", backgroundGranted, stepsGranted}`. */
+    AsyncFunction("healthFeatures") Coroutine { ->
+      HealthFeatures.read(context)
     }
   }
 }

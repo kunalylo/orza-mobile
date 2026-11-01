@@ -34,5 +34,28 @@
         <action android:name="android.intent.action.ACTION_SHUTDOWN" />
       </intent-filter>
     </receiver>
+
+    <!-- Health Connect's "privacy policy" link opens ÖRZA's privacy policy (HealthPrivacyActivity: a WebView on the same
+         page as the Play Console's privacy URL). Android 9–13: Health Connect starts the rationale action; Android 14+:
+         the system starts the VIEW_PERMISSION_USAGE alias, which only it may (START_VIEW_PERMISSION_USAGE). Replaces the
+         react-native-health-connect config plugin, which pointed both at MainActivity (Today). -->
+    <activity
+      android:name="expo.modules.orzasteps.HealthPrivacyActivity"
+      android:exported="true"
+      android:theme="@android:style/Theme.Material.Light.NoActionBar">
+      <intent-filter>
+        <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+      </intent-filter>
+    </activity>
+    <activity-alias
+      android:name="expo.modules.orzasteps.ViewPermissionUsageActivity"
+      android:exported="true"
+      android:targetActivity="expo.modules.orzasteps.HealthPrivacyActivity"
+      android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+        <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+      </intent-filter>
+    </activity-alias>
   </application>
 </manifest>
