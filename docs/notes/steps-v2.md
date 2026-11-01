@@ -971,14 +971,18 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
 
 **Phase B: backend (web, local only)**
 
-- [ ] **B1.** `track/steps` modes + response (§2.5) and the `tracking.ts` helpers.
-- [ ] **B2.** `steps_edited_at` in `TrackingDay` and in the dashboard/today response.
-- [ ] **B3.** Mirror skips edited days; `normaliseDays` drops future-dated steps.
-- [ ] **B4.** `GET /api/health/days` steps from `tracking.steps`.
-- [ ] **B5.** Coach prompt without steps.
-- [ ] **B6.** Privacy page section `#phone-app` + AI-improvement wording (the user reviews the text).
-- [ ] **B7.** `scripts/check-steps-modes.mjs` against `orza-localtest` (the §7.2 cases). Commit on the backend branch;
+- [x] **B1.** `track/steps` modes + response (§2.5) and the `tracking.ts` helpers.
+- [x] **B2.** `steps_edited_at` in `TrackingDay` and in the dashboard/today response.
+- [x] **B3.** Mirror skips edited days; `normaliseDays` drops future-dated steps.
+- [x] **B4.** `GET /api/health/days` steps from `tracking.steps`.
+- [-] **B5.** Coach prompt without steps. SKIPPED by coordinator decision (header): the app-wide AI consent replaces it before iOS ships.
+- [x] **B6.** Privacy page section `#phone-app` + AI-improvement wording (the user reviews the text).
+- [x] **B7.** `scripts/check-steps-modes.mjs` against `orza-localtest` (the §7.2 cases). Commit on the backend branch;
   not pushed.
+  Done 2026-11-01 on web branch `steps-v2-backend` (`e4f70b3`, review fixes `06e7bcf`, live-check fixes `a3e3c0e`): 25/25 + 8 hand
+  checks on the local server. Deviations: no mode = legacy plain set WITHOUT a marker (the phone build testers have); the web
+  StepsCard sends mode "manual"; `steps_edited_value` (the typed number) is stored and returned with the marker; a typed 0 shows on
+  the Health chart. Privacy copy (B6) awaits the user's review; publish with v2.
 
 **Phase J: pure JS core (no native; test-first)**
 
