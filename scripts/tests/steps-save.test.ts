@@ -373,18 +373,33 @@ describe('the “not_higher” answer (T37)', () => {
 });
 
 describe('reconcile a past day (T38, M6)', () => {
-  /** Today at 23:30: the phone's live count above the store's (12,000 vs 11,000) — saved as the live tail. */
+  /**
+   * Today at 23:30 on an iPhone with the Motion fallback: the phone's live count above Apple Health's (12,000 vs
+   * 11,000) — saved as the live tail. (A store that holds the phone's own steps: past days follow it, M4.)
+   */
   async function liveTail(modes: boolean) {
     forgetServerObservations();
     const srv = fakeServer(modes, ist(D, '23:30'));
     const a = srv.phone('A');
-    await saveDay(a.deps, a.userId, dayOf([hc(11_000), recording(12_000)]), true, { tz: IST });
+    await saveDay(a.deps, a.userId, dayOf([health(11_000), pedometer(12_000)]), true, { tz: IST });
     assert.equal(srv.steps(), 12_000);
     srv.advance(8.5 * H); // the next morning, 08:00
     return { srv, a };
   }
   /** The past day the next morning: the store caught up at 11,500, below the phone's 12,000. */
-  const morning = () => dayOf([hc(11_500), recording(12_000, S, { complete: true })]);
+  const morning = () => dayOf([health(11_500), pedometer(12_000, S, { complete: true })]);
+
+  test('Android 9–13: Health Connect without this phone’s steps never lowers the phone’s live tail (M4)', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '23:30'));
+    const a = srv.phone('A');
+    await saveDay(a.deps, a.userId, dayOf([hc(4_000), recording(12_000)]), true, { tz: IST });
+    srv.advance(8.5 * H);
+    // Strava wrote 4 000 steps for a run; the Recording API counted 12 000 — the day stays the phone's.
+    await saveDay(a.deps, a.userId, dayOf([hc(4_000), recording(12_000, S, { complete: true })]), false, { tz: IST });
+    assert.equal(srv.posts.length, 1);
+    assert.equal(srv.steps(), 12_000);
+  });
 
   test('the next morning the store says 11,500 → the day follows it (only this phone’s own save is corrected)', async () => {
     const { srv, a } = await liveTail(true);
@@ -435,10 +450,10 @@ describe('the old server (no `applied`, T39)', () => {
     forgetServerObservations();
     const srv = fakeServer(false, ist(D, '23:30'));
     const a = srv.phone('A');
-    await saveDay(a.deps, a.userId, dayOf([hc(11_000), recording(12_000)]), true, { tz: IST });
+    await saveDay(a.deps, a.userId, dayOf([health(11_000), pedometer(12_000)]), true, { tz: IST });
     assert.equal(a.record(D)?.serverModes, false);
     srv.advance(8.5 * H);
-    assert.equal(await saveDay(a.deps, a.userId, dayOf([hc(11_500), recording(12_000, S, { complete: true })]), false, { tz: IST }), true);
+    assert.equal(await saveDay(a.deps, a.userId, dayOf([health(11_500), pedometer(12_000, S, { complete: true })]), false, { tz: IST }), true);
     assert.equal(srv.posts.length, 1);
     assert.equal(srv.steps(), 12_000);
   });
@@ -526,17 +541,37 @@ describe('a taken edit leaves a past day open (T36 on a settled day, M7)', () =>
     assert.equal(await syncDay(a.deps, a.userId, dayOf([recording(7_800, S, { complete: true })]), false, false), 'edited');
     assert.equal(srv.posts.length, 1, 'nothing to save until the count since the edit is read');
     assert.equal(a.record(D)?.final, undefined);
-    // The old server (no `applied` yet for the day): its read before the save shows a lower count — the edit.
+    // The old server (no markers): a lower count Today read at 23:30 is the edit, anchored at that read — open too.
     forgetServerObservations();
     const old = fakeServer(false, ist(D, '20:00'));
     const b = old.phone('B');
     await syncDay(b.deps, b.userId, dayOf([recording(7_000)]), true, false);
     old.advance(3 * H);
     old.set(D, 6_000);
-    old.advance(2.5 * H);
+    old.advance(30 * MIN);
+    const seenAt = old.now();
+    observeServerSteps(b.userId, D, 6_000, seenAt);
+    old.advance(2 * H);
     assert.equal(await syncDay(b.deps, b.userId, dayOf([recording(7_800, S, { complete: true })]), false, false), 'edited');
-    assert.equal(b.record(D)?.base?.kind, 'edit');
+    assert.deepEqual(b.record(D)?.base, { kind: 'edit', steps: 6_000, at: seenAt, editRef: null });
     assert.equal(b.record(D)?.final, undefined);
+    assert.equal(old.posts.length, 1);
+  });
+
+  test('the old server: an edit first seen by the read before a past day’s save is anchored at that read — after the day, so final', async () => {
+    forgetServerObservations();
+    const old = fakeServer(false, ist(D, '20:00'));
+    const b = old.phone('B');
+    await syncDay(b.deps, b.userId, dayOf([recording(7_000)]), true, false);
+    old.advance(3 * H);
+    old.set(D, 6_000); // when, the old server can't say
+    old.advance(2.5 * H);
+    assert.equal(await syncDay(b.deps, b.userId, dayOf([recording(7_800, S, { complete: true })]), false, false), 'done');
+    assert.equal(b.record(D)?.base?.kind, 'edit');
+    assert.ok((b.record(D)?.base?.at ?? 0) >= dayBounds(D, IST).end, 'the member’s number for good (M5d)');
+    assert.equal(b.record(D)?.final, true);
+    assert.equal(old.steps(), 6_000);
+    assert.equal(old.posts.length, 1);
   });
 
   test('an edit made after the day ended is the member’s number for good: final at once', async () => {

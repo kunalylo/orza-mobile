@@ -541,10 +541,10 @@ describe('implicitStart — counting began partway through a day that already ha
     assert.equal(val(dayValue(dayOf([recording(2_600, from)]), base, true)), 'start 7600 ← phone/recording', 'later that day');
   });
 
-  test('only with no base, no automatic save of the day by this phone, a partial winner and a count on the server', () => {
+  test('only with no base, no automatic save of the day by this phone since that coverage began, a partial winner and a count on the server', () => {
     const day = dayOf([recording(800, from)]);
     assert.equal(implicitStart(day, true, { server: 5_000, base: { kind: 'edit', steps: 4_000, at: S } }), null);
-    assert.equal(implicitStart(day, true, { server: 5_000, autoSent: 800 }), null);
+    assert.equal(implicitStart(day, true, { server: 5_000, autoSent: 800 }), null, 'saved, when unknown: taken as since');
     assert.equal(implicitStart(day, true, { server: 0 }), null);
     assert.equal(implicitStart(day, true, {}), null);
     assert.equal(implicitStart(dayOf([recording(800)]), true, { server: 5_000 }), null, 'a whole-day winner');
@@ -564,6 +564,10 @@ describe('implicitStart — counting began partway through a day that already ha
     assert.equal(val(dayValue(hcDay, hcBase, true)), 'start 9000 ← health_connect');
     // Saved after the coverage began (the same source's partial first day): the server already holds these steps.
     assert.equal(implicitStart(day, true, { server: 5_000, autoSent: 5_000, autoAt: ist(D, '15:10') }), null);
+    // The member's other phone raised the day to 9 000 meanwhile (its count holds the steps since 15:00 too): this
+    // phone carries on from its own 5 000 — compared with the other phone's, never added to it.
+    assert.deepEqual(implicitStart(day, true, { server: 9_000, autoSent: 5_000, autoAt: ist(D, '11:50') }), { kind: 'start', steps: 5_000, at: back });
+    assert.equal(implicitStart(day, true, { server: 4_000, autoSent: 5_000, autoAt: ist(D, '11:50') })?.steps, 4_000, 'never above the server');
   });
 
   test('no automatic save of the day on record (deleted at sign-out, the cache purged): never from before this phone’s last save', () => {

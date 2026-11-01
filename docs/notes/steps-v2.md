@@ -193,7 +193,9 @@ R1–R16 are adopted as written, with these changes:
   - A day entirely before `W` → `null`.
   - A day straddling `W`'s start → `coverFrom = W.start`.
   - A day inside `W` with no buckets → `0` (covered, really 0).
-- **S-R4.** For base ranges (`since(a)`), use 1-minute buckets from `floor_minute(a)`, today only.
+- **S-R4.** For base ranges (`since(a)`), use 1-minute buckets from `floor_minute(a)`, on **every day read in the window
+  that has a base** (today and past days; J review: a past day without it is only a lower bound — `sinceUnknown`, never
+  reconciled, not final before 72 h).
 - **S-R5.** No step counter → status `no_sensor`, so the Recording API is not used (C9.6).
 - **S-R6.** Never copy Google's sample, which uses `bucketByTime(1, TimeUnit.DAYS)` from now − 1 week: those are rolling
   24 h windows, not local days [G-rec].
@@ -225,7 +227,8 @@ R1–R16 are adopted as written, with these changes:
 
 **iOS**
 - `firstAsk = healthkit` (`requestAuthorization({toRead: [StepCount]})`).
-- **"Health empty" state:** every one of the last 7 past days is `null` and today is `null`.
+- **"Health empty" state:** every one of the last 7 past days is `null` and today is `null`. A past day no longer read
+  (final) counts by its record: final with `noStore` (J review — after the first run only the newest days are read).
   - Show "Log steps".
   - Show a one-time "Use iPhone motion instead", which opens its own pre-alert sheet and then the Motion prompt and sets
     `consent.phone`.
@@ -253,8 +256,11 @@ off):
   - A tie goes to the store (label).
   - The estimated part is never saved for today (target = `auto − estimated` when the phone wins).
 - **M4 (past day).**
-  - If `S ≠ null` **and** `S.coverFrom ≤ (P?.coverFrom ?? +∞)`, then `auto = S`. This is store-authoritative, even when
-    `P` is higher.
+  - If `S ≠ null` **and** `S` holds this phone's own steps **and** `S.coverFrom ≤ (P?.coverFrom ?? +∞)`, then
+    `auto = S`. This is store-authoritative, even when `P` is higher. "Holds the phone's steps" (J review): Apple Health
+    always; Health Connect only with `includesPhone` (the reader sets it when `stepTracking`; R2 may also set it when the
+    day's origins include a phone-step recorder such as Samsung Health or Google Fit). On Android 9–13, HC may hold only
+    a watch worn part of the day or a running app's workouts, which must never lower the phone's whole-day count.
   - Otherwise, `auto` = the higher of `S` and `P` by `steps − estimated`. When only `P` exists, `auto = P` including its
     estimate.
 - **M5 (bases, time-anchored).**
@@ -265,15 +271,30 @@ off):
   - (c) **How a base is created:**
     - (c1) **The member saves a number on this phone at `a`.** It is `edit` if some ON source had `coverFrom ≤ a` on `D`
       (something was counting). Otherwise it is `start` (typed while nothing counted, so counting that starts later adds
-      on, and a whole-day store count can still replace it once higher).
-    - (c2) **The phone sees a server marker `m` ≠ the known `editRef`.** Same test, with `a = clamp(Date.parse(m), s,
-      t)`. `steps` = the server value, and `editRef = m`.
-    - (c3) **Implicit start.** There is no base, this phone hasn't auto-saved `D` yet, the winner's `coverFrom > s`, and
-      the known server value is > 0. Then `start {steps: server, at: winner.coverFrom}`. This covers a new source's first
-      day, and a re-subscribe after sign-out.
+      on, and a whole-day store count can still replace it once higher). **With no reading of `D` at hand** (the first
+      read hasn't finished or timed out; J review): `edit` when `a ≥ e`, when this phone auto-saved `D`, or when a
+      source is ON (the counter's permission, a connected store); else `start` (`merge.baseWithoutReading`).
+    - (c2) **The phone sees a server marker `m` ≠ the known `editRef`.** Same test, with `editRef = m`. J review: the
+      count may already hold raises made on top of the edit (another phone took `m` first; this phone did before its day
+      record was lost), so it is never anchored at `m` as is: `{steps: steps_edited_value, at: m}` when the server sends
+      the edit's own number (B2 amendment), else `{steps: server value, at: max(m, row.updated_at)}` — where the count
+      was last set (conservative: may miss steps between the edit and a later non-step write of the row). Clamped to
+      `[s, t]`.
+    - (c3) **Implicit start.** There is no base, the winner's `coverFrom > s`, the known server value is > 0, and this
+      phone hasn't auto-saved `D` **since `coverFrom`** (J review: `autoAt < coverFrom` — a source switched, S-A3, or the
+      switch turned off and on, P9 — or no save on record). Then `start {at: winner.coverFrom}` with `steps` = this
+      phone's own `autoSent` (capped at the server's; another phone's higher count may already hold the steps since)
+      when it has one, else the server value — and then `at = max(coverFrom, lastAutoSave)`: the member's last applied
+      automatic save on this phone, kept in the prefs (it outlives the day records deleted at sign-out or a purged
+      cache, so this phone's own earlier save is never counted twice). This covers a new source's first day, and a
+      re-subscribe after sign-out.
   - (d) An `edit` with `at ≥ e` (a past day edited after it ended) keeps `value = base.steps` forever. Late watch data
     stamped before `at` never adds on (C4b).
   - (e) No base → `value = auto`.
+  - (f) **Lower bounds** (J review). `sinceUnknown`: a source covering `D` from before `base.at` has no `since` read
+    for that exact `at` (counted as 0). `storeUnread` (on `DayReading`, set by the readers): a store that is ON wasn't
+    read this run (Android background without `READ_HEALTH_DATA_IN_BACKGROUND`, a locked iPhone, a failed query) — not
+    "no data". Either way the value may raise a day, never lower it (M6) or settle it (M7).
 
 ### 2.4 What Today shows (`policy.shownSteps`)
 
@@ -318,13 +339,22 @@ Target: `T = clamp(value − (isToday ? estimated : 0))`. Known floor: `K = max(
    - **Today:** save when `T − K ≥ 50`, or when 10 min have passed since the last save, or when nothing was saved yet.
    - **Past day:** save at once.
    - Mode `auto` with `edit_ref = rec.editRef ?? null`.
-3. **Past day, `T < server`, and all of these hold:** `server == autoSent`, `rec.serverModes` is true, and no unseen
-   marker. Mode `reconcile`, `expect = autoSent`. ÖRZA corrects only its own earlier save (the provisional live tail).
-4. **Otherwise:** nothing.
+3. **Past day, `T < server`, and all of these hold:** `server == autoSent`, `rec.serverModes` is true, no unseen
+   marker, and the value isn't a lower bound (`sinceUnknown`, M5f). Mode `reconcile`, `expect = autoSent`. ÖRZA corrects
+   only its own earlier save (the provisional live tail).
+4. **Past day with `storeUnread`** (M5f): nothing at all — the store this day follows wasn't read (§2.9). Today still
+   raises.
+5. **The run that may make a past day final** (`settling` = `isFinal` before the save, J review): when rules 2–3 give
+   nothing and `T > 0`, send `auto T` once more. `rec.server` is refreshed only by this phone's own save answers, so
+   another phone's reconcile may have lowered the day below `T` meanwhile; the atomic raise refuses it otherwise. At
+   most one extra POST per past day; not on the old server.
+6. **Otherwise:** nothing.
 
 **Responses**
-- `applied` → `autoSent = server = tracking.steps`.
-- `'edited'` → take the edit (M5c2) from `tracking.steps_edited_at`. The next run saves edit + counted since.
+- `applied` → `autoSent = server = tracking.steps`; the prefs note the time (`lastAutoSave`, M5c3).
+- `'edited'` → take the edit (M5c2) from `tracking.steps_edited_at`. The next run saves edit + counted since: the day
+  is **not** made final on the run that took an edit before `e` and saved nothing on top of it (from this answer,
+  Today's read, or the old server's read before a save; `save.syncDay` → `edited`).
 - `'not_higher'` / `'changed'` → `server = tracking.steps`. `autoSent` is left alone, so a foreign value is never
   reconciled.
 - **Capability detection:** `serverModes = ('applied' in response)`. While it is false (the old production server):
@@ -344,6 +374,9 @@ Target: `T = clamp(value − (isToday ? estimated : 0))`. Known floor: `K = max(
     - The Recording API is `complete` = read at or after `e + 60 min`.
     - CMPedometer is `complete` = `t ≥ e + 60 min`.
     - A CMPedometer `0` is never final while HealthKit is ON.
+  - **never** (J review): on a run with `storeUnread` (not even after 72 h), on a `sinceUnknown` value before 72 h, on a
+    run that took an edit it couldn't save on from (M6 responses), or on a failed save. The record notes `noStore`
+    when the read that settled it had no store count (`plan.healthEmpty` reads final days by it).
 - **Lookback.** `pendingPastDays` covers back to the largest lookback among ON sources (§2.1) and never before the
   coverage floor (M9). Days already final are skipped, so in steady state at most 3 past days are pending.
   - The first run after consent may read up to 30 store days.
@@ -359,9 +392,12 @@ Target: `T = clamp(value − (isToday ? estimated : 0))`. Known floor: `K = max(
   - `off?: {at}` (the switch);
   - `notNowUntil?` (P19);
   - `motionOffered?` (iOS);
-  - `sharedAtConsent: boolean`.
+  - `sharedAtConsent: boolean`;
+  - beside the consents (J review): `autoSavedAt[userId]` (the last applied automatic save, a time — M5c3) and the
+    install flag `formerConsent` (no id, no data).
 - **`sharedAtConsent`** is true when, at this member's first consent on this install, the prefs already hold a consent
-  record for another `userId`.
+  record for another `userId` — or `formerConsent` is set (a member who had agreed deleted their account: their walking
+  is still in the phone's history; J review).
 - **Coverage floor.**
   - If `sharedAtConsent`, then `coverFloor = consent.at` and every source's `coverFrom = max(coverFrom, coverFloor)`.
     Days ending before it are never pending, and today becomes a START.
@@ -375,7 +411,8 @@ Target: `T = clamp(value − (isToday ? estimated : 0))`. Known floor: `K = max(
 
   Consent records stay, so the same member signing in again isn't asked again. The next run re-subscribes, and the new
   `subscribedAt` makes the first day partial (M5c3).
-- **Account deletion:** the same as sign-out, plus remove the member's consent record.
+- **Account deletion:** the same as sign-out, plus remove the member's consent record and `autoSavedAt`; set
+  `formerConsent` when they had agreed.
 
 ### 2.8 "Both ways": what syncs where
 
@@ -388,9 +425,10 @@ Target: `T = clamp(value − (isToday ? estimated : 0))`. Known floor: `K = max(
 
 - **C16:** two phones carried at different times. The server keeps the higher number.
 - **Today's live tail** can sit a little above the store until the next morning's reconcile. This is limited to phones
-  where two sources are ON (Android 9–13 with HC, or iOS with the Motion fallback).
-- **HealthKit reads fail while the phone is locked** [A-hk-priv]. A background run then saves nothing and the next run
-  catches up.
+  where two sources are ON and the store holds the phone's steps (iOS with the Motion fallback). On Android 9–13 with HC
+  the past day stays the higher of the two (M4 as amended), so it can sit above what HC shows.
+- **HealthKit reads fail while the phone is locked** [A-hk-priv]. A background run then saves nothing for past days
+  (`storeUnread`, M5f) and the next run catches up.
 
 ---
 
@@ -403,7 +441,7 @@ against the old production server.
 | # | Change | Files |
 |---|---|---|
 | B1 | Modes `manual` (default) / `auto` / `reconcile`, `edit_ref`, `expect`; response `{tracking, applied, reason}` (§2.5). Ensure the row exists before the conditional `auto` update, so a failed `$lt` filter never hits the unique index through an upsert | `web:src/app/api/track/steps/route.ts`, `web:src/lib/domain/tracking.ts` (new `raiseSteps`, `reconcileSteps`, `setStepsManual`) |
-| B2 | `steps_edited_at` in `TrackingDay` and in every response that returns tracking (`GET /api/dashboard/today` at least) | `web:src/lib/types*`, `web:src/app/api/dashboard/today/*` |
+| B2 | `steps_edited_at` in `TrackingDay` and in every response that returns tracking (`GET /api/dashboard/today` at least). The row's `updated_at` stays in those responses (the phone anchors a taken edit at it, M5c2). Optional (J review): `steps_edited_value` = the manual number, set with the marker by `manual` and kept by `auto`/`reconcile`, so M5c2 needs no `updated_at` fallback | `web:src/lib/types*`, `web:src/app/api/dashboard/today/*` |
 | B3 | `mirrorIntoTracking`: add `steps_edited_at: null` to the raise filter (never raise an edited day). `normaliseDays`: drop the `steps` metric for a date after the profile's today (other metrics keep the +1-day slack) | `web:src/lib/care/health.ts:164-202, 359-385` |
 | B4 | `GET /api/health/days`: per date, `steps` = `tracking.steps` when a tracking row exists with steps > 0, otherwise the merged `health_days` steps (R16: one number in the app and on the website) | `web:src/app/api/health/days/route.ts` (+ `trackingInRange`) |
 | B5 | Coach: remove `steps …/…` from `contextForPrompt` (about `web:src/lib/coach.ts:1308-1317`) until the AI-sharing consent ships (P3b). The member still sees steps everywhere | `web:src/lib/coach.ts` |
@@ -571,10 +609,10 @@ These are exactly the filters [G-start] shows.
 | `src/lib/steps/merge.ts` (new, pure) | M0–M5: `phoneWinner`, `autoCount(reading, isToday)`, `dayValue(reading, base, isToday)`, `hcCoverFrom(grantAt, preGrant)`, `applyCoverFloor`. Replaces `shared.bestOf`, which is deleted |
 | `src/lib/steps/policy.ts` | `DayBase` becomes `{kind, steps, at, editRef?}`; `DayRecord` adds `autoSent`, `autoAt`, `editRef`, `serverModes`, `tz`; `savePlan()` (M6) returns `{mode, steps, expect?, editRef} \| null`; `baseForEdit(at, reading)` (M5c); `shownSteps` per §2.4; delete `rebased`, `withBase`, `editedOnServer` (value heuristic) and `needsStartBase` (replaced by M5c3) |
 | `src/lib/steps/plan.ts` | `SETTLE_STORE_MS`, `SETTLE_PHONE_MS`, `LOOKBACK_DAYS`; `isFinal(dayRead, rec, now, storeOn)` (M7); `pendingPastDays(today, isFinal, maxBack, coverFloor, tz)` with the zone freeze (M8); `backfill(consents, userId)` (M9); `firstAsk(features)` and `healthEmpty(days)` (pure, §2.2) |
-| `src/lib/steps/save.ts` | Rewritten around `savePlan` and the server modes. `postSteps(date, steps, mode, editRef, expect)` returns `{tracking, applied, reason}`. Response handling per §2.5. The legacy GET-before-POST branch is kept behind `serverModes === false` |
-| `src/lib/steps/store.ts` | Split: `orza-steps-prefs.json` in `Paths.document` (version 2: Android permission history, consents, `hcGrantAt`, `notNowUntil`, `hkBackground`) and `orza-steps-days.json` in **`Paths.cache`** (day records, `KEEP_DAYS = 35`). `deleteUserDays(userId)` at sign-out. Version-1 file: migrate the asked/blocked flags, drop the day records |
-| `src/lib/steps/reader.android.ts` | Source selection S-A1…S-A4. HC through the bridge (consent-gated, not `healthConnected`). Recording API via the module (subscribe on every `prepare`; read 15-min buckets for the dates, 1-min for `sinceAt`). Sampler only per S-A4. `requestPermission(kind: 'hc' \| 'phone')` |
-| `src/lib/steps/reader.ios.ts` | HealthKit primary (S-I1); CMPedometer only with `consent.phone` (S-I2); `requestPermission(kind: 'healthkit' \| 'phone')`; `sinceAt` via range queries |
+| `src/lib/steps/save.ts` | Rewritten around `savePlan` and the server modes. `postSteps(date, steps, mode, editRef, expect)` returns `{tracking, applied, reason}`. Response handling per §2.5. The legacy GET-before-POST branch is kept behind `serverModes === false`. J review: `syncDay(…, storeOn)` = the save + M7 (`done` / `edited` / `retry`; the sync calls it per day) |
+| `src/lib/steps/store.ts` | Split: `orza-steps-prefs.json` in `Paths.document` (version 2: Android permission history, consents, `hcGrantAt`, `notNowUntil`, `hkBackground`) and `orza-steps-days.json` in **`Paths.cache`** (day records, `KEEP_DAYS = 35`). `deleteUserDays(userId)` at sign-out. Version-1 file: migrate the asked/blocked flags, drop the day records. J review: the prefs also keep `autoSavedAt` per member (M5c3) and `formerConsent` (M9) |
+| `src/lib/steps/reader.android.ts` | Source selection S-A1…S-A4. HC through the bridge (consent-gated, not `healthConnected`). Recording API via the module (subscribe on every `prepare`; read 15-min buckets for the dates, 1-min for `sinceAt` on every date that has one, S-R4). Sampler only per S-A4. `requestPermission(kind: 'hc' \| 'phone')`. J review: HC readings get `includesPhone` when `stepTracking` (M4); a day whose HC read was skipped or failed while HC is ON gets `storeUnread` (M5f) |
+| `src/lib/steps/reader.ios.ts` | HealthKit primary (S-I1); CMPedometer only with `consent.phone` (S-I2); `requestPermission(kind: 'healthkit' \| 'phone')`; `sinceAt` via range queries. J review: a failed HealthKit query (locked phone) → `storeUnread`, never "no data" |
 | `src/lib/steps/sync.ts` | Consent gate (nothing reads or saves without this member's consent and with the switch on); `firstAsk`; the new save flow; Android `READ_HEALTH_DATA_IN_BACKGROUND` used by the background run (HC reads simply return null without it); `clearStepsOnSignOut` adds unsubscribe, `clearBackgroundTypes` and `deleteUserDays`; `setAutoSteps(userId, on)`; the background run refreshes the user snapshot (M8) |
 | `src/lib/steps/useSteps.ts` | `requestAccess(kind)`, `turnOn()` (consent only), `setAutoSteps`, `notNow()`, `useMotionInstead()` (iOS); exposes `firstAsk`, `store`, `healthEmpty`, `counter` |
 | `src/lib/steps/healthkitObserver(.ios).ts` (new) | §4.3 |
@@ -724,8 +762,9 @@ on-device).
 
 **merge.ts**
 - **T8.** Today: `max(store, phone)`; a tie gets the store label.
-- **T9.** C3: on a past day the store wins when its `coverFrom ≤` the phone's, even though the phone is higher (Samsung
-  8,000 vs sampler 8,700 → 8,000).
+- **T9.** C3: on a past day a store that holds the phone's steps wins when its `coverFrom ≤` the phone's, even though the
+  phone is higher (Apple Health 8,000 vs CMPedometer 8,700 → 8,000; HC with `includesPhone` the same). J review: HC
+  without the phone's steps (Strava 4,000 vs Recording 12,000) → the higher, 12,000.
 - **T10.** On the store's partial first day (HC grant at 14:00, 0 before it) with a whole-day phone count, the larger by
   non-estimated part wins.
 - **T11.** Store 0 → null. A phone-only day → the phone.
@@ -960,7 +999,23 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
   - Feature detection is per day (`rec.serverModes`, set by every answer): a day not yet answered with `applied` — unknown **or** false — is saved behind the GET guard (on the old server an unguarded first `auto` would be a blind `$set`), so until V4 each day's first save still reads first. Edits come from the marker (`TrackingDay.steps_edited_at`, carried by Today's read, the guard's read and refused answers → `baseFromMarker`); the lower-value heuristic only on days not answered with the modes (C5). `saveDay(…, {tz})` writes `rec.tz` on applied saves (M8 now live). `saveManualDay` posts `manual` and anchors the base with the answer's marker. An `edited` answer with no takeable marker aligns `editRef` with the server's (no refusal loop). `postSteps` throws on an answer without `tracking` (retried). Tests: new `steps-save.test.ts` (T34–T39 + the old-server save tests moved from `steps-counter.test.ts`).
 - [x] **J7.** `store.ts` split (prefs in document, days in cache), v1 migration, `deleteUserDays` + T40 (store part).
   Then commit "steps v2: pure core".
-  - The file shapes and rules are a new pure `storeData.ts` (Node-tested in new `steps-store.test.ts`); `store.ts` is the expo-file-system shell. Days file `{version: 2, users: {userId: {date: DayRecord}}}`; the v1 file is deleted once its flags are in the prefs. Store API ready for R/U: `deleteUserDays`, `grantStepsConsent` / `updateStepsConsent` / `removeStepsConsent` / `useStepsConsent`, `hcGrantAt` / `noteHcGrant`, `hkBackground` / `setHkBackground`. Calling `deleteUserDays` at sign-out is left to R5b (`clearStepsOnSignOut` has no user id yet). Known limit of losing day records (the v1 drop, a cache purge): an M5c3 day (coverage starting after midnight) whose record is lost can take this phone's own earlier save as a START and count those steps twice; and on the old server only, a lost edit base lets an automatic save raise over the member's lower edit (the marker restores it once B1/B2 are live).
+  - The file shapes and rules are a new pure `storeData.ts` (Node-tested in new `steps-store.test.ts`); `store.ts` is the expo-file-system shell. (J8 closes the first "known limit" below — the M5c3 double count — with `autoSavedAt` in the prefs; M5c2 is now anchored where the count was last set.) Days file `{version: 2, users: {userId: {date: DayRecord}}}`; the v1 file is deleted once its flags are in the prefs. Store API ready for R/U: `deleteUserDays`, `grantStepsConsent` / `updateStepsConsent` / `removeStepsConsent` / `useStepsConsent`, `hcGrantAt` / `noteHcGrant`, `hkBackground` / `setHkBackground`. Calling `deleteUserDays` at sign-out is left to R5b (`clearStepsOnSignOut` has no user id yet). Known limit of losing day records (the v1 drop, a cache purge): an M5c3 day (coverage starting after midnight) whose record is lost can take this phone's own earlier save as a START and count those steps twice; and on the old server only, a lost edit base lets an automatic save raise over the member's lower edit (the marker restores it once B1/B2 are live).
+
+- [x] **J8.** Phase J review fixes (13 findings, all real; a failing test first for each). Commit "steps v2: pure core
+  review fixes". Rules amended in §2 (marked "J review"): M4 store authority only for a store holding the phone's steps
+  (`SourceReading.includesPhone`); M5c1 without a reading (`baseWithoutReading`); M5c2 anchored at
+  `max(marker, updated_at)` or the edit's own value; M5c3 after this phone's own save (`autoAt < coverFrom`, its own
+  `autoSent`) and after lost records (prefs `autoSavedAt`); M5f lower bounds (`sinceUnknown`, `DayReading.storeUnread`)
+  never reconcile or settle; M6 `settling` raise; M7 not on a run that took an edit (`save.syncDay` outcome) — final
+  is written by `syncDay` (`plan.finalPatch`, `noStore` for `healthEmpty`); M9 `formerConsent`. S-R4 now asks the
+  Recording API for `since` on past days too; B2 gains an optional `steps_edited_value`.
+  - Deviations: finding 12 uses the one settling raise rather than refreshing `rec.server` from Today's reads (it covers
+    days the member never opens); M5c3 after an own save starts from this phone's `autoSent`, not the server's count
+    (another phone's higher count may hold the steps since); the old server's edit seen by a past day's pre-save read is
+    anchored at that read, so it is fixed (M5d) and final at once. Test counts: test:steps 241, test:alarms 34.
+  - Left for R: readers set `includesPhone` (R2) and `storeUnread` (R2/R4) and read `since` on past days (S-R4);
+    `saveManualSteps`' "something counts" uses `healthConnected` / the phone permission until R5a's consent gate;
+    `healthEmpty` gets `recordOf` when U2 wires it; `deleteUserDays` / `removeStepsConsent` at sign-out / deletion (R5b).
 
 **Phase N: native Android (one native rebuild at the end of the phase)**
 

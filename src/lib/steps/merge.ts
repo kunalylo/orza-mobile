@@ -303,16 +303,17 @@ export function baseFromMarker(
 /**
  * M5c3, an implicit start: counting began partway through a day that already had a number on the server — a new
  * source's first day, a source switched (S-A3) or turned off and on again (P9), a re-subscribe after a sign-out, a
- * shared phone's consent day (M9). When the day has no base, the server's count (`server`, as last read) is above 0
- * and the winning reading's coverage starts after midnight: a `start` with that number. Else null. `known` takes the
- * day's record as it is, plus `lastAutoSave` (this phone's last applied automatic save of the member, any day):
+ * shared phone's consent day (M9). When the day has no base, the server's count (`server`, as just read) is above 0
+ * and the winning reading's coverage starts after midnight: a `start`. Else null. `known` takes the day's record as it
+ * is, plus `lastAutoSave` (this phone's last applied automatic save of the member, any day — kept in the prefs):
  * - this phone saved the day automatically (`autoSent`) since that coverage began (`autoAt`): no start — the server's
  *   number already holds the winner's steps (the same source's partial first day);
- * - it saved the day before the coverage began: at the coverage's start — the earlier source's steps stay, the new
- *   one's add on;
- * - no automatic save of the day on record (none, or the record was lost: deleted at sign-out, the cache purged): at
- *   the coverage's start, but never before `lastAutoSave` — the server's number may hold this phone's own earlier
- *   save of these steps, which would otherwise count twice.
+ * - it saved the day before the coverage began: this phone's own number then (never above the server's) at the
+ *   coverage's start — the earlier source's steps stay, the new one's add on. Not the server's when higher: another
+ *   phone's count may already hold the steps since then (compared, never summed: M1, C16);
+ * - no automatic save of the day on record (none, or the record was lost: deleted at sign-out, the cache purged): the
+ *   server's number at the coverage's start, but never before `lastAutoSave` — that number may hold this phone's own
+ *   earlier save of these steps, which would otherwise count twice.
  */
 export function implicitStart(
   reading: DayReading,
@@ -324,7 +325,10 @@ export function implicitStart(
   if (server <= 0) return null;
   const winner = autoCount(reading, isToday);
   if (!winner || winner.coverFrom <= reading.start) return null;
-  if (known.autoSent != null) return (known.autoAt ?? Infinity) >= winner.coverFrom ? null : { kind: 'start', steps: server, at: winner.coverFrom };
+  if (known.autoSent != null) {
+    if ((known.autoAt ?? Infinity) >= winner.coverFrom) return null;
+    return { kind: 'start', steps: Math.min(server, clampSteps(known.autoSent)), at: winner.coverFrom };
+  }
   const saved = known.lastAutoSave != null && Number.isFinite(known.lastAutoSave) ? known.lastAutoSave : -Infinity;
   return { kind: 'start', steps: server, at: Math.max(winner.coverFrom, saved) };
 }

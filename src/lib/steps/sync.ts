@@ -16,7 +16,8 @@
  *   the modes (the old production server), each save READS the server's count first and never lowers it, and a real
  *   read lower than this phone's last save is the edit.
  * - Past days: up to 7 back, until settled (`plan.isFinal`, M7: 72 h after the day while a health store is connected,
- *   else an hour after it once a phone count read it whole) and saved — then final.
+ *   else an hour after it once a phone count read it whole) and saved — then final (`save.syncDay`: not on a run that
+ *   failed or took an edit whose steps since aren't saved yet).
  * - `syncStepsInBackground()`: the same from the alarm background task (`lib/alarms/background.ts`) — the session and
  *   member snapshot then come from the Keychain, and Android reads stored samples only (no live sensor read).
  * - `clearStepsOnSignOut()`: stops the Android sampler and forgets its samples.
@@ -31,12 +32,12 @@ import type { PublicUser } from '@/lib/types';
 import { safeTimeZone, utcToZoned } from '../alarms/schedule';
 import { getHealthRecord } from '../health/store';
 
-import { BACKGROUND_PAST_DAYS, isFinal, mergeDays, mergeReason, pendingPastDays, shouldReadPast } from './plan';
+import { BACKGROUND_PAST_DAYS, mergeDays, mergeReason, pendingPastDays, shouldReadPast } from './plan';
 import { stepsReader } from './reader';
-import { saveDay, saveManualDay, type SaveDeps, type StepsAnswer } from './save';
-import { forgetServerObservations } from './serverSeen';
-import { legacyDaySteps } from './shared';
-import { getDayRecord, markDayFinal, updateDayRecord } from './store';
+import { saveManualDay, syncDay, type SaveDeps, type StepsAnswer } from './save';
+import { forgetServerObservations, markerOf, markerRowOf } from './serverSeen';
+import { dayBounds, legacyDaySteps } from './shared';
+import { getDayRecord, lastAutoSave, noteAutoSave, updateDayRecord } from './store';
 import type { DayReading, DaySteps, RefreshReason, StepsAccess } from './types';
 
 export type { RefreshReason } from './types';
@@ -298,16 +299,15 @@ async function runSave(job: SaveJob) {
     if (manualInFlight) await within(manualInFlight, MANUAL_WAIT_MS + SAVE_TIMEOUT_MS);
     if (stale()) return;
     const isToday = day.date === job.today;
-    const run = saveDay(saveDeps, job.userId, day, isToday, { tz: job.tz, onSaved: job.onSaved, onServerSteps: job.onServerSteps, stale });
+    // The save, then (a past day) final when settled — `syncDay` writes that to the day's record.
+    const run = syncDay(saveDeps, job.userId, day, isToday, job.storeOn, { tz: job.tz, onSaved: job.onSaved, onServerSteps: job.onServerSteps, stale });
     dayInFlight = run;
-    let ok = false;
     try {
-      ok = await run;
+      await run;
     } finally {
       if (dayInFlight === run) dayInFlight = null;
     }
     if (stale()) return;
-    if (!isToday && ok && isFinal(day, getDayRecord(job.userId, day.date), Date.now(), job.storeOn)) markDayFinal(job.userId, day.date);
   }
 }
 
@@ -320,12 +320,15 @@ const permanent = (e: unknown) => e instanceof ApiError && e.status >= 400 && e.
 const saveDeps: SaveDeps = {
   getRecord: getDayRecord,
   updateRecord: updateDayRecord,
+  lastAutoSave,
+  noteAutoSave,
   async fetchServerDay(date) {
     const d = await api.get<TodayData>(`/dashboard/today?date=${encodeURIComponent(date)}`, { timeoutMs: SERVER_READ_TIMEOUT_MS });
     if (d?.date !== date) return null;
     const steps = typeof d.tracking?.steps === 'number' ? d.tracking.steps : 0;
-    // The edit marker comes with the modes (backend B2); the old server's rows have no such field.
-    return d.tracking && 'steps_edited_at' in d.tracking ? { steps, marker: d.tracking.steps_edited_at ?? null } : { steps };
+    // The edit marker comes with the modes (backend B2), with the row's last write; the old server's rows have none.
+    const marker = markerOf(d.tracking);
+    return marker === undefined ? { steps } : { steps, marker, ...markerRowOf(d.tracking) };
   },
   async postSteps(date, steps, mode, editRef, expect) {
     const body = { steps, date, mode, edit_ref: editRef, ...(expect != null ? { expect } : {}) };
@@ -338,16 +341,28 @@ const saveDeps: SaveDeps = {
 };
 
 /**
+ * What is known of `date` for a manual save with no reading of it at hand (M5c1): its end in the member's zone (the
+ * member the app runs for), and whether something counts the member's steps here — a health store connected, or the
+ * phone's counter allowed (Today's card offers Edit on the same grounds).
+ */
+function manualDayInfo(userId: string, date: string): { end: number | null; counting: boolean } {
+  const member = foregroundMember?.id === userId ? foregroundMember : null;
+  const mine = state.userId === userId;
+  const phone = !!state.access?.phoneAvailable && state.access.phonePermission === 'granted';
+  return { end: member ? dayBounds(date, member.timeZone).end : null, counting: mine && (state.healthConnected || phone) };
+}
+
+/**
  * The member's own number for a day (the Edit / Log sheet): `POST /api/track/steps` in `manual` mode, then the day's
  * base with the server's edit marker (`save.saveManualDay`: an edit when something was counting the day, by its latest
- * reading; else a start). Serialised with the automatic queue: it first waits (bounded) for an automatic save in
- * flight, and the queue waits for it before its next day — on the old server (no modes) an automatic save landing
- * after the member's number would undo it.
+ * reading — or, with none at hand yet, by `manualDayInfo`; else a start). Serialised with the automatic queue: it
+ * first waits (bounded) for an automatic save in flight, and the queue waits for it before its next day — on the old
+ * server (no modes) an automatic save landing after the member's number would undo it.
  */
 export function saveManualSteps(userId: string, date: string, steps: number): Promise<{ tracking: TrackingDay }> {
   const run = (async () => {
     if (dayInFlight) await within(dayInFlight, MANUAL_WAIT_MS);
-    const { tracking } = await saveManualDay(saveDeps, userId, date, steps, latestReading(userId, date));
+    const { tracking } = await saveManualDay(saveDeps, userId, date, steps, latestReading(userId, date), manualDayInfo(userId, date));
     return { tracking };
   })();
   const held = run.then(

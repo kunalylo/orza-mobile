@@ -529,3 +529,13 @@ fixes); confirm `npx expo-modules-autolinking resolve --platform android` lists 
 - 2026-11-01: **Web batch 1 LIVE** — user OK'd; main fast-forwarded c3e234c → `47897ad` and pushed; Vercel production deployment
   "Deployment has completed" (05:58 UTC). Phase J review + fix resumed (`wf_743ae41a-b53`). Steps v2 Phase B (web) started on branch
   `steps-v2-backend` in `E:\aylo\orza-backend` (`wf_8fb330bb-494`, local only; the B6 privacy copy needs the user's review before any push).
+- 2026-11-01: Phase J review found real bugs (reconcile with unknown "since", baseFromMarker anchoring, edited-refusal finalising a
+  past day, implicit start after a source change, manual edit before the first read …); fix was cut off → WIP `8f94db7` (red), fix
+  resumed. Phase B built + reviewed + fixed (`e4f70b3`, `06e7bcf`); its live check resumed. Both runs: same IDs as above.
+- 2026-11-01: **Steps v2 Phase B (web) DONE locally** — branch `steps-v2-backend` head `a3e3c0e` (on top of live main 47897ad):
+  B1 modes manual/auto/reconcile + edit marker (`steps_edited_at`, `steps_edited_value`), no mode = legacy plain set without marker (the
+  phone build testers have); web StepsCard now sends mode "manual"; B2 marker in every tracking response; B3 mirror never raises an edited
+  day, future-dated steps dropped; B4 /api/health/days steps = tracked steps (typed 0 shows 0); B6 privacy page "Phone app: steps and
+  health data" (#phone-app) + settings copy — describes the v2 app → USER REVIEW before push, publish with v2; B7
+  `scripts/check-steps-modes.mjs` 25/25 on the local server (`ORZA_CHECK_TOKEN` to reuse an account). localtest now runs `a3e3c0e`
+  (DB backup scratchpad backend/orza-db.before-steps-b.json). Not pushed (plan V4).
