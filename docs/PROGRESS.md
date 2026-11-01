@@ -595,3 +595,37 @@ batch 1" log entry); 3 is still open.
   --clear); Gradle C++ "system_category" under low RAM → `gradlew --stop` + `ninja -j3` in android/app/.cxx/Debug/<hash>/x86_64, then
   Gradle again. Preview servers had been stopped (restarted); a stray agent dev server on 3102 (orza-backend, JSON DB, no env) killed.
   Reviews were cut off by a session limit; resumed with an added Device phase (run `wf_bb87f5d9-a6e`).
+- 2026-11-01 (late): **Batch-1 phone + native review fixes** (`7907ff9`, `eeb57d2`; 6/6 findings real, all fixed). (1) Alarm
+  screen judged "missed" only by the server, so the re-ring of a Snooze pressed on the notification with the app dead
+  (the queue drops it once its 10 min are up) was silenced as "Missed medicine": alarm links now carry `fired` = the time
+  the alarm rang for (Kotlin `AlarmNotifier.linkOf` on content + full-screen intents; in-app opens via `alarmOpenPath`,
+  Android `onAlarmShown.at`, iOS `data.at`), and `isMissedOnAlarm` keeps that alarm's doses open until fired + 60 min on
+  ÖRZA's clock (one medicine's alarm: that medicine only); the silence is decided once, when the screen opens (a later
+  tick used to `silenceRinging()` whatever rang by then). Late snoozes are still dropped (sent late the server would
+  start a 1-min snooze and the phone ring again). (2) Dose presses sent within `DELAYED_PRESS_MS` (30 s) carry no phone
+  time (server clock decides acted_at / snooze length); queued presses keep acted_at + snooze_until. (3) Kotlin `fire()`:
+  the 60-min cutoff is for dose (ring) items only; reminders / refill alerts show up to MAX_LATE_MS (3 h) again. (4–6)
+  `StepRecording`: Play services is called only when `status()` is available (a disabled Play services posts Google's
+  "enable" notification under ÖRZA's name — the 21.3.0 pre-check is only an APK-version compare); no permission →
+  `NoPermission` + `subscribedAt` forgotten (also at module start and on permission failures); all calls on the sensor
+  thread with a `generation` counter (a subscribe overtaken by an unsubscribe stores nothing, answers `Superseded`).
+  Plan N1 note updated. Checks: typecheck ✓, lint ✓, test:alarms 65/65, test:steps 241/241.
+  Rebuild at `7907ff9` in the build copy (prebuild cleared android/ → full build; C++ OOM again → `gradlew --stop` +
+  `ninja -j3` for expo-modules-core, reanimated and app `.cxx`; `packageDebug` "Java heap space" → `--max-workers=1
+  "-Dorg.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=512m"`, emulator stopped meanwhile); DEV build installed 22:23.
+  Device (local server, gate SAFE before every start): alarm links with `fired` = now → "Time for your medicine", live;
+  `fired` = dose time / other medicine → "Missed"; the reviewer's case for real — Amlodipine re-ring of a native Snooze
+  pressed with the process killed (phone clock 55 min behind via `cmd alarm set-time` so the server says missed): server
+  "missed", no snooze log, native action collected + dropped, yet the re-ring opens "Time for your medicine" and stays on
+  `orza_alarms` INSISTENT; Take on a phone 55 min behind → acted_at = server time (17:24Z, phone 16:29Z); clock jumped +65
+  min past a reminder + dose → reminder shown on `orza_reminders`, dose shown quietly as Missed; Recording API on the
+  emulator (no step sensor → `no_sensor`): subscribe `{ok:false, error:"Unavailable no_sensor"}`, read null, unsubscribe
+  false + `subscribedAt` cleared, planted `subscribedAt` forgotten at module start without Physical activity, kept with it.
+  Not covered on device: the `generation` race and a disabled Play services (needs a phone with a step counter).
+  Observations (not fixed): dev-client cold start from a full-screen alarm loses the `orza://alarm` link (the dev launcher
+  reopens the project URL; release builds route it, D1); after the phone clock went BACK 55 min the alarm sync used
+  stale meds / reminders (GET /api/meds, /api/reminders never reached the server; no HTTP cache on disk) — fine again
+  once the clock was right, worth a look; Metro inspector websocket closes 1006 even with an allowed Origin (a temporary
+  uncommitted route was used instead); the 2 GB emulator thrashes (kill-all helps). Local qa4 data: Glimepiride 21:00
+  taken by a swipe the laggy emulator read as a tap; test medicine "Review Alarm Tab" (taken) and reminder "Review late
+  reminder" deactivated; QA Wrapup Tab schedule restored; Amlodipine 22:00 left missed.
