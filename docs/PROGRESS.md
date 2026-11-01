@@ -588,3 +588,10 @@ batch 1" log entry); 3 is still open.
   doesn't help). After a Metro restart (`--clear`) + safety gate SAFE: the Kotlin functions from JS (Recording API status /
   subscribe / read, `healthFeatures`), app starts on Today, and the batch-1 device checks listed in the entry above.
   Lesson: stop Metro before `npm ci` / `expo install`.
+- 2026-11-01 (evening): batch-1 phone adaptation DONE `62dcc92` (test:alarms 55/55, new test:rebalance 9/9); steps v2 Phase N DONE
+  `c2c5ee9` (Recording API module, HealthFeatures, HealthPrivacyActivity for HC's privacy link, inexact midnight sample, app.json
+  permissions, Expo patch updates; expo-doctor 21/21); DEV build of it installed on the emulator (18:16). Lessons: run
+  `npx expo install --fix` only with Metro stopped (its file map broke → bundle 500 → gate NOT SAFE; fixed by restarting Metro with
+  --clear); Gradle C++ "system_category" under low RAM → `gradlew --stop` + `ninja -j3` in android/app/.cxx/Debug/<hash>/x86_64, then
+  Gradle again. Preview servers had been stopped (restarted); a stray agent dev server on 3102 (orza-backend, JSON DB, no env) killed.
+  Reviews were cut off by a session limit; resumed with an added Device phase (run `wf_bb87f5d9-a6e`).
