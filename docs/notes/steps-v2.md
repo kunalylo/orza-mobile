@@ -1048,16 +1048,37 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
     alias exactly as §4.2. The `bridge.android.ts` header no longer credits the RNHC plugin.
   - Deviations: DOM storage on (the policy is a web-app page whose scripts may need it), file / content access off,
     an SSL error never proceeds.
+  - Emulator (Android 16, offline so the WebView couldn't reach production): Health Connect › App permissions › ÖRZA ›
+    "Read privacy policy" opens `ViewPermissionUsageActivity` → this screen (not Today); offline it shows the note +
+    "Open in browser"; Back returns to Health Connect; the rationale action (explicit component, as Health Connect starts
+    it) opens it too. The first build crashed here (`WindowCompat.getInsetsController` before `setContentView`: no decor
+    view yet → NPE) — fixed by setting the bar icons after `setContentView`. The online page itself is not checked yet.
 - [x] **N4.** `StepScheduler.armMidnight` inexact only (P14); keep `reason` in `getSamples` output.
   - The exact branch, `nextMidnightSample` and `MIDNIGHT_OFFSET_MS` are deleted; `canScheduleExact` stays for
     `getStatus().exactMidnight` only (TS doc updated). `reason` was already in `getSamples` (`r`) and the wrapper.
   - J1's note done in `StepStore.add`: a forced `shutdown` sample within 60 s of an unchanged one re-tags the kept sample
     `shutdown` (instead of being dropped). Extension: when a forced sample within 60 s REPLACES the last one (counter
     moved), a `shutdown` tag on either survives — the kept sample is still the last reading before the power-off.
-- [ ] **N5.** app.json Android permissions (P5 removals, background add).
+- [x] **N5.** app.json Android permissions (P5 removals, background add).
   - `npx expo install --check` (the 6 Expo patch updates from D1).
   - Prebuild and Gradle build in the build copy.
   - Check the merged manifest (§4.2). Commit "steps v2: native Android".
+  - Done 2026-11-01. app.json: `READ_ACTIVE_CALORIES_BURNED`, `READ_DISTANCE`, `READ_HEART_RATE`, `READ_HYDRATION` removed,
+    `READ_HEALTH_DATA_IN_BACKGROUND` added. Patch updates via `npx expo install --fix` (expo 57.0.31, expo-router 57.0.29,
+    expo-notifications 57.0.24, expo-calendar 57.0.6, expo-sharing 57.0.24, @expo/ui 57.0.26); `expo install --check` up to
+    date, `expo-doctor` 21/21. Build copy: `npm ci`, `prebuild --clean`, `assembleDebug` (x86_64) BUILD SUCCESSFUL; no
+    Kotlin warning from `orza-steps`.
+  - Merged manifest (`processDebugManifest` + `aapt2 dump` of the APK): exactly one `ACTION_SHOW_PERMISSIONS_RATIONALE`
+    filter (on `HealthPrivacyActivity`), exactly one `VIEW_PERMISSION_USAGE` / `HEALTH_PERMISSIONS` alias
+    (`ViewPermissionUsageActivity` → `HealthPrivacyActivity`, guarded by `START_VIEW_PERMISSION_USAGE`), MainActivity has only
+    MAIN/LAUNCHER + the VIEW deep link; health permissions = READ_STEPS, READ_SLEEP, READ_RESTING_HEART_RATE, READ_WEIGHT,
+    READ_HEALTH_DATA_IN_BACKGROUND; `play-services-fitness` adds only its version meta-data, `connect-client` only its
+    (already present) SDK service + queries — no new permission, no GMS `ACTIVITY_RECOGNITION`, no WRITE_STEPS /
+    FOREGROUND_SERVICE_HEALTH / HIGH_SAMPLING_RATE_SENSORS / READ_HEALTH_DATA_HISTORY. (`SYSTEM_ALERT_WINDOW` is in the
+    debug APK only: RN's `src/debug` manifest; the release keeps `blockedPermissions`.) `cmd package query-activities`
+    resolves both Health Connect intents to the new activity / alias.
+  - Interim until R1: `bridge.android.ts` still requests the four removed types; Health Connect can't grant undeclared
+    permissions, and its ÖRZA page now lists only the five declared ones (the four earlier grants vanished on update).
 
 **Phase R: readers, sync, iOS config**
 

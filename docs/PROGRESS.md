@@ -573,3 +573,18 @@ batch 1" log entry); 3 is still open.
   queued offline snooze sent late → server snooze_until = press + 10; server devices doc shows alarms_local_until (null on
   Android); logcat `/meds/doses?from=` once per sync instead of per-day `/meds/today`; an alarm due > 60 min ago (Doze /
   `adb shell date` jump) → silent "Missed", alarm screen with the date; rebalance plan at the floor.
+- 2026-11-01: **Steps v2 phase N (native Android) built** (commit "steps v2: native Android"; plan §10 N1–N5 ticked with
+  deviations). `orza-steps`: Recording API (`StepRecording.kt`; `recordingStatus/Subscribe/Unsubscribe/Read/SubscribedAt`,
+  `getStatus` + `recording`/`subscribedAt`), `HealthFeatures.kt` (`healthFeatures()`), `HealthPrivacyActivity` + manifest
+  activity / `ViewPermissionUsageActivity` alias (RNHC config plugin removed), midnight sample inexact only, `shutdown`
+  re-tag in `StepStore.add`; app.json P5 removals + `READ_HEALTH_DATA_IN_BACKGROUND`; Expo patch updates (expo 57.0.31,
+  expo-router 57.0.29, …), expo-doctor 21/21. Build copy at the commit: prebuild + `assembleDebug` OK (the C++ "system_category"
+  error came back 3× under memory pressure — what worked: `gradlew --stop`, `ninja -j3 -C android/app/.cxx/Debug/<hash>/x86_64`
+  by hand, then Gradle again). Merged manifest as §4.2 (no new permission from play-services-fitness / connect-client).
+  DEV build installed on the emulator (replaces the release-type test build). Emulator, offline: Health Connect's "Read
+  privacy policy" for ÖRZA opens the new screen (first build crashed there — fixed), logcat clean.
+  **NOT yet tested — Metro must be restarted first:** `npx expo install --fix` ran while Metro was serving, and Metro's file
+  map lost the updated packages ("Unable to resolve expo-modules-core", bundle 500, safety gate NOT SAFE; touching the files
+  doesn't help). After a Metro restart (`--clear`) + safety gate SAFE: the Kotlin functions from JS (Recording API status /
+  subscribe / read, `healthFeatures`), app starts on Today, and the batch-1 device checks listed in the entry above.
+  Lesson: stop Metro before `npm ci` / `expo install`.
