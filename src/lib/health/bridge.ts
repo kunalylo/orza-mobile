@@ -24,6 +24,12 @@ export const healthBridge: HealthBridge = {
   async stepsBetween(ranges) {
     return ranges.map(() => null);
   },
+  async requestSteps() {
+    return { granted: false, background: false };
+  },
+  async revokeAll() {
+    return false;
+  },
   async openManage() {},
   async openStore() {},
 };

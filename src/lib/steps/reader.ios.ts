@@ -85,7 +85,7 @@ export const stepsReader: StepsReader = {
       const day = dayBounds(date, opts.timeZone);
       const sources: SourceReading[] = [];
       // 0 from Apple Health also means "nothing readable" (HealthKit hides a denied read as no data, M0).
-      const hk = health[i];
+      const hk = health[i]?.steps;
       if (hk) sources.push({ source: 'apple_health', steps: hk, coverFrom: day.start, complete: now >= day.end });
       // CMPedometer answers for the whole range it was asked (it records all day by itself).
       const p = phone[i];

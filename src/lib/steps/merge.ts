@@ -181,7 +181,10 @@ export interface DayValue {
    * on it before 72 h (M7).
    */
   sinceUnknown: boolean;
-  /** The reading's `storeUnread`: a health store that is ON wasn't read — a past day saves nothing and isn't final. */
+  /**
+   * The reading's `storeUnread`: a health store that is ON (or Android's Recording API, subscribed) wasn't read — a
+   * past day saves nothing and isn't final.
+   */
   storeUnread: boolean;
 }
 

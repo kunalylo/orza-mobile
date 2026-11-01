@@ -2,22 +2,28 @@
  * Health Connect reader — Android only. Metro picks this file on Android, so the Health Connect module is never loaded
  * on iPhone. Permissions are declared in app.json (`android.permission.health.READ_*`); the permissions-rationale intent
  * filter + activity alias Health Connect requires open ÖRZA's privacy policy (`modules/orza-steps`, HealthPrivacyActivity;
- * the library's config plugin is not used). Until steps v2 R1, READ_TYPES still lists the four types app.json no longer
- * declares (P5) — Health Connect can't grant those, and `readableTypes` only reads granted ones.
+ * the library's config plugin is not used).
+ *
+ * Steps v2 (`docs/notes/steps-v2.md`): ÖRZA reads only Steps, Sleep, Resting heart rate and Weight (P5) — the Health
+ * screen asks for those four (`requestAccess`), Today's steps card for Steps alone plus background reading
+ * (`requestSteps`). Automatic steps read `stepsBetween` (an aggregate per instant range, with the apps it came from).
  */
 import Constants from 'expo-constants';
 import { Linking, Platform } from 'react-native';
 import type {
   AggregateResult,
   AggregateResultRecordType,
+  BackgroundAccessPermission,
   Permission,
   ReadRecordsOptions,
   RecordResult,
   RecordType,
 } from 'react-native-health-connect';
 
+import { healthFeatures } from '../../../modules/orza-steps';
+
 import { DayCollector, datesSince, localDate, rangeStart, sleepMinutesByWakeDate, type SleepInterval } from './aggregate';
-import { HealthNotAuthorizedError, type HealthBridge, type HealthMetric } from './types';
+import { HealthNotAuthorizedError, type HealthBridge, type HealthMetric, type StepsGrant, type StepsTotal } from './types';
 
 const PROVIDER = 'com.google.android.apps.healthdata';
 const STORE_URL = `market://details?id=${PROVIDER}&url=healthconnect%3A%2F%2Fonboarding`;
@@ -26,21 +32,30 @@ const STORE_WEB_URL = `https://play.google.com/store/apps/details?id=${PROVIDER}
 const MANAGE_ACTION_APK = 'androidx.health.ACTION_MANAGE_HEALTH_PERMISSIONS';
 const APP_PACKAGE = Constants.expoConfig?.android?.package ?? 'in.co.ylo.orza';
 
-/** Health Connect record type → the ÖRZA metric it feeds. */
+/**
+ * Health Connect record type → the ÖRZA metric it feeds: the four types app.json declares (P5). Active calories,
+ * distance, heart rate and hydration are no longer read (nor declared: Health Connect couldn't grant them).
+ */
 const RECORDS = {
   Steps: 'steps',
-  ActiveCaloriesBurned: 'active_kcal',
-  Distance: 'distance_km',
   SleepSession: 'sleep_minutes',
   RestingHeartRate: 'resting_hr',
-  HeartRate: 'avg_hr',
   Weight: 'weight_kg',
-  Hydration: 'water_ml',
 } as const satisfies Partial<Record<RecordType, HealthMetric>>;
 
 type ReadType = keyof typeof RECORDS;
 const READ_TYPES = Object.keys(RECORDS) as ReadType[];
 const PERMISSIONS: Permission[] = READ_TYPES.map((recordType) => ({ accessType: 'read', recordType }));
+
+const STEPS_PERMISSION: Permission = { accessType: 'read', recordType: 'Steps' };
+const BACKGROUND_PERMISSION: BackgroundAccessPermission = { accessType: 'read', recordType: 'BackgroundAccessPermission' };
+const NOTHING_GRANTED: StepsGrant = { granted: false, background: false };
+
+/** Health Connect's grants (any permission list it answers with) → the steps-only request's outcome. */
+function stepsGrantOf(list: readonly { accessType: string; recordType: string }[]): StepsGrant {
+  const has = (recordType: string) => list.some((p) => p.accessType === 'read' && p.recordType === recordType);
+  return { granted: has('Steps'), background: has('BackgroundAccessPermission') };
+}
 
 const SLEEP_LOOKBACK_MS = 18 * 60 * 60 * 1000;
 /**
@@ -187,12 +202,7 @@ export const healthBridge: HealthBridge = {
 
     const jobs: Promise<unknown>[] = [];
     if (can('Steps')) jobs.push(daily(hc, collector, 'Steps', 'steps', range, (r) => r.COUNT_TOTAL));
-    if (can('ActiveCaloriesBurned'))
-      jobs.push(daily(hc, collector, 'ActiveCaloriesBurned', 'active_kcal', range, (r) => r.ACTIVE_CALORIES_TOTAL?.inKilocalories));
-    if (can('Distance')) jobs.push(daily(hc, collector, 'Distance', 'distance_km', range, (r) => r.DISTANCE?.inKilometers));
     if (can('RestingHeartRate')) jobs.push(daily(hc, collector, 'RestingHeartRate', 'resting_hr', range, (r) => r.BPM_AVG));
-    if (can('HeartRate')) jobs.push(daily(hc, collector, 'HeartRate', 'avg_hr', range, (r) => r.BPM_AVG));
-    if (can('Hydration')) jobs.push(daily(hc, collector, 'Hydration', 'water_ml', range, (r) => r.VOLUME_TOTAL?.inMilliliters));
     if (can('Weight')) {
       jobs.push(
         readAll(hc, 'Weight', range).then((records) => {
@@ -239,16 +249,18 @@ export const healthBridge: HealthBridge = {
       const hc = await client();
       if (!(await readableTypes(hc)).has('Steps')) return none;
       return await Promise.all(
-        ranges.map(async (r) => {
-          if (!(r.end > r.start)) return 0;
+        ranges.map(async (r): Promise<StepsTotal | null> => {
+          if (!(r.end > r.start)) return { steps: 0, origins: [] };
           try {
-            // Health Connect's aggregate de-duplicates overlapping apps / devices (its own priority list).
+            // Health Connect's aggregate de-duplicates overlapping apps / devices (its own priority list) — never
+            // readRecords sums (double counting), never aggregateGroupByPeriod (the phone's zone, not the profile's).
             const res = await hc.aggregateRecord({
               recordType: 'Steps',
               timeRangeFilter: { operator: 'between', startTime: new Date(r.start).toISOString(), endTime: new Date(r.end).toISOString() },
             });
             const n = res.COUNT_TOTAL;
-            return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.round(n) : 0;
+            const origins = Array.isArray(res.dataOrigins) ? res.dataOrigins.filter((o): o is string => typeof o === 'string' && !!o) : [];
+            return { steps: typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.round(n) : 0, origins };
           } catch {
             return null; // e.g. read from the background without background-read access
           }
@@ -256,6 +268,37 @@ export const healthBridge: HealthBridge = {
       );
     } catch {
       return none;
+    }
+  },
+
+  /**
+   * Today's steps card (§2.2 `hc`): Steps only, plus "Access data in the background" where Health Connect offers it
+   * (the background run keeps the day current with ÖRZA closed). Health Connect stops showing its sheet after two
+   * refusals and then answers at once with what is granted. Never throws.
+   */
+  async requestSteps() {
+    try {
+      const hc = await client();
+      const features = await healthFeatures();
+      const ask = features.backgroundRead === 'available' ? [STEPS_PERMISSION, BACKGROUND_PERMISSION] : [STEPS_PERMISSION];
+      return stepsGrantOf(await hc.requestPermission(ask));
+    } catch {
+      return NOTHING_GRANTED; // Health Connect missing / not ready, or the sheet couldn't open
+    }
+  },
+
+  /**
+   * Health screen › Disconnect: every ÖRZA permission in Health Connect goes. Takes effect when the app process restarts
+   * (RNHC 4.1: until then `getGrantedPermissions` and reads go on as before) — so the member's consent is what stops
+   * ÖRZA's reads right away. Never throws.
+   */
+  async revokeAll() {
+    try {
+      const hc = await client();
+      await hc.revokeAllPermissions();
+      return true;
+    } catch {
+      return false;
     }
   },
 

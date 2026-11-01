@@ -70,6 +70,25 @@ export interface StepRange {
   end: number;
 }
 
+/** A health store's step total over one `StepRange` (`stepsBetween`). */
+export interface StepsTotal {
+  /** Whole steps, ≥ 0 (0: nothing recorded — for a store, "nothing synced", never a real 0). */
+  steps: number;
+  /**
+   * Health Connect: the apps (package names) whose records make up the total — `android` is Health Connect's own
+   * on-device count of this phone (Android 14+). Always empty on iPhone (Apple Health's statistics don't say).
+   */
+  origins: string[];
+}
+
+/** What the steps-only permission request (`requestSteps`) ended with. */
+export interface StepsGrant {
+  /** Steps may be read (Health Connect `READ_STEPS`; on iPhone: the sheet was answered — HealthKit hides denials). */
+  granted: boolean;
+  /** Android: reading in the background (`READ_HEALTH_DATA_IN_BACKGROUND`) is granted too. */
+  background: boolean;
+}
+
 /**
  * - `available`: ready to connect / read.
  * - `needs_install`: Health Connect isn't installed (Android 9–13) — send the user to the Play Store.
@@ -103,10 +122,23 @@ export interface HealthBridge {
   readDays(days: number): Promise<HealthDayInput[]>;
   /**
    * Step totals for each `[start, end)` range (epoch ms) — the store's own deduplicated total (phone + watch counted
-   * once). `null` for a range that can't be read (no permission, store unavailable or locked); 0 when nothing was
-   * recorded. Used by automatic step counting (`lib/steps`) for Today; never throws.
+   * once), with the apps it came from (Android). `null` for a range that can't be read (no permission, store
+   * unavailable or locked, a failed query); `{steps: 0}` when nothing was recorded. Used by automatic step counting
+   * (`lib/steps`); never throws.
    */
-  stepsBetween(ranges: readonly StepRange[]): Promise<(number | null)[]>;
+  stepsBetween(ranges: readonly StepRange[]): Promise<(StepsTotal | null)[]>;
+  /**
+   * Steps v2: asks for steps only (P5) — Android: `READ_STEPS`, plus background reading where Health Connect offers it.
+   * Never throws (a store that can't be asked: nothing granted). Optional until the iPhone bridge has it (R3).
+   */
+  requestSteps?(): Promise<StepsGrant>;
+  /**
+   * Removes every permission ÖRZA holds in the store (Health screen › Disconnect). Android: Health Connect revokes at
+   * once, but this app process keeps reading as before until it restarts (a platform limit) — so the app's own
+   * consent must stop the reads. iPhone: HealthKit has no such call (false: the member does it in Settings › Health).
+   * True when the store took the request. Never throws.
+   */
+  revokeAll(): Promise<boolean>;
   /** Where the user manages ÖRZA's access (Health Connect settings / the app's Settings page on iPhone). */
   openManage(): Promise<void>;
   /** Play Store page for Health Connect (Android). */

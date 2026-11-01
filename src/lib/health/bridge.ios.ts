@@ -162,7 +162,7 @@ export const healthBridge: HealthBridge = {
       if (status === hk.AuthorizationRequestStatus.shouldRequest) return none;
       return await Promise.all(
         ranges.map(async (r) => {
-          if (!(r.end > r.start)) return 0;
+          if (!(r.end > r.start)) return { steps: 0, origins: [] };
           try {
             // A statistics sum: iPhone + Apple Watch steps counted once, like the Health app.
             const res = await hk.queryStatisticsForQuantity(STEPS, ['cumulativeSum'], {
@@ -170,7 +170,7 @@ export const healthBridge: HealthBridge = {
               unit: 'count',
             });
             const n = res.sumQuantity?.quantity;
-            return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.round(n) : 0;
+            return { steps: typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.round(n) : 0, origins: [] };
           } catch {
             return null; // e.g. the Health store is locked (phone locked) during a background run
           }
@@ -179,6 +179,10 @@ export const healthBridge: HealthBridge = {
     } catch {
       return none;
     }
+  },
+
+  async revokeAll() {
+    return false; // HealthKit can't: the member removes ÖRZA in Settings › Health › Data Access & Devices
   },
 
   async openManage() {

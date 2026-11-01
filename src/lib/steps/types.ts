@@ -28,10 +28,13 @@ export interface SourceReading {
   complete?: boolean;
   /**
    * Health Connect only: its count holds this phone's own steps — HC counts the phone itself (Android 14+ with SDK
-   * extension 20, `stepTracking`; the reader sets it). Only then does it decide a past day over the phone's count (M4).
-   * Apple Health always holds the iPhone's steps.
+   * extension 20, `stepTracking`), or a phone step recorder wrote the day (Samsung Health, Google Fit, HC's own
+   * on-device count: `androidSources.HC_PHONE_ORIGINS`); the reader sets it. Only then does it decide a past day over
+   * the phone's count (M4). Apple Health always holds the iPhone's steps.
    */
   includesPhone?: boolean;
+  /** Health Connect only: the apps (package names) whose records make up `steps` — for labels (U5). */
+  origins?: string[];
   /**
    * What the source counted after a base's `at` (M5): its count over [max(at, coverFrom), min(e, now)), read for the
    * day's `ReadOptions.sinceAt`. Not needed when `coverFrom >= at` (then it is all of `steps`).
@@ -59,7 +62,9 @@ export interface DayReading {
   /**
    * A health store is ON for the member but wasn't read this run (Android in the background without
    * `READ_HEALTH_DATA_IN_BACKGROUND`, a locked iPhone, a failed query) — not the same as "no data": the day may be
-   * missing the store's count. A past day then saves nothing and isn't final (§2.9); today still raises.
+   * missing the store's count. A past day then saves nothing and isn't final (§2.9); today still raises. Android also
+   * sets it when the phone's Recording API is ON (subscribed) but its read failed or Play services couldn't answer
+   * (R2): the same lower bound, for the phone's count.
    */
   storeUnread?: boolean;
 }
@@ -114,6 +119,9 @@ export type RefreshReason = 'launch' | 'foreground' | 'today' | 'permission' | '
 /** The one permission Today asks for first (§2.2); `none`: nothing can count on this phone — Log steps only. */
 export type FirstAsk = 'hc' | 'phone' | 'healthkit' | 'none';
 
+/** A permission the steps reader can ask for: Health Connect's / Apple Health's steps, or the phone's own counter. */
+export type StepsAsk = Exclude<FirstAsk, 'none'>;
+
 /** The health store's steps read access: `needs_install` = Health Connect can be installed / updated from Play. */
 export type StoreAccess = 'granted' | 'not_granted' | 'unavailable' | 'needs_install';
 
@@ -130,6 +138,10 @@ export interface StepsAccess {
   store?: StoreAccess;
   /** Steps v2, Android (R2): the Recording API's status. */
   recording?: RecordingStatus;
+  /** Steps v2, Android (R2): the Recording API is subscribed (with `available`: `plan.SourceInputs.recordingReady`). */
+  recordingReady?: boolean;
+  /** Steps v2 (R2 / R4): what this phone can count with — for `plan.sourcesOn` / `plan.lookbackDays` (R5a). */
+  features?: StepFeatures;
 }
 
 /** What this phone can count steps with (§2.1, §2.2) — from the readers (R2 / R4); `plan.firstAsk` / `plan.sourcesOn`. */
@@ -182,7 +194,10 @@ export interface ReadOptions {
   background?: boolean;
   /** Steps v2 (R2 / R4): per date, a base's `at` — each source also reports its count after it (`SourceReading.since`). */
   sinceAt?: Record<string, number>;
-  /** Steps v2 (R2 / R4 / R5a): the member's consents; nothing is read for a kind without one. */
+  /**
+   * Steps v2 (R2 / R4 / R5a): the member's consents; nothing is read for a kind without one. Until R5a passes it, the
+   * Android reader takes `{store: healthConnected, phone: true}` (the v1 behaviour).
+   */
   consent?: ReadConsent;
   /** Steps v2 (M9): no source reads before this instant (a shared phone: this member's consent). */
   coverFloor?: number | null;
@@ -195,11 +210,19 @@ export interface StepsReader {
   /** Where to turn it on when blocked. */
   settingsPath: string;
   access(): Promise<StepsAccess>;
-  /** Shows the system permission prompt (when it still can). */
-  requestPermission(): Promise<StepPermission>;
-  /** Starts background counting where the platform needs it (Android sampler alarms). Cheap, never throws. */
-  prepare(timeZone: string): Promise<void>;
-  /** Stops background counting and forgets raw samples (sign-out). Never throws. */
+  /**
+   * Shows the system permission prompt (when it still can) for `kind` — default `phone`, the phone's own counter
+   * (Android `hc`: Health Connect's steps + background, R2; iPhone `healthkit`: R4). Only the OS permission: the
+   * member's consent is the caller's (R5a). A kind this platform doesn't have → `unavailable`.
+   */
+  requestPermission(kind?: StepsAsk): Promise<StepPermission>;
+  /**
+   * Starts background counting where the platform needs it. Android: the next read subscribes to the Recording API
+   * again (once per prepare); with `opts` the phone's counter is set up now (Recording API or sampler, S-A2…S-A4),
+   * else by that read. Cheap, never throws.
+   */
+  prepare(timeZone: string, opts?: Pick<ReadOptions, 'consent' | 'healthConnected'>): Promise<void>;
+  /** Stops background counting and forgets raw samples — Android: also the Recording API subscription (sign-out). Never throws. */
   reset(): Promise<void>;
   /**
    * Every source's reading for each of `dates` (a date nothing could read has no sources, or no `DayReading`). Which

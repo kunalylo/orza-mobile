@@ -1091,8 +1091,44 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
 
 **Phase R: readers, sync, iOS config**
 
-- [ ] **R1.** `health/bridge.android.ts`: P5 types, `requestSteps`, `stepsBetween` with origins, `revokeAll`.
-- [ ] **R2.** `reader.android.ts`: sources S-A1…S-A4, the Recording API path, HC first-grant coverage, `sinceAt`.
+- [x] **R1.** `health/bridge.android.ts`: P5 types, `requestSteps`, `stepsBetween` with origins, `revokeAll`.
+  - `RECORDS` / `READ_TYPES` = Steps, SleepSession, RestingHeartRate, Weight (`readDays` drops the other four); the
+    Health screen's `requestAccess` asks those four, without background (E-8). `requestSteps()` → `{granted,
+    background}`: Steps + `BackgroundAccessPermission` when `healthFeatures().backgroundRead` is available; never throws.
+    `stepsBetween` → `StepsTotal {steps, origins}` | null (origins = the aggregate's `dataOrigins` package names).
+    `revokeAll()` → boolean (RNHC `revokeAllPermissions`; it takes effect only when the app process restarts — reads and
+    `getGrantedPermissions` go on until then, so R6's disconnect must clear `consent.store` to stop reads at once).
+  - Deviation (shared contract): `health/types.ts` gains `StepsTotal`, `StepsGrant`, `requestSteps?` (optional until R3
+    adds the iPhone one — R3 may make it required) and `revokeAll` (required); minimal adaptations so everything
+    compiles: `bridge.ts` no-ops, `bridge.ios.ts` `stepsBetween` → `{steps, origins: []}` and `revokeAll` → false,
+    `reader.ios.ts` reads `.steps`.
+- [x] **R2.** `reader.android.ts`: sources S-A1…S-A4, the Recording API path, HC first-grant coverage, `sinceAt`.
+  - Every decision is in a new pure `androidSources.ts` (`dayPlans`, `phonePlan`, `featuresOf`/`storeAccessOf`,
+    `hcAsks`/`hcRanges`/`hcAnswers`/`hcReading`, `samplerReadings`, `recordingWindowFor`/`recordingTotalsRange`/
+    `recordingReadings`, `sinceRange`, `assembleDays`; new `steps-android.test.ts`, 32 tests, listed in `test:steps`);
+    the reader only does native calls. ON per `plan.sourcesOn` (consent = `ReadOptions.consent`, until R5a passes it
+    `{store: healthConnected, phone: true}`). Each `readDays` decides and applies the phone's counter (serialised; a
+    `reset` generation stops a decision in flight from switching anything back on); `prepare(tz)` flags a re-subscribe,
+    `prepare(tz, {consent, healthConnected})` decides at once. Recording API: subscribed once per prepare / JS session,
+    one 15-min totals read, a 1-min read per day with a `sinceAt` (today and past days). Sampler only when the Recording
+    API can't be used (S-A4); taking over from a stopped sampler clears its old samples first (else the stretch since it
+    stopped reads as one long estimate). HC: one batched `stepsBetween` per read (totals, the pre-grant part on
+    `hcGrantAt`'s day, since); `hcGrantAt` noted whenever `READ_STEPS` is seen granted (access, reads, the `hc` request);
+    `includesPhone` = `stepTracking` or an origin in `HC_PHONE_ORIGINS` (`android`, Samsung Health, Google Fit);
+    `SourceReading.origins` kept for U5; in the background without `READ_HEALTH_DATA_IN_BACKGROUND` (app not active)
+    HC isn't read → `storeUnread`. M9 `coverFloor` honoured by every source. `requestPermission(kind = 'phone')`: `hc` →
+    `bridge.requestSteps` (`denied` for a refusal and HC's two-refusal lockout alike). `access()` adds `firstAsk`,
+    `store`, `recording`, `recordingReady`, `features`. `reset()` also unsubscribes the Recording API (R5b's item).
+  - Deviations: (1) `storeUnread` is also set when the Recording API is subscribed but its read failed, or Play services
+    is updating / not answering (`unread` mode: the stopped sampler isn't used) — the same lower bound for the phone's
+    count; Play services missing / disabled → unsubscribe + sampler. (2) Phone sources OFF for any reason (no consent,
+    S-A3, permission gone) → unsubscribe + sampler stopped, not only S-A3 (P9 minimisation). (3) Google Fit counts as a
+    phone recorder per J8's "may" — if a member's Fit tracks only a Wear OS watch, HC decides their past days on
+    Android 9–13. (4) The coverage floor cuts the Recording API at 15-min bucket granularity. (5) Interfaces:
+    `StepsReader.requestPermission(kind?: StepsAsk)`, `prepare(tz, opts?)`, `StepsAccess.recordingReady` / `features`.
+  - Known limit: a stepTracking phone on the phone path that grants HC later reads its still-pending past days from HC
+    alone (S-A3 unsubscribes); where HC holds only another app's part of such a day, a reconcile can lower this phone's
+    own earlier save. Small window: phone-only past days settle an hour after midnight.
 - [ ] **R3.** iOS config: app.json healthkit (`background: true`, `NSHealthUpdate… false`, share text), the motion
   string, `ios.privacyManifests`; `bridge.ios.ts` P5 types, `requestSteps`, `configureStepsBackground`.
 - [ ] **R4.** `reader.ios.ts`: HealthKit primary, the CMPedometer fallback by consent, `sinceAt`, health-empty detection.

@@ -661,3 +661,8 @@ batch 1" log entry); 3 is still open.
   a POST that failed late (up to the 20 s timeout) took the failure time as its press time → the press time. test:alarms
   69/69. Not fixed (native, needs a rebuild): the missed notification's title still says "💊 Time for <name>" (subText
   "Missed" only). QA medicines "QA Dev *" created for this run deleted.
+- 2026-11-02: batch-1 phone + phase N review fixes (`7907ff9`, `eeb57d2`) and DEVICE checks all PASS (`19decea`: every request sends
+  Cache-Control no-store — Android's HTTP cache served stale answers when the phone clock went back; clock-safe isOlderThan; queued
+  press keeps the press time). Recording API on this AVD: "no_sensor" (expected); HealthFeatures extension 17; HC privacy link opens
+  the new screen (loads the live /privacy#phone-app — section appears once B6 is pushed). Mobile repo pushed to origin (21 commits).
+  Running: steps v2 Phase R + U (`wf_9fbaa2fe-3fe`) incl. the native missed-dose title (compiled in phase V's rebuild).
