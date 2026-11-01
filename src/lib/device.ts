@@ -177,7 +177,9 @@ function registerNow(opts: RegisterOptions & { force?: boolean }): Promise<AppDe
     persistDeclaration(next);
   }
   if (inflight && !changed) return inflight;
-  if (!opts.force && !dirty && Date.now() - lastSentAt < MIN_INTERVAL_MS) return Promise.resolve(null);
+  // A last send "in the future" (the phone clock was set back since) doesn't hold the next one back.
+  const sinceSent = Date.now() - lastSentAt;
+  if (!opts.force && !dirty && sinceSent >= 0 && sinceSent < MIN_INTERVAL_MS) return Promise.resolve(null);
 
   const previous = inflight;
   const gen = generation;

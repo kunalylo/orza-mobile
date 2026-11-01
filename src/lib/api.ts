@@ -155,7 +155,14 @@ function baseHeaders(auth: boolean): Record<string, string> {
     Accept: 'application/json',
     'X-ORZA-Client': 'mobile',
   };
-  if (PLATFORM !== 'web') h['X-ORZA-Platform'] = PLATFORM;
+  if (PLATFORM !== 'web') {
+    h['X-ORZA-Platform'] = PLATFORM;
+    // React Native's HTTP stack keeps a disk cache (OkHttp on Android). ÖRZA's JSON carries no Cache-Control, and with
+    // the phone clock set back past the time an answer arrived, OkHttp counts that copy's age as negative = fresh and
+    // answers every GET from it without asking the server (alarms planned from old medicines, stale screens) until
+    // the clock catches up. `no-store`: always ask the server, and keep no health data in that cache.
+    h['Cache-Control'] = 'no-store';
+  }
   if (auth && sessionToken) h.Authorization = `Bearer ${sessionToken}`;
   return h;
 }

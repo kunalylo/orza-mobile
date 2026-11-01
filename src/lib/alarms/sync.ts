@@ -34,7 +34,7 @@ import type { PublicUser } from '@/lib/types';
 
 import { alarmAdapter, type AdapterStatus, type AlarmActionEvent, type DoseRef, type NativeAlarmAction } from './adapter';
 import { setAlarmDoseHandlers } from './bridge';
-import { doseRangeSpan, parseDoseRange, takenDoseLog } from './doses';
+import { doseRangeSpan, isOlderThan, parseDoseRange, takenDoseLog } from './doses';
 import { attachAlarmPhotos, cachedAlarmPhotoUri } from './photos';
 import {
   doseStateKey,
@@ -284,7 +284,7 @@ export async function checkAlarmsOnForeground(): Promise<void> {
     requestAlarmSync('permission', { force: true, delayMs: 300 });
     return;
   }
-  if (isDirty() || Date.now() - (state.lastSyncAt ?? 0) > FOREGROUND_THROTTLE_MS) {
+  if (isDirty() || isOlderThan(state.lastSyncAt, FOREGROUND_THROTTLE_MS, Date.now())) {
     requestAlarmSync('foreground', { delayMs: 800 });
   } else if (pendingDoseActions(userId).length) {
     void flushDoseQueue({ userId, queryClient: foreground?.queryClient ?? null }).then((r) => afterFlush(userId, r));
@@ -626,7 +626,11 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
     );
     const hash = planHash(items);
     const unchanged =
-      !force && !!lastScheduled && lastScheduled.hash === hash && lastScheduled.statusKey === statusKey && now - lastScheduled.at < RESCHEDULE_EVERY_MS;
+      !force &&
+      !!lastScheduled &&
+      lastScheduled.hash === hash &&
+      lastScheduled.statusKey === statusKey &&
+      !isOlderThan(lastScheduled.at, RESCHEDULE_EVERY_MS, now);
     let scheduled = lastScheduled?.count ?? 0;
     if (!unchanged) {
       try {
@@ -797,7 +801,7 @@ async function loadData(session: Session, cache: AlarmCache, stale: () => boolea
   const dirtyAll = dirty.all;
   const toFetch = dates.filter((d) => {
     const entry = cache.days[d];
-    return !entry || dirtyAll || dirty.dates.has(d) || now - entry.at >= dayMaxAge(d, today);
+    return !entry || dirtyAll || dirty.dates.has(d) || isOlderThan(entry.at, dayMaxAge(d, today), now);
   });
   dirty.all = false;
   for (const d of toFetch) dirty.dates.delete(d);

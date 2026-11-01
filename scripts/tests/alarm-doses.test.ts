@@ -17,6 +17,7 @@ import {
   firedAtOf,
   isDoseAlreadyTaken,
   isMissedOnAlarm,
+  isOlderThan,
   isPastRinging,
   MISSED_AFTER_MS,
   parseDoseRange,
@@ -379,5 +380,33 @@ describe('alarms_local_until (plan.doseCoveredUntil)', () => {
     assert.equal(p.items.filter((i) => i.ring).length, 7);
     assert.equal(p.doseCoveredUntil, null);
     assert.ok(p.coveredUntil < p.horizonEnd);
+  });
+});
+
+describe('ages on the phone clock (isOlderThan)', () => {
+  const T = Date.parse('2026-11-02T01:00:00.000Z');
+  const MIN = 60_000;
+
+  test('younger than the limit → fresh; at / past it → old', () => {
+    assert.equal(isOlderThan(T, 15 * MIN, T + 14 * MIN), false);
+    assert.equal(isOlderThan(T, 15 * MIN, T + 15 * MIN), true);
+    assert.equal(isOlderThan(T, 15 * MIN, T + 3 * 3_600_000), true);
+  });
+
+  test("a limit of 0 (today's dose logs) → always fetched again", () => {
+    assert.equal(isOlderThan(T, 0, T), true);
+  });
+
+  test('the device case: clock set back 75 min after a fetch — the copy from "the future" is old, not fresh', () => {
+    // A negative age used to pass `now - at >= max` as false: no day logs re-read, no foreground sync, an unchanged plan
+    // kept, until the clock caught up.
+    assert.equal(isOlderThan(T, 30 * MIN, T - 75 * MIN), true);
+    assert.equal(isOlderThan(T, 6 * 3_600_000, T - 1), true);
+  });
+
+  test('no / unusable time → old', () => {
+    assert.equal(isOlderThan(null, 15 * MIN, T), true);
+    assert.equal(isOlderThan(undefined, 15 * MIN, T), true);
+    assert.equal(isOlderThan(Number.NaN, 15 * MIN, T), true);
   });
 });

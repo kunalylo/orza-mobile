@@ -629,3 +629,35 @@ batch 1" log entry); 3 is still open.
   uncommitted route was used instead); the 2 GB emulator thrashes (kill-all helps). Local qa4 data: Glimepiride 21:00
   taken by a swipe the laggy emulator read as a tap; test medicine "Review Alarm Tab" (taken) and reminder "Review late
   reminder" deactivated; QA Wrapup Tab schedule restored; Amlodipine 22:00 left missed.
+- 2026-11-02: **Device test of batch 1 + phase N** (DEV build 22:23, Metro after its `--clear` restart, gate SAFE before every
+  start; local server only). Metro's inspector works over `127.0.0.1` with `origin: http://127.0.0.1:8081` (`localhost`
+  closes 1006) and Hermes ignores `awaitPromise` — scratchpad `tools/cdp-eval3.mjs` stores the result on a global and polls.
+  (A) From JS (`__r(<id>)` of `modules/orza-steps`, and the raw native module): `recordingStatus` "no_sensor", subscribe
+  `{ok:false, subscribedAt:null, error:"Unavailable no_sensor"}`, `recordingSubscribedAt` null, read over the last hour
+  null (native rejects "Unavailable no_sensor", the wrapper turns it into null), unsubscribe false, `healthFeatures`
+  `{stepTracking:false, extension:17, backgroundRead:"available", backgroundGranted:false, stepsGranted:true}`, `getStatus`
+  `{available:false, permission:false, recording:"no_sensor", subscribedAt:null, …}`; logcat clean. HC › App permissions ›
+  ÖRZA › "Read privacy policy" online opens `ViewPermissionUsageActivity` → HealthPrivacyActivity on the LIVE
+  `https://orza-nine.vercel.app/privacy#phone-app` (the page loads; `#phone-app` doesn't exist live until B6 is pushed), Back →
+  HC. (B) all 8 pass: Take on Medicines → acted_at 0.9 s after the press (server clock, sent at once); Snooze on the alarm
+  screen → snooze_until = acted_at + 10 min, the re-ring rang at +10; 409 on the Medicines card (Snooze) and on the alarm
+  screen (Snooze after a Take via the API) → "Taken" + info toast "<name> — already marked as taken", no re-ring set
+  (`dumpsys alarm`) and none rang; airplane mode, Snooze on the alarm screen (queued), 2 min 40 s later online → server
+  acted_at = the queued press, snooze_until = +10 min, re-ring at that time; one `GET /api/meds/doses?from=2026-11-01&to=
+  2026-11-09` per start sync (`from=to=` the dirty day after a dose event; the `/meds/today` GETs are the screens' 60 s
+  refetch); devices row `alarms_local: true` without `alarms_local_until` = null (39 alarms, Android cap 200 cut none;
+  stored declaration `alarmsLocalUntil: null`); stale alarm — phone clock 75 min back, a dose at 02:36 + one at 03:16
+  planned, clock restored at 03:37 → 02:36 "fired 61 min late — shown as missed" on `orza_alarms_quiet` (subText Missed),
+  03:16 (22 min late) rang INSISTENT on `orza_alarms` → "Time for your medicine"; the missed one opens "Missed medicine ·
+  Was due at 2:36 am"; Amlodipine's link from yesterday → "Was due at 10:00 pm yesterday"; Rebalance past plans: 1690 /
+  1693 → "None / Already at your safe minimum" + "Your usual 1,690 kcal already sits at your body's safe floor…", 1680 /
+  1696 → "None / Already below your safe minimum" + "…already below the safe floor for your body (1,696 kcal)…".
+  **Fixed (JS):** (1) the "stale data after the clock went back" seen on 1 Nov = OkHttp's disk HTTP cache (`cache/http-cache`):
+  ÖRZA's JSON has no Cache-Control, and with the phone clock behind the time an answer arrived OkHttp counts its age as
+  negative = fresh and answers GETs from disk without asking the server (alarms planned from a medicine list without the new
+  medicine; Today from disk) — every native API request now sends `Cache-Control: no-store` (no health data stored there
+  either); (2) negative ages counted as fresh in the alarm engine (day logs never re-read, no foreground sync, unchanged
+  plan kept) and the device-registration throttle → `isOlderThan` (doses.ts, tests); (3) an alarm-screen press queued after
+  a POST that failed late (up to the 20 s timeout) took the failure time as its press time → the press time. test:alarms
+  69/69. Not fixed (native, needs a rebuild): the missed notification's title still says "💊 Time for <name>" (subText
+  "Missed" only). QA medicines "QA Dev *" created for this run deleted.

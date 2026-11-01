@@ -246,6 +246,18 @@ export function isMissedOnAlarm(d: DoseWhen & { medication_id: string }, now: nu
   return !ringsAt(alarm.at, now);
 }
 
+/**
+ * Whether something the phone noted at `at` (epoch ms, its own clock) is at least `maxAgeMs` old at `now` — for "fetch
+ * again / sync again" checks. A time in the future counts as old too: the phone clock was set back since (automatic
+ * time correcting a clock that ran fast, or by hand), and a negative age would otherwise keep the old copy "fresh"
+ * until the clock caught up — hours of alarms planned from old dose logs. Not a time → old.
+ */
+export function isOlderThan(at: number | null | undefined, maxAgeMs: number, now: number): boolean {
+  if (typeof at !== 'number' || !Number.isFinite(at)) return true;
+  const age = now - at;
+  return age < 0 || age >= maxAgeMs;
+}
+
 /** The `fired` parameter of an alarm link (epoch ms, digits only); null when absent or unusable. */
 export function firedAtOf(v: string | null | undefined): number | null {
   if (typeof v !== 'string' || !/^\d{1,15}$/.test(v)) return null;

@@ -115,13 +115,13 @@ export function useAlarmDoses(at: string | null, userId: string | null) {
 export type HandledDose = DoseItem & { gone?: boolean };
 
 /** Queue a press on this phone (sent when ÖRZA is reachable). False when there's no member to queue it for. */
-function queueOnPhone(d: DoseItem, action: DoseAction): boolean {
+function queueOnPhone(d: DoseItem, action: DoseAction, pressedAt: number): boolean {
   return recordAlarmAction({
     key: doseAlarmKey(d.scheduled_for),
     action,
     doses: [{ medId: d.medication_id, scheduledFor: d.scheduled_for }],
     ...(action === 'snooze' ? { snoozeMinutes: SNOOZE_MINUTES } : {}),
-    at: Date.now(),
+    at: pressedAt,
   });
 }
 
@@ -146,16 +146,23 @@ export function useAlarmActions(tz: string, offline = false) {
     }
   };
 
-  /** Saved on the phone instead of sent: the alarm collapses the dose as if it went through. */
-  const queued = (d: DoseItem, action: DoseAction, quiet?: boolean): boolean => {
-    if (!queueOnPhone(d, action)) {
+  /**
+   * Saved on the phone instead of sent: the alarm collapses the dose as if it went through. `pressedAt` = the press —
+   * also for a POST that failed later (up to its 20 s timeout): the queue sends that time as `acted_at` and the snooze
+   * ends 10 min after it, like the re-ring already set on the phone.
+   */
+  const queued = (d: DoseItem, action: DoseAction, pressedAt: number, quiet?: boolean): boolean => {
+    if (!queueOnPhone(d, action, pressedAt)) {
       if (!quiet) {
         haptics.error();
         toast.error("Couldn't reach ÖRZA. Please try again.");
       }
       return false;
     }
-    const updated = withAction(d, action);
+    const updated = withAction(d, action, {
+      acted_at: new Date(pressedAt).toISOString(),
+      ...(action === 'snooze' ? { snooze_until: new Date(snoozeEndOf(pressedAt, SNOOZE_MINUTES)).toISOString() } : {}),
+    });
     setHandled((h) => ({ ...h, [doseKey(d)]: updated }));
     if (!quiet) {
       if (action === 'take') toast.success(`${d.name} — marked as taken. It syncs when you're back online.`);
@@ -178,7 +185,7 @@ export function useAlarmActions(tz: string, offline = false) {
     const pressedAt = Date.now();
     // The re-ring goes on the phone now — online or not, whatever happens to the request.
     if (action === 'snooze') alarmSnoozePressed([{ medId: d.medication_id, scheduledFor: d.scheduled_for }], snoozeEndOf(pressedAt, SNOOZE_MINUTES));
-    if (offline) return queued(d, action, opts.quiet);
+    if (offline) return queued(d, action, pressedAt, opts.quiet);
     inflight.current.add(key);
     setPending((p) => ({ ...p, [key]: action }));
     try {
@@ -201,7 +208,7 @@ export function useAlarmActions(tz: string, offline = false) {
       return true;
     } catch (e) {
       // No connection: keep the press on the phone (sent later) rather than lose it.
-      if (isNoConnection(e)) return queued(d, action, opts.quiet);
+      if (isNoConnection(e)) return queued(d, action, pressedAt, opts.quiet);
       if (isDoseAlreadyTaken(e)) {
         // Taken elsewhere meanwhile (web, Today screen, another phone): it collapses as taken — no error.
         setHandled((h) => ({ ...h, [key]: asTaken(d) }));
