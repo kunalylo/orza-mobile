@@ -47,10 +47,6 @@ class HealthPrivacyActivity : Activity() {
     window.statusBarColor = Color.TRANSPARENT
     window.navigationBarColor = Color.TRANSPARENT
     val root = FrameLayout(this).apply { setBackgroundColor(Color.WHITE) }
-    WindowCompat.getInsetsController(window, root).apply {
-      isAppearanceLightStatusBars = true
-      isAppearanceLightNavigationBars = true
-    }
     ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
       val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
       v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
@@ -63,6 +59,12 @@ class HealthPrivacyActivity : Activity() {
     root.addView(webView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     root.addView(errorView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     setContentView(root)
+    // Dark bar icons on the white page. Only after setContentView: the insets controller needs the window's decor view
+    // (called before it, Android 16 threw a NullPointerException — the emulator smoke test).
+    WindowCompat.getInsetsController(window, window.decorView).apply {
+      isAppearanceLightStatusBars = true
+      isAppearanceLightNavigationBars = true
+    }
     web = webView
     error = errorView
     webView.loadUrl(PRIVACY_URL)

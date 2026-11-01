@@ -1023,10 +1023,37 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
 
 **Phase N: native Android (one native rebuild at the end of the phase)**
 
-- [ ] **N1.** `orza-steps` Gradle deps + `StepRecording.kt` + the module functions + the TS wrappers (`modules/orza-steps/src/index.ts`).
-- [ ] **N2.** `HealthFeatures.kt` + wrapper.
-- [ ] **N3.** `HealthPrivacyActivity.kt` + manifest activity and alias; remove the RNHC plugin from app.json.
-- [ ] **N4.** `StepScheduler.armMidnight` inexact only (P14); keep `reason` in `getSamples` output.
+- [x] **N1.** `orza-steps` Gradle deps + `StepRecording.kt` + the module functions + the TS wrappers (`modules/orza-steps/src/index.ts`).
+  - Gradle: `play-services-fitness:21.3.0` (still the latest on Google Maven, checked 2026-11-01) + `connect-client:1.1.0`.
+    `StepRecording` runs every Task callback on the sensor thread (the store's file I/O stays off the main thread);
+    `StepStore` keeps `recordingSubscribedAt` in the state JSON (first success only; cleared by unsubscribe whatever Play
+    services answers). Module: `recordingStatus`, `recordingSubscribe` → `{ok, subscribedAt, error}`,
+    `recordingUnsubscribe` → boolean, `recordingRead(startMs, lastMs, bucketMinutes)` (range passed as is),
+    `recordingSubscribedAt`, `getStatus` + `recording` / `subscribedAt`. TS: `recordingRead` → `NativeRecordingBucket[]`
+    (`{start, end, steps}`, the shape of `recording.ts`'s `RecordingBucket`), **null when the read failed** (no reading,
+    never 0), `[]` = nothing counted.
+  - Deviations: subscribe / unsubscribe are not gated on `recordingStatus` natively (R2 decides; a failure answers
+    `{ok: false, error}`); the subscribe answer gains `error` (exception class + status code, logs only); a bad range
+    (start < 0, last < start, bucket outside 1–1440 min) rejects `ERR_RECORDING_READ` before calling Play services.
+- [x] **N2.** `HealthFeatures.kt` + wrapper.
+  - `healthFeatures()` (`Coroutine`) → `{stepTracking, extension, backgroundRead: 'available' | 'unavailable',
+    backgroundGranted, stepsGranted}`. `stepTracking` / `extension` are OS checks (extension 0 below Android 14); the
+    three Health Connect fields are "no" when `getSdkStatus` ≠ SDK_AVAILABLE; each field has its own try/catch; the
+    grants read has a 5 s timeout. connect-client 1.1.0 needed no `@OptIn`. The TS wrapper returns the all-"no" object
+    without the module or on any error.
+- [x] **N3.** `HealthPrivacyActivity.kt` + manifest activity and alias; remove the RNHC plugin from app.json.
+  - WebView on `PRIVACY_URL` (JavaScript on), links off `orza-nine.vercel.app` (and any non-https scheme) open in the
+    browser, a main-frame load error / HTTP ≥ 400 / SSL error shows the §4.1 note + "Open in browser", Back finishes;
+    edge-to-edge with the bar insets as padding (Android 15+ forces edge-to-edge at target SDK 36). Manifest activity +
+    alias exactly as §4.2. The `bridge.android.ts` header no longer credits the RNHC plugin.
+  - Deviations: DOM storage on (the policy is a web-app page whose scripts may need it), file / content access off,
+    an SSL error never proceeds.
+- [x] **N4.** `StepScheduler.armMidnight` inexact only (P14); keep `reason` in `getSamples` output.
+  - The exact branch, `nextMidnightSample` and `MIDNIGHT_OFFSET_MS` are deleted; `canScheduleExact` stays for
+    `getStatus().exactMidnight` only (TS doc updated). `reason` was already in `getSamples` (`r`) and the wrapper.
+  - J1's note done in `StepStore.add`: a forced `shutdown` sample within 60 s of an unchanged one re-tags the kept sample
+    `shutdown` (instead of being dropped). Extension: when a forced sample within 60 s REPLACES the last one (counter
+    moved), a `shutdown` tag on either survives — the kept sample is still the last reading before the power-off.
 - [ ] **N5.** app.json Android permissions (P5 removals, background add).
   - `npx expo install --check` (the 6 Expo patch updates from D1).
   - Prebuild and Gradle build in the build copy.
