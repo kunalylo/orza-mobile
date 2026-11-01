@@ -149,11 +149,13 @@ function MedicineAlarm({ at, med, ringing, fired }: { at: string | null; med?: s
   }, [open.length, missedOnly]);
 
   // Rung for doses ÖRZA already counts as missed: no sound — they show as missed (the alarm stays quietly in the shade).
+  // Decided once, when the screen opens with its doses: a screen left open past the hour must not silence (it silences
+  // every ÖRZA alarm) another alarm that rings by then — this one stopped long before (RING_LIMIT 10 min).
   useEffect(() => {
-    if (!missedOnly || !raisedByAlarm || silencedMissed.current) return;
+    if (silencedMissed.current || !loaded || raisedByAlarm === null) return;
     silencedMissed.current = true;
-    silence();
-  }, [missedOnly, raisedByAlarm, silence]);
+    if (missedOnly && raisedByAlarm) silence();
+  }, [loaded, missedOnly, raisedByAlarm, silence]);
 
   // Everything handled here → celebrate briefly, then close.
   useEffect(() => {
