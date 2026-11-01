@@ -8,8 +8,8 @@
  * phone (`recordAlarmAction`) and sent as soon as ÖRZA is reachable again. A press whose POST fails for lack of a
  * connection is queued the same way, so it is never lost.
  * Snooze sets the re-ring on the phone at once (`alarmSnoozePressed`), before the POST — the screen closes itself and
- * the phone may lock (and the app be suspended) long before the next alarm sync would get there. Every press goes to
- * ÖRZA with its own time (`acted_at`, and `snooze_until` = press + 10 min).
+ * the phone may lock (and the app be suspended) long before the next alarm sync would get there. A press sent right
+ * away goes on ÖRZA's clock; a queued one reaches it with its own time (`acted_at`, and `snooze_until` = press + 10 min).
  * A Skip / Snooze ÖRZA refuses because the dose was already taken elsewhere (409 `dose_already_taken`) settles the
  * dose as taken (calm toast, no error) and the alarm engine takes back the re-ring it set.
  */

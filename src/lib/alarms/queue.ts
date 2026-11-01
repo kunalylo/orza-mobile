@@ -6,12 +6,15 @@
  * - Idempotent on the server: the dose log is an upsert and "take" lowers the stock only once.
  * - Kept on network trouble / 5xx / 401 / 408 / 429 (sent later, in order); dropped on any other 4xx (the dose or the
  *   medicine changed — `isStaleDoseError` — or the action is invalid), and after 72 h.
- * - Sent with the press time (`acted_at`) and, for a snooze, its end (`snooze_until` = press + 10 min) — see
- *   `./doses` `doseActionBody`: a Snooze pressed with the app asleep and synced 8 min later still re-rings 10 min after
- *   the press (the plan follows the server's `snooze_until`). An older server ignores both; it gets the minutes still
- *   left (`snooze_minutes`, at least 5) and starts the snooze on arrival.
+ * - Sent with the press time (`acted_at`) and, for a snooze, its end (`snooze_until` = press + 10 min) once it is
+ *   DELAYED_PRESS_MS old (sooner: ÖRZA's clock) — see `./doses` `doseActionBody`: a Snooze pressed with the app asleep
+ *   and synced 8 min later still re-rings 10 min after the press (the plan follows the server's `snooze_until`). An
+ *   older server ignores both; it gets the minutes still left (`snooze_minutes`, at least 5) and starts the snooze on
+ *   arrival.
  * - A snooze that couldn't be sent before its 10 minutes were up is dropped: the phone already re-rang it, and sending
- *   it late would make the server start a fresh snooze (and the phone ring again later).
+ *   it late would make the server start a fresh snooze (clamped to now + 1 min — the phone would ring again a minute
+ *   later). ÖRZA may then call the dose missed while that re-ring rings: the alarm screen judges by the alarm that
+ *   opened it (`fired`, `./doses` `isMissedOnAlarm`), so the re-ring still rings.
  * - 409 `dose_already_taken` (a Skip / Snooze that lost to a Take made elsewhere): the dose is taken — the press is
  *   dropped, the taken log is kept for the planner (`./recent`), so the next plan drops its snooze re-ring.
  * - A snooze / skip is checked against ÖRZA first (`GET /api/meds/doses?at=`): it is dropped when the dose was taken or

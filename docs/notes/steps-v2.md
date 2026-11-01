@@ -1032,9 +1032,18 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
     `recordingSubscribedAt`, `getStatus` + `recording` / `subscribedAt`. TS: `recordingRead` → `NativeRecordingBucket[]`
     (`{start, end, steps}`, the shape of `recording.ts`'s `RecordingBucket`), **null when the read failed** (no reading,
     never 0), `[]` = nothing counted.
-  - Deviations: subscribe / unsubscribe are not gated on `recordingStatus` natively (R2 decides; a failure answers
-    `{ok: false, error}`); the subscribe answer gains `error` (exception class + status code, logs only); a bad range
+  - Deviations: the subscribe answer gains `error` (exception class + status code, logs only); a bad range
     (start < 0, last < start, bucket outside 1–1440 min) rejects `ERR_RECORDING_READ` before calling Play services.
+  - Review fixes (batch-1 phone + native review): subscribe / read / unsubscribe ARE gated natively — Play services is
+    called only when `status()` is `available` (a disabled Play services passes the library's APK-version pre-check, then
+    its SERVICE_DISABLED connection failure posts Google's "enable Google Play services" notification under ÖRZA's name);
+    otherwise `{ok: false, error: "Unavailable <status>"}` / read rejects / unsubscribe resolves false, so sign-out (R5b)
+    and the P9 switch may call `recordingUnsubscribe` unconditionally. Without Physical activity subscribe / read answer
+    `NoPermission` without calling Play services and **forget `subscribedAt`** — also when the module starts (Android kills
+    the app on a revoke) and when a call fails with a SecurityException / permission status: coverage restarts at the next
+    successful subscribe (A-3). Limit: a revoke + re-grant with no ÖRZA code running in between (no start, no background
+    run) can't be seen. Subscribe / unsubscribe / read all run on the sensor thread with a `generation` counter: a
+    subscribe that an unsubscribe overtook stores no time (answers `Superseded`).
 - [x] **N2.** `HealthFeatures.kt` + wrapper.
   - `healthFeatures()` (`Coroutine`) → `{stepTracking, extension, backgroundRead: 'available' | 'unavailable',
     backgroundGranted, stepsGranted}`. `stepTracking` / `extension` are OS checks (extension 0 below Android 14); the

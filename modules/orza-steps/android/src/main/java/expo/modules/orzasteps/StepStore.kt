@@ -218,9 +218,17 @@ internal object StepStore {
     updateState(context) { if (it.optLong(RECORDING_SUBSCRIBED_AT, 0L) <= 0L) it.put(RECORDING_SUBSCRIBED_AT, at) }
   }
 
-  /** Unsubscribed: the API's data is gone, so the next subscription starts a new coverage. */
+  /**
+   * Unsubscribed, or "Physical activity" gone: the API's data is gone or has a gap, so the next subscription starts a
+   * new coverage. Writes nothing when no time is stored.
+   */
   fun clearRecordingSubscribed(context: Context) {
-    updateState(context) { it.remove(RECORDING_SUBSCRIBED_AT) }
+    synchronized(lock) {
+      val state = readState(context)
+      if (!state.has(RECORDING_SUBSCRIBED_AT)) return
+      state.remove(RECORDING_SUBSCRIBED_AT)
+      writeText(file(context, StepConst.STATE_FILE), state.toString())
+    }
   }
 
   private const val RECORDING_SUBSCRIBED_AT = "recordingSubscribedAt"

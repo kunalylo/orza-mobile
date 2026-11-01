@@ -57,8 +57,9 @@ export const medsApi = {
   today: (date: string) => api.get<TodayResponse>(`/meds/today?date=${encodeURIComponent(date)}`),
   adherence: (days: 7 | 30) => api.get<AdherenceResponse>(`/meds/adherence?days=${days}`),
   /**
-   * Take / Skip / Snooze. ÖRZA records `pressedAt` (default: now) as `acted_at` and ends a snooze `snoozeMinutes`
-   * (default 10) after it (`snooze_until`), however late the request arrives — see `lib/alarms/doses`.
+   * Take / Skip / Snooze. Sent right away it goes on ÖRZA's clock; sent DELAYED_PRESS_MS or more after `pressedAt`
+   * (default: now) ÖRZA records `pressedAt` as `acted_at` and ends a snooze `snoozeMinutes` (default 10) after it
+   * (`snooze_until`), however late the request arrives — see `lib/alarms/doses` `doseActionBody`.
    * Skip / Snooze over a dose already taken → 409 `dose_already_taken` (`isDoseAlreadyTaken`).
    */
   dose: (d: Pick<DoseItem, 'medication_id' | 'scheduled_for'>, action: DoseAction, opts: { pressedAt?: number; snoozeMinutes?: number } = {}) =>

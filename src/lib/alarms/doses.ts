@@ -2,10 +2,13 @@
  * Dose wire rules — PURE (no React Native imports; `npm run test:alarms` runs this file in Node). Shared by the medicine
  * screens, the alarm screen, the offline action queue and the alarm sync. Contract: web `SPEC.md` (web batch 1).
  *
- * - `POST /api/meds/doses` body (`doseActionBody`): `acted_at` = the moment the member pressed, and for a snooze
- *   `snooze_until` = that moment + the snooze length — ÖRZA records both (clamped), so a press that reaches it late
- *   (offline, the app asleep) keeps its own time. `snooze_minutes` is still sent, as the minutes LEFT of that snooze
- *   (at least 5): an older server ignores the two new fields and starts the snooze when the request arrives.
+ * - `POST /api/meds/doses` body (`doseActionBody`): a press sent right away (within DELAYED_PRESS_MS) goes on ÖRZA's
+ *   clock — only `snooze_minutes` for a snooze —, so a phone clock that is off (days behind after a power-off, an hour
+ *   fast) can't change when a dose counts as taken or how long a snooze lasts on the server. A press that reaches ÖRZA
+ *   late (queued offline, pressed with the app asleep) carries its own time: `acted_at` = the moment the member pressed
+ *   and, for a snooze, `snooze_until` = that moment + the snooze length (ÖRZA records both, clamped). `snooze_minutes`
+ *   is then the minutes LEFT of that snooze (at least 5): an older server ignores the two fields and starts the snooze
+ *   when the request arrives.
  * - 409 `dose_already_taken` (`isDoseAlreadyTaken`): a Skip / Snooze over a dose that was already taken — the dose IS
  *   taken; nothing to retry, nothing to show as an error.
  * - `GET /api/meds/doses?from=&to=` (`doseRangeSpan`, `parseDoseRange`): the recorded actions of up to 14 local days in
@@ -13,7 +16,9 @@
  *   400 / 404 — and the caller falls back to one `/api/meds/today?date=` per day.
  * - Missed (`doseRingsUntil`, `isPastRinging`): ÖRZA counts an unanswered dose as missed 60 min after its time (web
  *   `MISSED_AFTER_MIN`, `doseStatus`), a snoozed one 60 min after its snooze ended (web `doseHistoryBetween`). Past that
- *   a dose no longer RINGS anywhere on the phone — it shows as missed instead (never silently dropped).
+ *   a dose no longer RINGS anywhere on the phone — it shows as missed instead (never silently dropped). The alarm screen
+ *   also counts the alarm that opened it (`isMissedOnAlarm`): a snooze pressed on the notification with ÖRZA closed may
+ *   never reach the server, and its re-ring must still ring.
  */
 import { DEFAULT_SNOOZE_MINUTES } from './plan';
 import { isoOf, type DoseActionKind, type PlanDoseState } from './types';
@@ -24,6 +29,11 @@ export const MISSED_AFTER_MS = 60 * 60_000;
 export const DOSE_ALREADY_TAKEN = 'dose_already_taken';
 /** Most local days one `GET /api/meds/doses?from=&to=` may span (web `MAX_RANGE_DAYS`). */
 export const MAX_RANGE_DAYS = 14;
+/**
+ * A press sent at least this long after it was made carries its own time (`acted_at`, `snooze_until`); sooner, ÖRZA's
+ * clock decides (it is then at most this far off, and the phone's clock may be off by much more).
+ */
+export const DELAYED_PRESS_MS = 30_000;
 /** The server's snooze limits (`snooze_minutes` 5–60). */
 export const MIN_SNOOZE_MINUTES = 5;
 export const MAX_SNOOZE_MINUTES = 60;
@@ -55,17 +65,18 @@ export interface DoseActionBody {
   medication_id: string;
   scheduled_for: string;
   action: DoseActionKind;
-  /** When the member pressed (ISO, UTC "Z"). */
-  acted_at: string;
-  /** Snooze only: the minutes still to run when sent (older servers). */
+  /** Delayed presses only: when the member pressed (ISO, UTC "Z"). Absent → ÖRZA records the arrival. */
+  acted_at?: string;
+  /** Snooze only: the minutes still to run when sent (all of it when sent right away; what an older server uses). */
   snooze_minutes?: number;
-  /** Snooze only: when it ends (ISO, UTC "Z") — wins over `snooze_minutes` on a current server. */
+  /** Delayed snoozes only: when it ends (ISO, UTC "Z") — wins over `snooze_minutes` on a current server. */
   snooze_until?: string;
 }
 
 /**
- * The body for an action pressed at `pressedAt` and sent at `now` (default: right away). The snooze ends
- * `snoozeMinutes` (default 10) after the press, however late it is sent.
+ * The body for an action pressed at `pressedAt` and sent at `now` (default: right away). Sent within DELAYED_PRESS_MS
+ * of the press (or with no usable press time): no phone time at all — ÖRZA's clock. Later: the press time, and a
+ * snooze ends `snoozeMinutes` (default 10) after the press, however late it is sent.
  */
 export function doseActionBody(
   dose: { medication_id: string; scheduled_for: string },
@@ -74,15 +85,17 @@ export function doseActionBody(
 ): DoseActionBody {
   const now = typeof opts.now === 'number' && Number.isFinite(opts.now) ? opts.now : Date.now();
   const pressedAt = typeof opts.pressedAt === 'number' && Number.isFinite(opts.pressedAt) ? opts.pressedAt : now;
+  // A clock that went back between the press and the send (negative delay) counts as right away too.
+  const delayed = now - pressedAt >= DELAYED_PRESS_MS;
   return {
     medication_id: dose.medication_id,
     scheduled_for: dose.scheduled_for,
     action,
-    acted_at: new Date(pressedAt).toISOString(),
+    ...(delayed ? { acted_at: new Date(pressedAt).toISOString() } : {}),
     ...(action === 'snooze'
       ? {
           snooze_minutes: remainingSnoozeMinutes(pressedAt, opts.snoozeMinutes, now),
-          snooze_until: new Date(snoozeEndOf(pressedAt, opts.snoozeMinutes)).toISOString(),
+          ...(delayed ? { snooze_until: new Date(snoozeEndOf(pressedAt, opts.snoozeMinutes)).toISOString() } : {}),
         }
       : {}),
   };
@@ -208,3 +221,34 @@ export function isPastRinging(d: DoseWhen, now: number): boolean {
 
 /** An alarm that fires at `at` (a dose time, or a snooze's end) `now` still rings — no more than 60 min late. */
 export const ringsAt = (at: number, now: number) => now - at <= MISSED_AFTER_MS;
+
+/**
+ * The alarm that opened the alarm screen: the time it rang for (`at`, epoch ms — its dose's time, or a snooze's end:
+ * the link's `fired` parameter) and, for one medicine's alarm, which medicine (the link's `med`).
+ */
+export interface OpeningAlarm {
+  at: number;
+  medId?: string | null;
+}
+
+/**
+ * A dose the alarm screen shows as missed at `now` (ÖRZA's clock): past ringing on ÖRZA's terms (`isPastRinging`),
+ * unless the alarm that opened the screen is for it and still rings (`ringsAt` its own time) — like ÖRZA's rule for a
+ * snooze it knows of. A Snooze pressed on the notification with ÖRZA closed is sent only when the app next runs —
+ * usually at its own re-ring, when its 10 minutes are up and the queue drops it — so ÖRZA may call that dose missed
+ * while the member asked to be reminded. A phone clock that was off keeps old doses missed: their alarm's own time is
+ * then long past on ÖRZA's clock.
+ */
+export function isMissedOnAlarm(d: DoseWhen & { medication_id: string }, now: number, alarm?: OpeningAlarm | null): boolean {
+  if (!isPastRinging(d, now)) return false;
+  if (!alarm || !Number.isFinite(alarm.at) || alarm.at <= 0) return true;
+  if (alarm.medId && alarm.medId !== d.medication_id) return true;
+  return !ringsAt(alarm.at, now);
+}
+
+/** The `fired` parameter of an alarm link (epoch ms, digits only); null when absent or unusable. */
+export function firedAtOf(v: string | null | undefined): number | null {
+  if (typeof v !== 'string' || !/^\d{1,15}$/.test(v)) return null;
+  const n = Number(v);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}

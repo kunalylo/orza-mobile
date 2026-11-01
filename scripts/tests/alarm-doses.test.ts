@@ -9,11 +9,14 @@ import { describe, test } from 'node:test';
 import { asTaken, doseDayText } from '../../src/features/meds/shared';
 import type { DoseItem } from '../../src/features/meds/types';
 import {
+  DELAYED_PRESS_MS,
   DOSE_ALREADY_TAKEN,
   doseActionBody,
   doseRangeSpan,
   doseRingsUntil,
+  firedAtOf,
   isDoseAlreadyTaken,
+  isMissedOnAlarm,
   isPastRinging,
   MISSED_AFTER_MS,
   parseDoseRange,
@@ -23,6 +26,7 @@ import {
   takenDoseLog,
 } from '../../src/lib/alarms/doses';
 import { planAlarms } from '../../src/lib/alarms/plan';
+import { alarmOpenPath, pathParam } from '../../src/lib/alarms/presence';
 import { utcToZoned, zonedToUtc } from '../../src/lib/alarms/schedule';
 import type { PlanMedication, PlanReminder } from '../../src/lib/alarms/types';
 
@@ -35,24 +39,54 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const dateIST = (s: string) => utcToZoned(new Date(s), IST).date;
 
 describe('POST /api/meds/doses body', () => {
-  test('take / skip right away: acted_at = the press, nothing about snoozes', () => {
+  // A press sent right away goes on ÖRZA's clock (no acted_at / snooze_until): a phone clock that is off — days behind,
+  // or an hour fast — must not change when a dose counts as taken or how long a snooze lasts on the server.
+  test('take / skip sent right away: no acted_at (ÖRZA records its own time), nothing about snoozes', () => {
     assert.deepEqual(doseActionBody(DOSE, 'take', { pressedAt: PRESS, now: PRESS + 300 }), {
+      medication_id: 'm1',
+      scheduled_for: '2026-11-01T02:30:00.000Z',
+      action: 'take',
+    });
+    const skip = doseActionBody(DOSE, 'skip', { pressedAt: PRESS, now: PRESS });
+    assert.equal('acted_at' in skip, false);
+    assert.equal('snooze_until' in skip, false);
+    assert.equal('snooze_minutes' in skip, false);
+  });
+
+  test('snooze sent right away: only snooze_minutes = 10 (the server starts it on arrival)', () => {
+    const b = doseActionBody(DOSE, 'snooze', { pressedAt: PRESS, now: PRESS + 400 });
+    assert.equal('acted_at' in b, false);
+    assert.equal('snooze_until' in b, false);
+    assert.equal(b.snooze_minutes, 10);
+  });
+
+  test('the live case: a phone clock days behind pressing Take / Snooze on the Today screen sends no phone time', () => {
+    const behind = PRESS - 5 * 24 * H; // the phone's clock (pressedAt and now both come from it)
+    const take = doseActionBody(DOSE, 'take', { pressedAt: behind, now: behind + 1_000 });
+    assert.equal('acted_at' in take, false);
+    const snooze = doseActionBody(DOSE, 'snooze', { pressedAt: behind, now: behind + 1_000 });
+    assert.equal('snooze_until' in snooze, false);
+    assert.equal(snooze.snooze_minutes, 10);
+  });
+
+  test('delayed below DELAYED_PRESS_MS still counts as right away; a clock that went back too', () => {
+    assert.equal(DELAYED_PRESS_MS, 30_000);
+    assert.equal('acted_at' in doseActionBody(DOSE, 'take', { pressedAt: PRESS, now: PRESS + DELAYED_PRESS_MS - 1 }), false);
+    assert.equal('acted_at' in doseActionBody(DOSE, 'take', { pressedAt: PRESS, now: PRESS - 5 * MIN }), false);
+    assert.equal(doseActionBody(DOSE, 'take', { pressedAt: PRESS, now: PRESS + DELAYED_PRESS_MS }).acted_at, iso(PRESS));
+  });
+
+  test('take / skip sent late (queued offline / app asleep): acted_at = the press', () => {
+    assert.deepEqual(doseActionBody(DOSE, 'take', { pressedAt: PRESS, now: PRESS + 3 * MIN }), {
       medication_id: 'm1',
       scheduled_for: '2026-11-01T02:30:00.000Z',
       action: 'take',
       acted_at: '2026-11-01T03:00:00.000Z',
     });
-    const skip = doseActionBody(DOSE, 'skip', { pressedAt: PRESS, now: PRESS });
+    const skip = doseActionBody(DOSE, 'skip', { pressedAt: PRESS, now: PRESS + 2 * H });
     assert.equal(skip.acted_at, iso(PRESS));
     assert.equal('snooze_until' in skip, false);
     assert.equal('snooze_minutes' in skip, false);
-  });
-
-  test('snooze right away: 10 min, ending 10 min after the press', () => {
-    const b = doseActionBody(DOSE, 'snooze', { pressedAt: PRESS, now: PRESS + 400 });
-    assert.equal(b.acted_at, iso(PRESS));
-    assert.equal(b.snooze_until, iso(PRESS + 10 * MIN));
-    assert.equal(b.snooze_minutes, 10);
   });
 
   test('snooze sent late (queued offline / app asleep): snooze_until stays press + 10; snooze_minutes = what is left, ≥ 5', () => {
@@ -66,19 +100,22 @@ describe('POST /api/meds/doses body', () => {
   });
 
   test('snooze length: clamped to the server 5–60, default 10', () => {
-    assert.equal(doseActionBody(DOSE, 'snooze', { pressedAt: PRESS, now: PRESS, snoozeMinutes: 30 }).snooze_until, iso(PRESS + 30 * MIN));
+    const late = PRESS + MIN; // sent a minute after the press: snooze_until is sent
+    assert.equal(doseActionBody(DOSE, 'snooze', { pressedAt: PRESS, now: late, snoozeMinutes: 30 }).snooze_until, iso(PRESS + 30 * MIN));
     assert.equal(doseActionBody(DOSE, 'snooze', { pressedAt: PRESS, now: PRESS, snoozeMinutes: 90 }).snooze_minutes, 60);
-    assert.equal(doseActionBody(DOSE, 'snooze', { pressedAt: PRESS, now: PRESS, snoozeMinutes: 1 }).snooze_until, iso(PRESS + 5 * MIN));
+    assert.equal(doseActionBody(DOSE, 'snooze', { pressedAt: PRESS, now: late, snoozeMinutes: 1 }).snooze_until, iso(PRESS + 5 * MIN));
+    assert.equal(doseActionBody(DOSE, 'snooze', { pressedAt: PRESS, now: PRESS, snoozeMinutes: 1 }).snooze_minutes, 5);
     assert.equal(doseActionBody(DOSE, 'snooze', { pressedAt: PRESS, now: PRESS, snoozeMinutes: null }).snooze_minutes, 10);
     assert.equal(snoozeEndOf(PRESS), PRESS + 10 * MIN);
     assert.equal(remainingSnoozeMinutes(PRESS, 10, PRESS + 20 * MIN), 5);
     assert.equal(remainingSnoozeMinutes(NaN, 15, PRESS), 15);
   });
 
-  test('no / unusable press time → now', () => {
+  test('no / unusable press time → sent as right away (no acted_at)', () => {
     const now = PRESS + 5_000;
-    assert.equal(doseActionBody(DOSE, 'take', { now }).acted_at, iso(now));
-    assert.equal(doseActionBody(DOSE, 'take', { pressedAt: NaN, now }).acted_at, iso(now));
+    assert.equal('acted_at' in doseActionBody(DOSE, 'take', { now }), false);
+    assert.equal('acted_at' in doseActionBody(DOSE, 'take', { pressedAt: NaN, now }), false);
+    assert.equal(doseActionBody(DOSE, 'snooze', { pressedAt: NaN, now }).snooze_minutes, 10);
   });
 });
 
@@ -224,6 +261,70 @@ describe('missed: no ringing past 60 min (web MISSED_AFTER_MIN)', () => {
     assert.equal(ringsAt(at, at + 45 * MIN), true);
     assert.equal(ringsAt(at, at + 60 * MIN), true);
     assert.equal(ringsAt(at, at + 60 * MIN + 1), false);
+  });
+});
+
+describe('alarm screen: missed, judged with the alarm that opened it', () => {
+  const at = Date.parse(DOSE.scheduled_for); // 08:00 IST
+  // ÖRZA never heard of the snooze (pressed on the notification with the app closed, dropped once its 10 min were up):
+  // 65 min after the dose its answer says "missed".
+  const missed = { ...DOSE, status: 'missed' };
+  const due = { ...DOSE, status: 'due' };
+
+  test('the re-ring of a snooze pressed at 8:55 (fired 9:05) still rings at 9:05 — not missed, not silenced', () => {
+    const fired = at + 65 * MIN;
+    assert.equal(isMissedOnAlarm(missed, at + 65 * MIN + 20_000, { at: fired, medId: 'm1' }), false);
+    assert.equal(isMissedOnAlarm(missed, at + 65 * MIN + 20_000, { at: fired }), false); // a group alarm (no medicine)
+    // …until 60 min after the snooze's end, like ÖRZA's own rule.
+    assert.equal(isMissedOnAlarm(missed, fired + 60 * MIN, { at: fired }), false);
+    assert.equal(isMissedOnAlarm(missed, fired + 61 * MIN, { at: fired }), true);
+  });
+
+  test('without the alarm (opened in the app, an older link): ÖRZA decides, as before', () => {
+    assert.equal(isMissedOnAlarm(missed, at + 65 * MIN), true);
+    assert.equal(isMissedOnAlarm(missed, at + 65 * MIN, null), true);
+    assert.equal(isMissedOnAlarm(due, at + 61 * MIN), true);
+    assert.equal(isMissedOnAlarm(due, at + 30 * MIN), false);
+  });
+
+  test('another medicine of that time is still judged by ÖRZA (the re-ring is for m1 only)', () => {
+    const other = { medication_id: 'm2', scheduled_for: DOSE.scheduled_for, status: 'missed' };
+    assert.equal(isMissedOnAlarm(other, at + 66 * MIN, { at: at + 65 * MIN, medId: 'm1' }), true);
+  });
+
+  test('the live case: a phone clock days behind rings 27 Oct doses on 1 Nov — still missed, silenced', () => {
+    const old = { medication_id: 'm1', scheduled_for: zonedToUtc('2026-10-27', '21:00', IST).toISOString(), status: 'missed' };
+    const serverNow = zonedToUtc('2026-11-01', '02:39', IST).getTime();
+    assert.equal(isMissedOnAlarm(old, serverNow, { at: Date.parse(old.scheduled_for), medId: 'm1' }), true);
+  });
+
+  test('taken / skipped / snoozed never show as missed, whatever rang', () => {
+    for (const status of ['taken', 'skipped']) assert.equal(isMissedOnAlarm({ ...DOSE, status }, at + 5 * H, null), false);
+    assert.equal(isMissedOnAlarm({ ...DOSE, status: 'snoozed', snooze_until: iso(at + 5 * H) }, at + 4 * H, null), false);
+  });
+
+  test('the `fired` link parameter: epoch ms digits only', () => {
+    assert.equal(firedAtOf(String(at)), at);
+    for (const bad of [null, undefined, '', '0', '-5', 'abc', '12.5', '1e12', `${at}x`, '99999999999999999']) assert.equal(firedAtOf(bad), null, String(bad));
+  });
+
+  test('alarm links opened by the engine carry ringing=1 and fired=<its time>', () => {
+    const path = `/alarm?at=${encodeURIComponent(DOSE.scheduled_for)}&med=m1`;
+    const fired = at + 65 * MIN;
+    const opened = alarmOpenPath(path, { ringing: true, firedAt: fired });
+    assert.equal(pathParam(opened, 'ringing'), '1');
+    assert.equal(pathParam(opened, 'fired'), String(fired));
+    assert.equal(pathParam(opened, 'at'), DOSE.scheduled_for);
+    assert.equal(pathParam(opened, 'med'), 'm1');
+    // A tap: no ringing, still its time. Unknown time: nothing added.
+    const tapped = alarmOpenPath(path, { firedAt: fired });
+    assert.equal(pathParam(tapped, 'ringing'), null);
+    assert.equal(pathParam(tapped, 'fired'), String(fired));
+    assert.equal(alarmOpenPath(path, { firedAt: NaN }), path);
+    assert.equal(alarmOpenPath('/alarm', { ringing: true, firedAt: fired }), `/alarm?ringing=1&fired=${fired}`);
+    // Only the alarm screen; a test alarm gets ringing only (it records nothing).
+    assert.equal(alarmOpenPath('/meals', { ringing: true, firedAt: fired }), '/meals');
+    assert.equal(alarmOpenPath('/alarm?test=t1', { ringing: true, firedAt: fired }), '/alarm?test=t1&ringing=1');
   });
 });
 

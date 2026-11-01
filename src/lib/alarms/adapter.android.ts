@@ -172,7 +172,7 @@ function createAndroidAdapter(): PlatformAdapter {
     const path = pathOfDeepLink(e.deepLink);
     if (!path || !listeners.size) return;
     // The alarm itself is already ringing in the shade (a heads-up) whatever the listener does.
-    emit({ key: e.key, action: 'open', doses: [], path, ringing: true, at: Date.now() });
+    emit({ key: e.key, action: 'open', doses: [], path, ringing: true, ...(e.at > 0 ? { firedAt: e.at } : {}), at: Date.now() });
   };
 
   /** A native action was recorded: collect everything waiting and hand it to the listeners (once). */

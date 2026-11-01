@@ -46,16 +46,24 @@ internal object AlarmExecutor {
 /** What happens when an alarm is due, stops ringing, or is handled elsewhere. */
 internal object AlarmFiring {
   /**
-   * AlarmManager fired `key` (scheduled for `at`). Ignored if it was cancelled or re-scheduled meanwhile. More than
-   * RING_LATE_MS late (process dead / Doze for long, the phone asleep or off): the dose is missed on ÖRZA's terms — a
-   * dose alarm no longer rings but shows silently as missed (up to MISSED_SHOW_MS), so the dose isn't lost unseen.
+   * AlarmManager fired `key` (scheduled for `at`). Ignored if it was cancelled or re-scheduled meanwhile.
+   * - A dose alarm (`ring`) more than RING_LATE_MS late (process dead / Doze for long, the phone asleep or off): the
+   *   dose is missed on ÖRZA's terms — it no longer rings but shows silently as missed (up to MISSED_SHOW_MS), so the
+   *   dose isn't lost unseen.
+   * - A reminder / refill alert isn't a dose (nothing is "missed"): it still shows up to MAX_LATE_MS late — the same
+   *   limit `scheduleAll` keeps it for — and is dropped after that. The JS engine counts a refill alert as delivered
+   *   once its time has passed, so dropping one held back for an hour would leave the day without it.
    */
   fun fire(context: Context, key: String, at: Long) {
     val item = AlarmStore.takePending(context, key, at) ?: return
     val late = System.currentTimeMillis() - item.at
-    if (late > AlarmConst.RING_LATE_MS) {
+    if (item.ring && late > AlarmConst.RING_LATE_MS) {
       Log.w(AlarmConst.TAG, "$key fired ${late / 60_000} min late — shown as missed")
       if (late <= AlarmConst.MISSED_SHOW_MS) showMissed(context, item)
+      return
+    }
+    if (!item.ring && late > AlarmConst.MAX_LATE_MS) {
+      Log.w(AlarmConst.TAG, "$key fired ${late / 60_000} min late — dropped")
       return
     }
     show(context, item)

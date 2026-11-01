@@ -274,7 +274,8 @@ function handleResponse(response: Notifications.NotificationResponse, receivedAt
   if (response.actionIdentifier === Notifications.DEFAULT_ACTION_IDENTIFIER) {
     const path = data?.path ?? notificationPath(content.data);
     if (!path || Date.now() - receivedAt > OPEN_MAX_AGE_MS) return;
-    emit({ key: data?.key ?? request.identifier, action: 'open', doses: data?.doses ?? [], path, at: receivedAt });
+    const fired = data?.ring && data.at > 0 ? { firedAt: data.at } : {};
+    emit({ key: data?.key ?? request.identifier, action: 'open', doses: data?.doses ?? [], path, ...fired, at: receivedAt });
     return;
   }
 
@@ -316,7 +317,8 @@ function openDoses(action: DoseActionKind, doses: DoseRef[]): DoseRef[] {
 function presentInApp(data: OrzaNotificationData): boolean {
   // Dose alarms — and the "Test alarm" (no doses, `test:` key), which opens its demo alarm screen.
   if (!actionListeners.size || (!data.doses.length && !data.key.startsWith('test:'))) return false;
-  return emit({ key: data.key, action: 'open', doses: data.doses, path: data.path, ringing: true, at: Date.now() });
+  const fired = data.ring && data.at > 0 ? { firedAt: data.at } : {};
+  return emit({ key: data.key, action: 'open', doses: data.doses, path: data.path, ringing: true, ...fired, at: Date.now() });
 }
 
 /* ───────────────────────────── Adapter ───────────────────────────── */

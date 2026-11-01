@@ -153,9 +153,31 @@ internal object AlarmNotifier {
 
   /* ───────────────────────────── Intents ───────────────────────────── */
 
+  /**
+   * `deepLink`; for a medicine alarm (`ring`, not the test alarm) with `fired` = the time it rang for (`at`: its dose's
+   * time, or a snooze's end — a native Snooze's re-ring keeps the dose's link). The alarm screen judges with it whether
+   * this alarm still rings on ÖRZA's clock (JS `isMissedOnAlarm`): a snooze pressed here with the app closed may never
+   * reach the server, which then calls the dose missed while its re-ring is ringing.
+   */
+  private fun linkOf(item: AlarmItem): Uri {
+    val link = Uri.parse(item.deepLink)
+    if (!item.ring || item.isTest || item.at <= 0L) return link
+    return try {
+      if (link.isHierarchical && link.getQueryParameter(LINK_FIRED) == null) {
+        link.buildUpon().appendQueryParameter(LINK_FIRED, item.at.toString()).build()
+      } else {
+        link
+      }
+    } catch (e: Exception) {
+      link
+    }
+  }
+
+  private const val LINK_FIRED = "fired"
+
   /** Opens the app's launch activity on `deepLink` (ACTION_VIEW + data, so React Native's Linking delivers the URL). */
   fun openAppIntent(context: Context, item: AlarmItem, fullScreen: Boolean): Intent {
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(item.deepLink))
+    val intent = Intent(Intent.ACTION_VIEW, linkOf(item))
     val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
     val component = launch?.component
     if (component != null) {

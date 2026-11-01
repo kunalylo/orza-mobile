@@ -82,6 +82,11 @@ export interface AlarmActionEvent {
    * alarm screen leaves it ringing until the member's first press instead of dismissing it on open.
    */
   ringing?: boolean;
+  /**
+   * `open` of a medicine alarm: the time it rang for (epoch ms — its dose's time, or a snooze's end). The alarm screen
+   * gets it as `fired` (`presence` `alarmOpenPath`) and judges missed doses with it (`doses` `isMissedOnAlarm`).
+   */
+  firedAt?: number;
   /** Epoch ms when it was pressed. */
   at: number;
 }

@@ -25,6 +25,8 @@ class OrzaStepsModule : Module() {
     OnCreate {
       val app = appContext.reactContext?.applicationContext
       if (app != null && StepStore.isEnabled(app) && StepSensor.hasPermission(app)) StepSensor.keepCounting(app)
+      // Android kills the app when "Physical activity" is revoked: this start may be the first to see it gone.
+      if (app != null) StepRecording.forgetWithoutPermission(app)
     }
 
     /** This phone has a hardware step counter. */
@@ -101,7 +103,9 @@ class OrzaStepsModule : Module() {
 
     /**
      * Subscribes to step recording. Resolves `{ok, subscribedAt, error}`: subscribedAt = the FIRST successful
-     * subscription (epoch ms, null when none), error = exception class + status code when it failed (logs only).
+     * subscription (epoch ms, null when none), error = exception class + status code when it failed (logs only),
+     * "Unavailable <status>" / "NoPermission" when Play services wasn't asked (StepRecording), "Superseded" when an
+     * unsubscribe came after it.
      */
     AsyncFunction("recordingSubscribe") { promise: Promise ->
       val ctx = context
@@ -116,7 +120,10 @@ class OrzaStepsModule : Module() {
       }
     }
 
-    /** Unsubscribes; the subscription time is always forgotten. Resolves whether Play services agreed. */
+    /**
+     * Unsubscribes; the subscription time is always forgotten. Resolves whether Play services agreed (false without
+     * asking it when its status isn't "available").
+     */
     AsyncFunction("recordingUnsubscribe") { promise: Promise ->
       StepRecording.unsubscribe(context) { ok, _ -> promise.resolve(ok) }
     }
@@ -124,7 +131,8 @@ class OrzaStepsModule : Module() {
     /**
      * Steps over [startMs, lastMs] (both inclusive: `recordingRange()` already ends at end − 1, so it is passed as is)
      * in `bucketMinutes` buckets, as JSON `[[bucketStartMs, bucketEndMs, steps], …]` (non-zero buckets only). Rejects
-     * ERR_RECORDING_READ with the exception class + status code.
+     * ERR_RECORDING_READ with the exception class + status code, or "Unavailable <status>" / "NoPermission" without
+     * asking Play services.
      */
     AsyncFunction("recordingRead") { startMs: Double, lastMs: Double, bucketMinutes: Int, promise: Promise ->
       StepRecording.read(

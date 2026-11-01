@@ -13,7 +13,10 @@
  *
  * Missed doses: when every open dose is already missed on ÖRZA's terms (more than 60 min past its time or its snooze's
  * end — judged by ÖRZA's clock, so a phone clock that was off can't make old doses ring) the screen doesn't ring: it
- * silences the alarm and shows them as missed, still with Take / Skip. A dose that isn't from today shows its date.
+ * silences the alarm and shows them as missed, still with Take / Skip. The alarm that opened the screen counts too
+ * (`fired` = the time it rang for, from the alarm's link): while it still rings on ÖRZA's clock, its doses aren't missed
+ * — a Snooze pressed on the notification with ÖRZA closed may never reach the server, and its re-ring must ring
+ * (`isMissedOnAlarm`). A dose that isn't from today shows its date.
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -29,7 +32,7 @@ import { useMedsTimezone } from '@/features/meds/api';
 import { MedPhoto } from '@/features/meds/MedPhoto';
 import { clockIn, doseDayText, doseKey, formatTime12, isOpen, medicineTitle, todayIn } from '@/features/meds/shared';
 import type { DoseAction, DoseItem } from '@/features/meds/types';
-import { isPastRinging } from '@/lib/alarms/doses';
+import { firedAtOf, isMissedOnAlarm } from '@/lib/alarms/doses';
 import { utcToZoned } from '@/lib/alarms/schedule';
 import { testAlarmDetails, testAlarmKey } from '@/lib/alarms/test';
 import { errorMessage } from '@/lib/api';
@@ -79,16 +82,16 @@ function NextDose({ dose, tz }: { dose: DoseItem; tz: string }) {
 }
 
 export default function AlarmRoute() {
-  const params = useLocalSearchParams<{ med?: string; at?: string; test?: string; ringing?: string }>();
+  const params = useLocalSearchParams<{ med?: string; at?: string; test?: string; ringing?: string; fired?: string }>();
   const test = param(params.test);
   const ringing = param(params.ringing) === '1';
   const at = param(params.at);
   // Keyed by the alarm: a link to another alarm while this screen is showing starts it afresh (state, presence).
   if (test) return <TestAlarm key={`test:${test}`} test={test} ringing={ringing} />;
-  return <MedicineAlarm key={at ?? 'due'} at={at} med={param(params.med) ?? undefined} ringing={ringing} />;
+  return <MedicineAlarm key={at ?? 'due'} at={at} med={param(params.med) ?? undefined} ringing={ringing} fired={firedAtOf(param(params.fired))} />;
 }
 
-function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; ringing: boolean }) {
+function MedicineAlarm({ at, med, ringing, fired }: { at: string | null; med?: string; ringing: boolean; fired: number | null }) {
   const { user } = useAuth();
   const memberTz = useMedsTimezone();
   const q = useAlarmDoses(at, user?.id ?? null);
@@ -122,7 +125,9 @@ function MedicineAlarm({ at, med, ringing }: { at: string | null; med?: string; 
   // ÖRZA's clock (its `now` when the doses loaded, moved on by the phone's): a phone clock that was off — a phone
   // back on after days, an emulator snapshot — must not make old doses look due.
   const serverNow = loaded ? now + clockSkew(q.data?.now, q.dataUpdatedAt) : now;
-  const isMissed = (d: DoseItem) => isPastRinging(d, serverNow);
+  // The alarm that opened this screen (its doses: those at its instant — of its medicine, for one medicine's alarm).
+  const opening = mode === 'at' && fired !== null ? { at: fired, medId: med ?? null } : null;
+  const isMissed = (d: DoseItem) => isMissedOnAlarm(d, serverNow, opening);
   const missedOnly = open.length > 0 && open.every(isMissed);
   const today = todayIn(tz);
 

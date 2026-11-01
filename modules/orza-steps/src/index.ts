@@ -225,8 +225,14 @@ export async function recordingStatus(): Promise<RecordingStatus> {
 }
 
 /**
- * Subscribe to step recording (needs "Physical activity"; subscribing again changes nothing). Cheap — call it on every
- * launch and background run. `subscribedAt` stays the first successful subscription until `recordingUnsubscribe`.
+ * Subscribe to step recording — only meant for `recordingStatus() === 'available'` with "Physical activity" granted
+ * (subscribing again changes nothing; cheap enough for every launch and background run that has both). Natively gated
+ * too: Play services isn't asked otherwise (a disabled Play services would post its own "enable" notification under
+ * ÖRZA's name) and the answer is `{ok: false, error: 'Unavailable <status>' | 'NoPermission'}`.
+ * `subscribedAt` stays the first successful subscription until `recordingUnsubscribe` — or until the permission is
+ * seen missing (this call, a read, the module starting after Android killed the app for a revoke): the API records
+ * nothing meanwhile, so coverage starts again at the next successful subscribe (first day partial). A subscribe that
+ * an unsubscribe overtook answers `{ok: false, error: 'Superseded'}` and stores no time.
  */
 export async function recordingSubscribe(): Promise<RecordingSubscription> {
   if (!native) return { ok: false, subscribedAt: null, error: 'no module' };
@@ -238,7 +244,11 @@ export async function recordingSubscribe(): Promise<RecordingSubscription> {
   }
 }
 
-/** Stop step recording (switch-off, sign-out): its data becomes unreadable and `subscribedAt` is forgotten. */
+/**
+ * Stop step recording (switch-off, sign-out): its data becomes unreadable and `subscribedAt` is forgotten — always, and
+ * a subscribe still on its way stores no time. Safe to call unconditionally: when the status isn't `available` Play
+ * services isn't asked (false).
+ */
 export async function recordingUnsubscribe(): Promise<boolean> {
   if (!native) return false;
   try {
@@ -250,8 +260,9 @@ export async function recordingUnsubscribe(): Promise<boolean> {
 
 /**
  * The Recording API's non-zero buckets over [startMs, lastMs] — pass `recordingRange()`'s fields as they are (both ends
- * inclusive; `lastMs` is already end − 1). Null when the read failed (no reading — never 0 steps); `[]` = nothing
- * counted.
+ * inclusive; `lastMs` is already end − 1). Null when the read failed (no reading — never 0 steps) — also, without
+ * asking Play services, when the status isn't `available` or the permission is missing (`subscribedAt` is then
+ * forgotten); `[]` = nothing counted.
  */
 export async function recordingRead(startMs: number, lastMs: number, bucketMinutes: number): Promise<NativeRecordingBucket[] | null> {
   if (!native) return null;
