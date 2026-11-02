@@ -701,3 +701,7 @@ batch 1" log entry); 3 is still open.
   THE COPY. (8) HealthKit weight reached the AI through the coach's `goalReply` (chat history): the iPhone import leaves weight
   out while held (web follow-up: `goalReply` from `profile.weight_kg`). (9) A failed / `unknown` HealthKit StepCount status
   check no longer clears Apple Health background delivery (store stays ON, its days unread).
+- 2026-11-02: R/U review fixes DONE (`29027cc`, 9/9 real; test:steps 417): reconcile only against the source that saved, restart base,
+  save-job merge per tz/day, shared-phone floor from other members' sign-out times, iPhone sends NO automatic steps/weight until the AI
+  consent ships (`SEND_IPHONE_HEALTH_DATA`), Android disclosures say step totals go to the AI provider with AI requests, failed
+  HealthKit checks keep the earlier answer. Running: V1 emulator checks (`wf_1ed3af09-ae8`; rebuild, Toolbox, §8.1 E-1…E-9, UI pass).
