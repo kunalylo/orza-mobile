@@ -28,7 +28,7 @@ import { healthBridge } from '../health/bridge';
 import { dayValue } from './merge';
 import { consentKindOf, type CountingSource } from './plan';
 import { openStepsSettings, stepsReader } from './reader';
-import { stepsFullBackfill, subscribeStepsStore, updateStepsConsent, useDayRecord, useStepsConsent } from './store';
+import { hcRefused, setHcRefused, stepsFullBackfill, subscribeStepsStore, updateStepsConsent, useDayRecord, useStepsConsent } from './store';
 import {
   ACCESS_TIMEOUT_MS,
   agreeToSteps,
@@ -112,6 +112,7 @@ export function useTodaySteps() {
   const record = useDayRecord(userId, mine ? s.date : null);
   const consent = useStepsConsent(userId);
   const fullBackfill = useSyncExternalStore(subscribeStepsStore, () => stepsFullBackfill(userId));
+  const refusedHc = useSyncExternalStore(subscribeStepsStore, hcRefused);
 
   useFocusEffect(
     useCallback(() => {
@@ -149,11 +150,13 @@ export function useTodaySteps() {
    * "Continue" on the disclosure (§6): the system prompt for `kind` (default the phone's own counter; Android `hc`:
    * Health Connect's Steps + background; iPhone `healthkit`: Apple Health's StepCount, `granted` = the sheet answered).
    * Granted → this member's consent to that kind (`plan.consentKindOf`), "Count steps automatically" back on, "Not now"
-   * cleared. The answer is shown at once; the read follows in the background. A refusal records nothing.
+   * cleared. The answer is shown at once; the read follows in the background. A refusal records no consent; a refusal of
+   * Health Connect is noted for the install (`hcRefused`: its sheet may never show again — U2), a grant clears it.
    */
   const requestAccess = useCallback(
     async (kind: StepsAsk = 'phone'): Promise<StepPermission> => {
       const result = await stepsReader.requestPermission(kind);
+      if (kind === 'hc' && (result === 'granted' || result === 'denied')) setHcRefused(result === 'denied');
       if (result === 'granted') await agreeToSteps(userId, consentKindOf(kind), { switchOn: true });
       await afterAnswer();
       return result;
@@ -220,8 +223,11 @@ export function useTodaySteps() {
     firstAsk: access?.firstAsk ?? null,
     /** The health store's steps access (null until checked). */
     store: access?.store ?? null,
-    /** The member connected Apple Health / Health Connect on the Health screen (the v1 card's wording, until U1). */
-    healthConnected: mine ? s.healthConnected : false,
+    /**
+     * Android (U2): Health Connect's steps sheet was refused from Today (a refusal or its lockout after two): Today offers
+     * "Open Health Connect" and the phone's motion sensor instead of the sheet again.
+     */
+    hcRefused: refusedHc,
     /** What the member's consent lets ÖRZA read now (null: no consent on this install, or the switch is off). */
     consent: mine ? s.consent : null,
     /** The sources ON at the last read (§2.1; empty: nothing counts for the member). */

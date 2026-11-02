@@ -1255,9 +1255,40 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
 
 **Phase U: UI**
 
-- [ ] **U1.** `StepsCard`: one-button disclosure (per-platform copy §6), "Turn on" variant, `manual = !countingToday`,
+- [x] **U1.** `StepsCard`: one-button disclosure (per-platform copy §6), "Turn on" variant, `manual = !countingToday`,
   "Not now", the watch/app button on the card, labels and status lines.
-- [ ] **U2.** Motion fallback flows: Android after an HC refusal; iOS health-empty + the one-time offer.
+  - Every decision is in a new pure `lib/steps/todayCard.ts` (`todayCard(inputs)` → state, CTA, motion / watch buttons,
+    Not now, Log / Edit; `disclosureCopy(path, variant, fullBackfill)` → §6's points and captions; new
+    `steps-card.test.ts`, in `test:steps`); the card renders it (a source → ÖRZA picture on the sheet, points fade in).
+  - Deviations: (1) copy §6 lacks, written here: Health Connect where it doesn't count the phone (`hc_add` — the watch
+    button — and `hc_watch` — no step counter): §6's 14+ points 1–2 would be false there; the sampler's point 1 (no Play
+    services); iPhone motion as the first ask (no Apple Health); the CTA labels ("Count my steps automatically" / "Turn
+    on step counting", "Open Health Connect", "Get Health Connect" for `needs_install`) with captions; the "waiting" /
+    "can't count" status lines; toasts. The history line: 30 days for a store, 7 for iPhone motion, none on Android's
+    phone path (the Recording API / sampler count from the subscription). (2) "Continue" closes the sheet and the
+    system prompt opens once it has gone (iPhone + 300 ms): one modal at a time — HealthKit's sheet over an RN Modal is
+    unverified (V5 / I-2 checks it); the answer shows as a toast and in the card's state (no in-sheet "blocked" view).
+    (3) `Sheet` gains `onBack` (Android back only): the Continue sheet has no X, swipe or backdrop, and only the system
+    back closes it on Android (P6). (4) "Not now" also on "Turn on" asks and "Get Health Connect" (a second member who
+    never wants counting would keep a full-width CTA, P19), never on a fresh first ask. (5) Until the first check has
+    finished (no access yet, a read running) neither "Log steps" nor "Edit" shows (no flicker); then P7 holds — also
+    when the check times out. (6) `StepsState.healthConnected` removed (v1 wording, "until U1") with the v1 "Use
+    {store}" link to the Health screen. (7) "approximate" = the label only. (8) The HC first-day line only when HC is
+    the winner on a `stepTracking` phone, else the generic "Counting since …". (9) Back from Settings / Health Connect /
+    Play opened by the card → `recheck()` (reason `permission`: the 5 s read gap can't hide the answer).
+- [x] **U2.** Motion fallback flows: Android after an HC refusal; iOS health-empty + the one-time offer.
+  - Android: an `hc` refusal (or the lockout — same answer) is kept per install in the prefs (`hcRefused`,
+    `storeData.withHcRefused`, `store.hcRefused` / `setHcRefused`; set by `requestAccess('hc')` → `denied`, cleared by a
+    grant, ignored while Steps is granted) so it survives a relaunch like HC's lockout. Then: "Open Health Connect" +
+    caption (not the sheet again), "Use this phone's motion sensor instead" (its own disclosure → Physical activity;
+    "Turn on" when already allowed, Settings when blocked), "Log steps", "Not now". The watch button after a refusal
+    opens Health Connect too.
+  - iPhone: health-empty status (§6) + "Log steps" + "Use iPhone motion instead" (motion disclosure → Motion &
+    Fitness), marked offered when tapped (the Continue sheet can't be left otherwise). Deviation: offered again — as
+    "Turn on" only — when Motion & Fitness is allowed later in Settings without the member's OK (no other way to agree);
+    never while refused. No "Not now" there (§6 lists only the two buttons). `healthEmpty`'s `recordOf` was wired by R5a.
+  - For U3 / U4: the Health screen's connect doesn't note `hcRefused` (U3 may call `setHcRefused`); the disclosure's
+    last point promises U4's Settings › Privacy & data switch. No app.json change. test:steps 360, test:alarms 69.
 - [ ] **U3.** Health screen: the Steps switch card, the "both ways" line, the off sheet; ConnectCard metric list (P5);
   Disconnect = revoke.
 - [ ] **U4.** Settings › Privacy & data switch + footer; `preferences.tsx` AI copy; "never share" sentences in

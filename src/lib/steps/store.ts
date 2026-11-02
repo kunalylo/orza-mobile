@@ -1,8 +1,9 @@
 /**
  * Per-phone step-sync memory, in two small JSON files (shapes and rules: `storeData.ts`, tested):
  * - the prefs, in the documents folder (kept with the app): per install the Android permission history ("blocked"),
- *   Health Connect's first grant time, Apple Health's background setup and whether a member who had agreed deleted
- *   their account; per member the steps consent (M9) and when this phone last saved their steps automatically (M5c3);
+ *   Health Connect's first grant time, a Health Connect refusal from Today, Apple Health's background setup and whether a
+ *   member who had agreed deleted their account; per member the steps consent (M9) and when this phone last saved their
+ *   steps automatically (M5c3);
  * - the day records, in the cache folder (never backed up; the system may purge it — the server is the record of
  *   truth): per member and day, what this phone saved and read on the server, the day's base (`policy.ts`), whether a
  *   past day is final. A member's are deleted at sign-out (`deleteUserDays`).
@@ -25,6 +26,7 @@ import {
   withConsents,
   withDayRecord,
   withHcGrant,
+  withHcRefused,
   withoutConsent,
   withoutConsentKind,
   withoutHcGrant,
@@ -225,6 +227,19 @@ export function noteHcGrant(at = Date.now(), explicit = false) {
 export function forgetHcGrant() {
   hcRevokedThisRun = true;
   setPrefs(withoutHcGrant(prefs()));
+}
+
+/**
+ * Android (U2): Health Connect's steps sheet was refused from Today (a refusal or its two-refusal lockout — they look the
+ * same): Today offers "Open Health Connect" and the phone's motion sensor instead of the sheet again.
+ */
+export function hcRefused(): boolean {
+  return !!prefs().hcRefused;
+}
+
+/** Today's Health Connect steps sheet answered: refused (`true`) or granted (`false`). */
+export function setHcRefused(refused: boolean) {
+  setPrefs(withHcRefused(prefs(), refused));
 }
 
 /** iPhone: Apple Health's background delivery of steps is configured (§4.3). */

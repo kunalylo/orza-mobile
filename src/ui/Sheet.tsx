@@ -58,6 +58,11 @@ export interface SheetProps {
    * false (e.g. to ask "Discard changes?"). Swipe-down stays disabled. Without it those controls do nothing.
    */
   onBlockedDismiss?: () => void;
+  /**
+   * Android back only: called instead of the default (`onClose`, or `onBlockedDismiss` while not dismissible) — e.g. a
+   * pre-permission sheet that the backdrop, swipe and close button can't leave, but the system back may (P6).
+   */
+  onBack?: () => void;
   /** Show the round close button in the header (default true when there is a title). */
   closeButton?: boolean;
   /** Screen-reader label for the sheet (defaults to the title). */
@@ -108,6 +113,7 @@ function SheetModal({
   scroll = true,
   dismissible = true,
   onBlockedDismiss,
+  onBack,
   closeButton,
   accessibilityLabel,
   initialFocus,
@@ -211,7 +217,7 @@ function SheetModal({
   // Android the Modal's empty, transparent window then stayed on top and swallowed every tap (the screen froze).
   return (
     <LayoutAnimationConfig skipExiting>
-      <Modal visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={requestClose} onShow={onShow}>
+      <Modal visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={onBack ?? requestClose} onShow={onShow}>
         {/* The screen under the sheet must not try to scroll the sheet's fields into its own view (scrollReveal.ts). */}
         <ScrollRevealContext.Provider value={null}>
           <GestureHandlerRootView style={styles.fill}>

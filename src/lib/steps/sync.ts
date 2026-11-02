@@ -39,7 +39,6 @@ import { KEYS, readSecure, readSecureJson, userSnapshot, writeSecureJson } from 
 import type { PublicUser } from '@/lib/types';
 
 import { addDays, safeTimeZone, utcToZoned } from '../alarms/schedule';
-import { getHealthRecord } from '../health/store';
 
 import { autoCount } from './merge';
 import {
@@ -129,8 +128,6 @@ export interface StepsState {
   userId: string | null;
   /** The phone's step sources and permissions (null until checked). */
   access: StepsAccess | null;
-  /** The member connected Apple Health / Health Connect on the Health screen (Today's card wording, until U1). */
-  healthConnected: boolean;
   /** What the member's consent lets ÖRZA read (null: nothing — no consent yet, or the switch is off). */
   consent: ReadConsent | null;
   /** The sources ON for the member at the last read (§2.1; empty: nothing counts). */
@@ -155,7 +152,6 @@ export interface StepsState {
 const EMPTY: StepsState = {
   userId: null,
   access: null,
-  healthConnected: false,
   consent: null,
   on: [],
   ask: null,
@@ -253,9 +249,8 @@ async function readAndPublish(member: StepsMember, opts: RefreshOptions) {
   const tz = safeTimeZone(member.timeZone);
   const today = utcToZoned(new Date(now), tz).date;
   const background = opts.reason === 'background';
-  const healthConnected = getHealthRecord(member.id).connected;
   const notNow = notNowActive(getStepsConsent(member.id), now);
-  setState(sameMember ? { reading: true, healthConnected, notNow } : { ...EMPTY, userId: member.id, healthConnected, notNow, reading: true });
+  setState(sameMember ? { reading: true, notNow } : { ...EMPTY, userId: member.id, notNow, reading: true });
 
   let job: SaveJob | null = null;
   try {

@@ -38,6 +38,12 @@ export interface StepsPrefs {
   /** iPhone: Apple Health's background delivery of steps is configured (the observer subscribes at launch). */
   hkBackground?: boolean;
   /**
+   * Android (U2): Health Connect's steps sheet was refused from Today — a refusal, or its lockout after two (the app's,
+   * so per install). Today then offers "Open Health Connect" and the phone's motion sensor instead of asking again;
+   * cleared by a grant from Today.
+   */
+  hcRefused?: boolean;
+  /**
    * A member who had agreed deleted their account (their consent record is gone) or withdrew every consent (the Health
    * screen's Disconnect, R6): a later first consent — theirs too — is still a shared phone's (M9): the phone's history
    * holds that member's walking.
@@ -90,6 +96,7 @@ function flags(x: Record<string, unknown>): Omit<StepsPrefs, 'version' | 'consen
   if (typeof x.blocked === 'boolean') out.blocked = x.blocked;
   if (isTime(x.hcGrantAt)) out.hcGrantAt = x.hcGrantAt;
   if (typeof x.hkBackground === 'boolean') out.hkBackground = x.hkBackground;
+  if (x.hcRefused === true) out.hcRefused = true;
   if (x.formerConsent === true) out.formerConsent = true;
   return out;
 }
@@ -242,4 +249,12 @@ export function withAutoSave(prefs: StepsPrefs, userId: string, at: number): Ste
 /** S-H2: Health Connect's steps read seen granted at `at` — kept only the first time (unchanged after). */
 export function withHcGrant(prefs: StepsPrefs, at: number): StepsPrefs {
   return prefs.hcGrantAt != null || !isTime(at) ? prefs : { ...prefs, hcGrantAt: at };
+}
+
+/** U2: Health Connect's steps refused from Today (`refused`), or granted since (the note goes; unchanged when so already). */
+export function withHcRefused(prefs: StepsPrefs, refused: boolean): StepsPrefs {
+  if (!!prefs.hcRefused === refused) return prefs;
+  if (refused) return { ...prefs, hcRefused: true };
+  const { hcRefused: _gone, ...rest } = prefs;
+  return rest;
 }

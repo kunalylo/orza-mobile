@@ -25,6 +25,7 @@ import {
   withDayRecord,
   withAutoSave,
   withHcGrant,
+  withHcRefused,
   withoutConsent,
   withoutConsentKind,
   withoutHcGrant,
@@ -121,6 +122,7 @@ describe('prefs: consents, Health Connect’s first grant, the v1 file', () => {
       blocked: false,
       hcGrantAt: 1_700_000_000_000,
       hkBackground: true,
+      hcRefused: true,
       formerConsent: true,
       consents: {
         a: { store: { at: 1 }, phone: { at: 2 }, off: { at: 3 }, notNowUntil: 4, motionOffered: true, sharedAtConsent: false },
@@ -130,7 +132,7 @@ describe('prefs: consents, Health Connect’s first grant, the v1 file', () => {
     };
     assert.deepEqual(loadPrefs(JSON.parse(JSON.stringify(prefs)), null).prefs, prefs);
     const odd = loadPrefs(
-      { version: 2, hcGrantAt: 'soon', formerConsent: 'yes', consents: { a: { store: true, phone: { at: 'x' }, off: { at: 3 } }, b: 'yes' }, autoSavedAt: { a: 'x', b: 5 } },
+      { version: 2, hcGrantAt: 'soon', hcRefused: 'yes', formerConsent: 'yes', consents: { a: { store: true, phone: { at: 'x' }, off: { at: 3 } }, b: 'yes' }, autoSavedAt: { a: 'x', b: 5 } },
       null
     ).prefs;
     assert.deepEqual(odd, { version: 2, consents: { a: { off: { at: 3 }, sharedAtConsent: false } }, autoSavedAt: { b: 5 } });
@@ -182,6 +184,17 @@ describe('prefs: consents, Health Connect’s first grant, the v1 file', () => {
     assert.equal(prefs.hcGrantAt, 1_000);
     assert.equal(withHcGrant(prefs, 2_000), prefs, 'a later sighting changes nothing');
     assert.equal(withHcGrant(prefs, Number.NaN), prefs);
+  });
+
+  test('U2: a Health Connect refusal is kept per install (its lockout is the app’s), until a grant clears it', () => {
+    const none = loadPrefs(null, null).prefs;
+    const refused = withHcRefused(none, true);
+    assert.equal(refused.hcRefused, true);
+    assert.equal(withHcRefused(refused, true), refused, 'already noted → unchanged');
+    assert.equal(loadPrefs(JSON.parse(JSON.stringify(refused)), null).prefs.hcRefused, true, 'survives a relaunch');
+    const cleared = withHcRefused(refused, false);
+    assert.equal('hcRefused' in cleared, false);
+    assert.equal(withHcRefused(none, false), none, 'nothing to clear → unchanged');
   });
 });
 
