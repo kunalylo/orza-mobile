@@ -676,3 +676,7 @@ batch 1" log entry); 3 is still open.
   the 4 P5 types and Disconnect = revoke, Settings › Privacy & data switch row + the web branch's privacy wording (footer,
   data, memory, AI toggle), U5 Health Connect origin labels + the time-zone hint on Today. Today's disclosure flow now lives in
   `features/today/StepsDisclosure.tsx`. test:steps 388, test:alarms 69. Next: phase V (device checks; nothing native changed).
+- 2026-11-02: **Alarms: missed-dose notification title** (Kotlin only, compiled in phase V's rebuild): a dose alarm shown as
+  missed now reads "Missed: <name>" / "Missed: N medicines" + "Was due at 2:36 am on Mon, 2 Nov" (phone's zone, the doses'
+  scheduled time), dose lines in the expanded text, no "Missed" subText; the showing record keeps `missed` so a partial
+  refresh stays missed. Check on the V1 rebuild (stale-alarm run). Plan note: steps-v2.md §10 AT.

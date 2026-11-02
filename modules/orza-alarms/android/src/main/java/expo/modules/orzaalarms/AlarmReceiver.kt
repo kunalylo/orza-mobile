@@ -71,12 +71,13 @@ internal object AlarmFiring {
 
   /**
    * A dose alarm that couldn't ring in time (the phone was off, or the alarm was held back for hours): shown silently
-   * in the shade, marked "Missed", with its photos and Take / Snooze / Skip. Reminders / refills and test alarms aren't.
+   * in the shade as "Missed: <name>" / "Was due at …", with its photos and Take / Snooze / Skip. Reminders / refills
+   * and test alarms aren't.
    */
   fun showMissed(context: Context, item: AlarmItem) {
     if (!item.ring || item.isTest) return
     if (!AlarmNotifier.post(context, item, quiet = true, missed = true)) return
-    AlarmStore.putShown(context, item, quiet = true, shownAt = System.currentTimeMillis())
+    AlarmStore.putShown(context, item, quiet = true, shownAt = System.currentTimeMillis(), missed = true)
   }
 
   /** Posts the alarm now; ring items start ringing and get a silencer after RING_LIMIT_MS. */
@@ -154,8 +155,9 @@ internal object AlarmFiring {
       AlarmStore.putShown(context, next, quiet = false, shownAt = shown.shownAt)
       return@locked true
     }
-    if (AlarmNotifier.post(context, next, quiet = true)) {
-      AlarmStore.putShown(context, next, quiet = true, shownAt = shown.shownAt)
+    // A missed alarm stays "Missed: …" with the doses still open.
+    if (AlarmNotifier.post(context, next, quiet = true, missed = shown.missed)) {
+      AlarmStore.putShown(context, next, quiet = true, shownAt = shown.shownAt, missed = shown.missed)
     }
     true
   }

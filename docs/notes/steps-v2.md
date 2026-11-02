@@ -1338,6 +1338,13 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
     Health Connect winner, and the hint (today, something counting; measured at the reading's time — no clock read in
     render): "Steps count by your days in {profile}. This phone is set to {device}. Change time zone" → Preferences
     (its "Use this phone's time zone" button). No app.json change in U3–U5.
+- [x] **AT** (alarm-title, from the 2 Nov device test; not a steps step). Android's missed-dose notification
+  (`orza-alarms` `AlarmNotifier.post(missed = true)`) reads "Missed: <name>" / "Missed: 2 medicines", text "Was due at
+  2:36 am on Mon, 2 Nov" (the alarm screen's "Was due at …"; always dated: it may stay into the next day; the doses'
+  `scheduledFor`, else `at`; in the PHONE's zone — native has no profile zone), dose lines below it when expanded; the
+  "Missed" subText is gone (the title says it). The "showing" record keeps `missed`, so a refresh (a dose of the group
+  handled in the app) re-posts it still missed. Kotlin only, NOT compiled yet → V1 rebuild: check with the stale-alarm
+  run (phone clock back 75 min, PROGRESS 2 Nov) on `orza_alarms_quiet`. No app.json change.
 
 **Phase V: verify and ship**
 

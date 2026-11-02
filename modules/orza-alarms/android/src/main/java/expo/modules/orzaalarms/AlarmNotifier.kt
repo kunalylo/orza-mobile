@@ -14,6 +14,8 @@ import android.net.Uri
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import java.time.Instant
+import java.time.ZoneId
 
 /**
  * Notification channels and the alarm notification itself.
@@ -231,11 +233,47 @@ internal object AlarmNotifier {
 
   fun requestCode(seed: String): Int = seed.hashCode()
 
+  /* ───────────────────────────── Missed texts ───────────────────────────── */
+
+  /** java.time's DayOfWeek order (MONDAY = 1); the app's short names (features/meds/shared.ts WEEKDAYS / MONTHS). */
+  private val WEEKDAYS = arrayOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+  private val MONTHS = arrayOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+  /** "Missed: Metformin 500 mg", "Missed: 2 medicines" ("Missed medicine" without a name). */
+  private fun missedTitle(item: AlarmItem): String {
+    if (item.doses.size > 1) return "Missed: ${item.doses.size} medicines"
+    val label = item.doses.firstOrNull()?.label?.trim().orEmpty()
+    return if (label.isNotEmpty()) "Missed: $label" else "Missed medicine"
+  }
+
+  /**
+   * "Was due at 2:36 am on Mon, 2 Nov" — the alarm screen's "Was due at …", always with the date (the notification may
+   * stay into the next day). The doses' scheduled time (a snooze re-ring's `at` is the snooze's end), else `at`; in the
+   * phone's time zone, like the notification's own time.
+   */
+  private fun missedText(item: AlarmItem): String {
+    val due = item.doses.mapNotNull { epochOf(it.scheduledFor) }.minOrNull() ?: item.at
+    val t = Instant.ofEpochMilli(due).atZone(ZoneId.systemDefault())
+    val h12 = if (t.hour % 12 == 0) 12 else t.hour % 12
+    val minute = t.minute.toString().padStart(2, '0')
+    val suffix = if (t.hour >= 12) "pm" else "am"
+    return "Was due at $h12:$minute $suffix on ${WEEKDAYS[t.dayOfWeek.value - 1]}, ${t.dayOfMonth} ${MONTHS[t.monthValue - 1]}"
+  }
+
+  /** Epoch ms of an ISO UTC instant ("2026-11-02T21:06:00.000Z", JS toISOString), or null. */
+  private fun epochOf(iso: String): Long? =
+    try {
+      Instant.parse(iso).toEpochMilli()
+    } catch (e: Exception) {
+      null
+    }
+
   /* ───────────────────────────── Posting ───────────────────────────── */
 
   /**
    * Shows `item`. `quiet` = the silent copy of a ring item (after RING_LIMIT_MS or `silenceRinging`); `missed` (with
-   * `quiet`) marks a dose alarm that couldn't ring in time ("Missed" next to the app name).
+   * `quiet`) is a dose alarm that couldn't ring in time: "Missed: <name>" / "Was due at 2:36 am on Mon, 2 Nov" instead
+   * of JS's "💊 Time for <name>" / dose line (the dose line stays in the expanded text).
    * Returns false when notifications are off (nothing can show).
    */
   fun post(context: Context, item: AlarmItem, quiet: Boolean, missed: Boolean = false): Boolean {
@@ -248,12 +286,14 @@ internal object AlarmNotifier {
       quiet -> CHANNEL_QUIET
       else -> CHANNEL_ALARMS
     }
+    val title = if (missed) missedTitle(item) else item.title
+    val text = if (missed) missedText(item) else item.body
 
     val builder = NotificationCompat.Builder(context, channel)
       .setSmallIcon(smallIcon(context))
       .setColor(accentColor(context))
-      .setContentTitle(item.title)
-      .setContentText(item.body)
+      .setContentTitle(title)
+      .setContentText(text)
       .setWhen(item.at)
       .setShowWhen(true)
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -263,7 +303,6 @@ internal object AlarmNotifier {
       .setAutoCancel(!item.ring)
       .setOnlyAlertOnce(quiet)
       .setTimeoutAfter(if (ringing) RINGING_TIMEOUT_MS else if (item.ring) QUIET_TIMEOUT_MS else REMINDER_TIMEOUT_MS)
-    if (missed) builder.setSubText("Missed")
 
     val photos = AlarmPhotos.load(item.photos)
     if (photos != null) {
@@ -272,11 +311,12 @@ internal object AlarmNotifier {
         NotificationCompat.BigPictureStyle()
           .bigPicture(photos.picture)
           .bigLargeIcon(null as Bitmap?)
-          .setSummaryText(item.body)
+          .setSummaryText(text)
       )
     } else {
-      val text = item.details?.takeIf { it.isNotBlank() } ?: item.body
-      builder.setStyle(NotificationCompat.BigTextStyle().bigText(text))
+      val details = item.details?.takeIf { it.isNotBlank() } ?: item.body
+      val expanded = if (!missed) details else if (details.isBlank()) text else "$text\n$details"
+      builder.setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
     }
 
     if (item.ring && (item.doses.isNotEmpty() || item.isTest)) {

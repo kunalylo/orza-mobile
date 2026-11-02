@@ -92,7 +92,8 @@ internal object AlarmStore {
 
   /* ───────────────────────────── Showing ───────────────────────────── */
 
-  class Shown(val item: AlarmItem, val shownAt: Long, val quiet: Boolean)
+  /** `missed`: shown silently as missed (`AlarmFiring.showMissed`) — a re-post keeps its "Missed" texts. */
+  class Shown(val item: AlarmItem, val shownAt: Long, val quiet: Boolean, val missed: Boolean = false)
 
   fun readShown(context: Context): LinkedHashMap<String, Shown> = locked {
     val o = readObject(context, SHOWN)
@@ -105,7 +106,7 @@ internal object AlarmStore {
       val item = AlarmItem.fromJson(entry.optJSONObject("item")) ?: continue
       val shownAt = entry.optLong("shownAt", 0L)
       if (now - shownAt > SHOWN_MAX_AGE_MS) continue
-      out[key] = Shown(item, shownAt, entry.optBoolean("quiet", false))
+      out[key] = Shown(item, shownAt, entry.optBoolean("quiet", false), entry.optBoolean("missed", false))
     }
     out
   }
@@ -117,14 +118,15 @@ internal object AlarmStore {
       entry.put("item", s.item.toJson())
       entry.put("shownAt", s.shownAt)
       entry.put("quiet", s.quiet)
+      if (s.missed) entry.put("missed", true)
       o.put(key, entry)
     }
     writeText(context, SHOWN, o.toString())
   }
 
-  fun putShown(context: Context, item: AlarmItem, quiet: Boolean, shownAt: Long) = locked {
+  fun putShown(context: Context, item: AlarmItem, quiet: Boolean, shownAt: Long, missed: Boolean = false) = locked {
     val all = readShown(context)
-    all[item.key] = Shown(item, shownAt, quiet)
+    all[item.key] = Shown(item, shownAt, quiet, missed)
     writeShown(context, all)
   }
 
