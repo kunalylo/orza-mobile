@@ -1289,12 +1289,55 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
     never while refused. No "Not now" there (§6 lists only the two buttons). `healthEmpty`'s `recordOf` was wired by R5a.
   - For U3 / U4: the Health screen's connect doesn't note `hcRefused` (U3 may call `setHcRefused`); the disclosure's
     last point promises U4's Settings › Privacy & data switch. No app.json change. test:steps 360, test:alarms 69.
-- [ ] **U3.** Health screen: the Steps switch card, the "both ways" line, the off sheet; ConnectCard metric list (P5);
+- [x] **U3.** Health screen: the Steps switch card, the "both ways" line, the off sheet; ConnectCard metric list (P5);
   Disconnect = revoke.
-- [ ] **U4.** Settings › Privacy & data switch + footer; `preferences.tsx` AI copy; "never share" sentences in
+  - Every decision is in a new pure `lib/steps/switchCard.ts` (`switchView` → state, switch position, subtitle, what
+    switching on does, the "get it counting again" actions; `offSheet` → §6's off sheet; `bothWaysLine`; new
+    `steps-switch.test.ts`, in `test:steps`); `features/health/StepsSwitch.tsx` renders `StepsSwitchCard` (Health
+    screen, replaces the v1 `StepsAutoCard`, deleted) and `StepsSwitchRow` (U4). Off → the §6 sheet → `setAutoSteps(
+    false)` (never a revoke, P9); on → the member's consents count again, or Today's ask.
+  - Deviations: (1) Today's disclosure flow moved out of `StepsCard` into `features/today/StepsDisclosure.tsx`
+    (`useStepsDisclosure(steps, {againLabel})`: `act(action)`, the one-button sheet, the answer toasts, the recheck on
+    return), so the switch opens the very same sheet; `useTodaySteps({live: false})` (no reads of its own) gains `agreed`;
+    R6's `useStepsSwitch()` is removed (nothing used it, and the switch needs Today's ask flow). (2) States §6 lacks:
+    never agreed on this install → off-looking, "Not on yet — you log steps yourself", switching on opens Today's ask
+    (its disclosure / Settings / Health Connect / Play) whatever "Not now" folded (P19's way back); on with nothing ON
+    (a permission taken away) → "On — but ÖRZA can't read your steps right now" + the ask's button (+ the motion sensor
+    after a Health Connect refusal); "On — checking this phone…"; nothing can count → disabled, "This phone can't count
+    steps — log them on Today"; Health Connect without the phone's count → "From Health Connect — your watch and fitness
+    apps" (§6's "this phone and your watch" would be false); iPhone with both → "From Apple Health and your iPhone's
+    motion sensor". (3) Off sheet notes §6 lacks: "Health Connect may keep counting this phone's steps" only where it
+    counts the phone (`stepTracking`); Android with only the phone counting → Physical activity in Settings + "Open
+    Settings"; iPhone with the motion sensor → Motion & Fitness in Settings › ÖRZA + "Open Settings" (Apple Health: §6's
+    path, no button). (4) The Android 14+ "both ways" line only while Health Connect counts this phone for ÖRZA
+    (`stepTracking` and the store ON — its step counting starts with a grant), else the 9–13 line. (5) ConnectCard: the 4
+    P5 tags; connect copy says connecting also counts steps from the store (R6's `consent.store`); connected / empty
+    copy (state banner, toasts, the screen's "No health data yet") now speaks of sleep, resting heart rate and weight
+    (the import carries no steps); "Stop syncing" → "Disconnect" with a toast by `revoked` (removed there too / where
+    to remove it: §6's iPhone path replaces v1's "Health app › your profile › Apps"). (6) `health/sync.ts` connect
+    (Android) sets `hcRefused` from the answer (Steps refused → true, allowed → false), per U2's note.
+- [x] **U4.** Settings › Privacy & data switch + footer; `preferences.tsx` AI copy; "never share" sentences in
   `account/data.tsx` and `memory.tsx`. Commit "steps v2: UI".
-- [ ] **U5** (optional). HC origin labels ("From Samsung Health"); a time-zone mismatch hint on Today when the phone's
+  - Settings › Privacy & data: `StepsSwitchRow` (U3's switch, its off sheet and Today's disclosure) as the group's first
+    row; none on a non-phone build.
+  - Deviation (copy): the web branch's wording (`steps-v2-backend`, `src/components/account/settings/*`), verbatim, not
+    §6's — §6's footer ("… never sent to AI providers") was written for B5, which the coordinator skipped: AI chat does
+    send today's step count (web privacy page `#phone-app`). Footer (Settings) and `data.tsx`'s subtitle = the web's
+    Privacy section: "Your data is stored securely and never sold. We share it only to run ÖRZA — for example with our
+    AI provider when you use an AI feature — as our privacy policy explains." `preferences.tsx`: the web's "… Steps and
+    anything read from Apple Health, Health Connect or your phone's motion sensor are never used for this. …" ("logs",
+    "sensor" — §6 had "meal logs", "sensors"). `memory.tsx`: "… When you use an AI feature, the ones it needs go with your
+    request to our AI provider." No "never share … without your consent" left in the app.
+- [x] **U5** (optional). HC origin labels ("From Samsung Health"); a time-zone mismatch hint on Today when the phone's
   offset ≠ the profile's (R8d).
+  - Pure in `todayCard.ts` (tests in `steps-card.test.ts`): `originLabel(origins)` → "From Samsung Health" / "From
+    Fitbit" / "From Google Fit" / "From Garmin Connect" / "From Oura" / "From Withings" / "From this phone" (`android`,
+    Health Connect's on-device count) when ONE known app made up the day's total; several apps or an unknown one → the
+    card keeps "From Health Connect". `zoneHint(profileTz, deviceTz, at)` → both zones when their UTC offsets differ at
+    `at` (another name for the same zone, e.g. Asia/Calcutta, gives none). Today's card shows the label for a live
+    Health Connect winner, and the hint (today, something counting; measured at the reading's time — no clock read in
+    render): "Steps count by your days in {profile}. This phone is set to {device}. Change time zone" → Preferences
+    (its "Use this phone's time zone" button). No app.json change in U3–U5.
 
 **Phase V: verify and ship**
 

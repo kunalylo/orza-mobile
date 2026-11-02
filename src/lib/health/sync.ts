@@ -20,7 +20,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 
 import { api, ApiError, errorMessage } from '@/lib/api';
 import { useAuth, useSignedInUser } from '@/lib/auth';
-import { forgetHcGrant, noteHcGrant } from '@/lib/steps/store';
+import { forgetHcGrant, noteHcGrant, setHcRefused } from '@/lib/steps/store';
 import { agreeToSteps, stepsMemberOf, withdrawSteps } from '@/lib/steps/sync';
 import { refreshStepsNow } from '@/lib/steps/useSteps';
 
@@ -249,8 +249,14 @@ export function useHealthSync() {
       else {
         const r = await healthBridge.requestAccess();
         granted = r.granted;
-        // S-H2: the member's own grant of Health Connect's steps (noted even right after a Disconnect in this process).
-        if (r.granted && healthBridge.platform === 'android' && r.metrics.includes('steps')) noteHcGrant(Date.now(), true);
+        if (healthBridge.platform === 'android') {
+          const steps = r.metrics.includes('steps');
+          // U2 / U3: Today's card follows this answer like its own sheet's — Steps refused (or Health Connect's lockout
+          // after two refusals) → "Open Health Connect" rather than a sheet that may never show; allowed → cleared.
+          setHcRefused(!steps);
+          // S-H2: the member's own grant of Health Connect's steps (noted even right after a Disconnect in this process).
+          if (steps) noteHcGrant(Date.now(), true);
+        }
       }
       if (!granted) return { status: 'denied' };
       updateHealthRecord(user.id, {

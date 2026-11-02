@@ -1,6 +1,8 @@
 /**
- * Health sync — connect Apple Health (iPhone) or Health Connect (Android), sync the last 30 days of daily totals to
- * ÖRZA, and see steps, sleep, resting heart rate and weight trends (all sources merged, like the web page).
+ * Health sync — connect Apple Health (iPhone) or Health Connect (Android), sync the last 30 days of sleep, resting heart
+ * rate and weight to ÖRZA, switch "Count steps automatically" (steps v2 U3: steps reach the account only through the
+ * steps sync, never the import), and see steps, sleep, resting heart rate and weight trends (all sources merged, like
+ * the web page; steps are the account's day counts, B4).
  */
 import { useState } from 'react';
 import { RefreshControl, StyleSheet, View } from 'react-native';
@@ -12,7 +14,7 @@ import { ConnectCard } from '@/features/health/ConnectCard';
 import { addDays, compact, formatDay, formatInt, formatKg, formatSleep, sourceLabel, timeAgo, todayIn } from '@/features/health/format';
 import { PrivacyNote, SourcesCard } from '@/features/health/SourcesCard';
 import { StatTiles, StatTilesSkeleton } from '@/features/health/StatTiles';
-import { StepsAutoCard } from '@/features/health/StepsAutoCard';
+import { StepsSwitchCard } from '@/features/health/StepsSwitch';
 import type { ChartPoint, HealthMetric, HealthRange, MergedHealthDay } from '@/features/health/types';
 import { errorMessage } from '@/lib/api';
 import { useSignedInUser } from '@/lib/auth';
@@ -98,7 +100,7 @@ export default function HealthSync() {
         back
         eyebrow="Care · Health sync"
         title="Health sync"
-        subtitle={`Steps, sleep, heart rate and weight from ${health.platform === 'android' ? 'Health Connect' : 'Apple Health'}, side by side with what you eat.`}
+        subtitle={`Steps, sleep, resting heart rate and weight from ${health.platform === 'android' ? 'Health Connect' : 'Apple Health'}, side by side with what you eat.`}
         right={
           <IconButton
             icon="refresh-cw"
@@ -111,7 +113,7 @@ export default function HealthSync() {
 
       <View style={styles.stack}>
         <ConnectCard health={health} />
-        <StepsAutoCard platform={health.platform} connected={health.connected} />
+        <StepsSwitchCard />
 
         {query.isPending ? (
           <LoadingBody />
@@ -133,10 +135,11 @@ export default function HealthSync() {
               title="No health data yet"
               body={
                 !health.connected
-                  ? `Connect ${health.name} above and your steps, sleep, heart rate and weight will show up here.`
+                  ? `Connect ${health.name} above for your sleep, resting heart rate and weight. Your steps show up here as Today counts them or you log them.`
                   : health.record.lastEmpty && !health.syncing
-                    ? // The sync ran and the phone had nothing to send — "on its way" would never come true.
-                      `${health.name} had nothing to share for the last 30 days. Once your watch or a fitness app saves data there, it shows up here after the next sync.`
+                    ? // The sync ran and the phone had nothing to send — "on its way" would never come true. (It carries no
+                      // steps: they come from Today's count.)
+                      `${health.name} had no sleep, resting heart rate or weight for the last 30 days. Once your watch or a fitness app saves them there, they show up here after the next sync.`
                     : `Your first sync from ${health.name} is on its way — pull down to check again.`
               }
             />

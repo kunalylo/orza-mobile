@@ -12,12 +12,13 @@
  *   Android with the phone counting on a phone where Health Connect doesn't count it → "Include your watch or fitness
  *   app"; iPhone with Apple Health empty → "Use iPhone motion instead", once.
  * - §6: the disclosure's exact points and captions by path.
+ * - U5: Health Connect origin labels ("From Samsung Health"), the time-zone mismatch hint.
  */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import type { CountingSource, StepsAskState } from '../../src/lib/steps/plan';
-import { disclosureCopy, todayCard, type CardInputs } from '../../src/lib/steps/todayCard';
+import { disclosureCopy, originLabel, todayCard, zoneHint, type CardInputs } from '../../src/lib/steps/todayCard';
 import type { StepFeatures, StepsAccess } from '../../src/lib/steps/types';
 
 const ANDROID_14: StepFeatures = { platform: 'android', store: 'available', stepTracking: true, counter: true };
@@ -343,5 +344,38 @@ describe('the disclosure (§6: one button, the exact points)', () => {
     assert.equal(c.button, 'Turn on');
     assert.equal(c.caption, null);
     assert.deepEqual(texts(c), texts(disclosureCopy('hc', 'continue', true)));
+  });
+});
+
+describe('U5: where Health Connect\'s steps came from, the time-zone hint', () => {
+  test('one known app → its name ("From Samsung Health", "From Fitbit"); Health Connect\'s own phone count → "From this phone"', () => {
+    assert.equal(originLabel(['com.sec.android.app.shealth']), 'From Samsung Health');
+    assert.equal(originLabel(['com.fitbit.FitbitMobile']), 'From Fitbit');
+    assert.equal(originLabel(['com.google.android.apps.fitness']), 'From Google Fit');
+    assert.equal(originLabel(['android']), 'From this phone');
+    assert.equal(originLabel(['android', 'android']), 'From this phone');
+  });
+
+  test('several apps (Health Connect\'s priority list decided), an unknown app or none → no label of its own', () => {
+    assert.equal(originLabel(['android', 'com.sec.android.app.shealth']), null);
+    assert.equal(originLabel(['com.example.steps']), null);
+    assert.equal(originLabel([]), null);
+    assert.equal(originLabel(undefined), null);
+  });
+
+  const AT = Date.UTC(2026, 10, 2, 6, 0); // 2 Nov 2026
+  const JULY = Date.UTC(2026, 6, 1, 12, 0);
+
+  test('the phone\'s zone has another offset than the profile\'s: a hint naming both', () => {
+    assert.deepEqual(zoneHint('Asia/Kolkata', 'Asia/Singapore', AT), { profile: 'Asia/Kolkata', device: 'Asia/Singapore' });
+    assert.deepEqual(zoneHint('Europe/London', 'Africa/Abidjan', JULY), { profile: 'Europe/London', device: 'Africa/Abidjan' });
+  });
+
+  test('the same offset (another name for the zone, or the same now): no hint; an unknown phone zone: none', () => {
+    assert.equal(zoneHint('Asia/Kolkata', 'Asia/Kolkata', AT), null);
+    assert.equal(zoneHint('Asia/Kolkata', 'Asia/Calcutta', AT), null);
+    assert.equal(zoneHint('Europe/London', 'Africa/Abidjan', AT), null);
+    assert.equal(zoneHint('Asia/Kolkata', 'Not/AZone', AT), null);
+    assert.equal(zoneHint('Asia/Kolkata', null, AT), null);
   });
 });

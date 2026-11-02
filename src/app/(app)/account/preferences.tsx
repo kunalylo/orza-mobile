@@ -177,7 +177,7 @@ export default function PreferencesSettings() {
       <SettingsGroup title="Privacy" delay={140}>
         <ToggleRow
           title="Help improve ÖRZA’s AI"
-          description="Lets your conversations and logs, anonymized first, help make ÖRZA’s AI better. Turning this off doesn’t change how AI features work for you."
+          description="Lets your conversations and logs, anonymized first, help make ÖRZA’s AI better. Steps and anything read from Apple Health, Health Connect or your phone’s motion sensor are never used for this. Turning this off doesn’t change how AI features work for you."
           value={!prefs.ai_training_opt_out}
           pending={isPending('ai_training_opt_out')}
           onChange={(v) => update('ai_training_opt_out', !v)}

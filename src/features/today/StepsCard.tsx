@@ -10,37 +10,38 @@
  * - after a Health Connect refusal: "Open Health Connect" and "Use this phone's motion sensor instead" (never chained);
  *   the phone counting where Health Connect doesn't count it: "Include your watch or fitness app"; iPhone with Apple
  *   Health empty: its status and, once, "Use iPhone motion instead" (U2);
- * - a counted day can still be corrected ("Edit": the member's number, plus steps counted after it).
- * It also renders without Today's data (offline / loading): the phone's own count needs no network.
+ * - a counted day can still be corrected ("Edit": the member's number, plus steps counted after it);
+ * - U5: Health Connect's day total from one known app → "From Samsung Health" / "From this phone" (`originLabel`); the
+ *   phone's time zone on another offset than the profile's → a hint (steps count by the profile's days, `zoneHint`).
+ * The disclosure sheet and the actions live in `StepsDisclosure.tsx` (shared with "Count steps automatically" on the
+ * Health screen and in Settings). It also renders without Today's data (offline / loading): the phone's own count
+ * needs no network.
  *
  * Reading + saving lives in `@/lib/steps` (`useTodaySteps`): it reads on focus, every minute while Today is visible and
  * on return to the app, and saves the count through `POST /api/track/steps` so the website shows the same number.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AppState, Platform, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import { router } from 'expo-router';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 
 import { useSignedInUser } from '@/lib/auth';
+import { deviceTimeZone } from '@/lib/device';
 import { haptics } from '@/lib/haptics';
 import { shownSteps, type ShownSource } from '@/lib/steps/policy';
 import { useDayRecord } from '@/lib/steps/store';
-import { disclosureCopy, todayCard, type CardAction, type DisclosureSheet, type PointIcon } from '@/lib/steps/todayCard';
-import type { StepPermission } from '@/lib/steps/types';
+import { originLabel, todayCard, zoneHint } from '@/lib/steps/todayCard';
 import { useTodaySteps } from '@/lib/steps/useSteps';
 import { colors, radii, spacing } from '@/theme';
-import { Button, EnergyRing, GlassCard, Icon, Orb, Sheet, Text, toast, type IconName } from '@/ui';
+import { Button, EnergyRing, GlassCard, Icon, Text, toast, type IconName } from '@/ui';
 
 import { formatNumber, formatTime } from '@/features/meals/utils';
 
+import { useStepsDisclosure } from './StepsDisclosure';
 import { TrackerHead } from './TrackerHead';
 
 /** Used when the member has no step target. */
 export const DEFAULT_STEP_TARGET = 10_000;
-
-/** iPhone: the system sheet waits this long after the disclosure's own sheet has gone (one modal at a time). */
-const PROMPT_AFTER_SHEET_MS = Platform.OS === 'ios' ? 300 : 0;
-
-const STORE_ICON: IconName = Platform.OS === 'ios' ? 'mci:apple' : 'mci:heart-pulse';
 
 const SOURCE: Record<ShownSource, { icon: IconName; label: string }> = {
   phone: { icon: 'smartphone', label: 'Counted by this phone' },
@@ -50,15 +51,7 @@ const SOURCE: Record<ShownSource, { icon: IconName; label: string }> = {
   edited: { icon: 'edit-3', label: 'Edited by you' },
 };
 
-const POINT_ICON: Record<PointIcon, IconName> = {
-  store: STORE_ICON,
-  watch: 'watch',
-  phone: 'smartphone',
-  share: 'share-2',
-  history: 'calendar',
-  saved: 'lock',
-  off: 'toggle-right',
-};
+const tzLabel = (tz: string) => tz.replace(/_/g, ' ');
 
 function LivePill() {
   const reduce = useReducedMotion();
@@ -105,29 +98,9 @@ export function StepsCard({
   const record = useDayRecord(user.id, date);
   const target = targetIn > 0 ? targetIn : DEFAULT_STEP_TARGET;
   const isToday = date === today;
-  const android = steps.platform === 'android';
-
-  // The disclosure: what it shows (kept while it slides out), whether it is open, and a system prompt to show once it
-  // has gone (P6: "Continue" opens the prompt; one modal at a time).
-  const [disclosure, setDisclosure] = useState<DisclosureSheet | null>(null);
-  const [open, setOpen] = useState(false);
-  const [asking, setAsking] = useState(false);
-  const [turningOn, setTurningOn] = useState(false);
-  const promptNext = useRef<DisclosureSheet | null>(null);
-
-  // Back from Settings / Health Connect / Google Play (opened here): check again at once — the answer shows without
-  // waiting for the next minute's read.
-  const away = useRef(false);
-  const { recheck } = steps;
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => {
-      if (s === 'active' && away.current) {
-        away.current = false;
-        recheck();
-      }
-    });
-    return () => sub.remove();
-  }, [recheck]);
+  // The disclosure sheet and what the card's buttons open (P6; shared with the switch outside Today).
+  const disclosure = useStepsDisclosure(steps, { againLabel: 'Count my steps automatically' });
+  const { act } = disclosure;
 
   const live = isToday && steps.reading && steps.reading.date === date ? steps.reading : null;
   const card = todayCard({
@@ -157,7 +130,9 @@ export function StepsCard({
   const reached = target > 0 && value >= target;
   const pct = Math.round(Math.min(progress, 9.99) * 100);
   let source = SOURCE[shown.source];
-  let sourceLabel = shown.approximate ? `${source.label} · approximate` : source.label;
+  // U5: Health Connect's total from one known app is named ("From Samsung Health", "From this phone").
+  const fromApp = shown.source === 'health_connect' && winner?.source === 'health_connect' ? originLabel(winner.origins) : null;
+  let sourceLabel = fromApp ?? (shown.approximate ? `${source.label} · approximate` : source.label);
   if (shown.source === 'saved') {
     if (value > 0) sourceLabel = autoOn ? (isToday ? 'Saved earlier today' : 'Saved for this day') : isToday ? 'Logged today' : 'Logged for this day';
     else {
@@ -199,96 +174,11 @@ export function StepsCard({
   else if (isToday) status = value > 0 ? toGo : 'A short walk after meals is a great place to start.';
   else status = value > 0 ? `${formatNumber(target - value)} short of the goal` : 'No steps for this day.';
 
+  // U5 (R8d): the phone's zone on another offset than the profile's while something counts — steps count by the
+  // profile's days. Measured at the reading's time (no clock read in render).
+  const zone = isToday && live && autoOn ? zoneHint(tz, deviceTimeZone(), live.at) : null;
+
   /* ─── the member's answers ─── */
-
-  const goAway = (opener: () => Promise<void>) => {
-    away.current = true;
-    void opener().catch(() => {
-      away.current = false;
-      toast.error('That didn’t open — please try again.');
-    });
-  };
-
-  const act = (action: CardAction) => {
-    if (action.type === 'sheet') {
-      // iPhone: "Use iPhone motion instead" is offered once — taken now.
-      if (action.sheet.fallback && steps.platform === 'ios') steps.markMotionOffered();
-      setDisclosure(action.sheet);
-      setOpen(true);
-    } else if (action.type === 'settings') goAway(steps.openSettings);
-    else if (action.type === 'store_settings') goAway(steps.openStoreSettings);
-    else goAway(steps.openStoreInstall);
-  };
-
-  /** The system prompt's answer, once the disclosure has gone. */
-  const answer = (s: DisclosureSheet, result: StepPermission) => {
-    if (result === 'granted') {
-      haptics.success();
-      toast.success('Step counting is on — Today fills in by itself.');
-    } else if (result === 'blocked') {
-      // Refused for good (iPhone: any refusal of Motion & Fitness) — the card offers Settings from now on.
-      haptics.warning();
-      toast.info(`No problem — you can log steps yourself. To count them later, turn on ${steps.permissionName} in ${steps.settingsPath}.`);
-    } else if (result === 'unavailable') {
-      toast.info(
-        s.kind === 'hc'
-          ? 'Health Connect isn’t available on this phone right now. You can still log steps yourself.'
-          : 'This phone doesn’t have a step counter. You can still log steps yourself.'
-      );
-    } else if (result === 'undetermined') {
-      toast.info('That didn’t open — please try again in a moment.');
-    } else {
-      haptics.warning();
-      toast.info(
-        s.kind === 'hc'
-          ? steps.access?.phoneAvailable
-            ? 'No problem — log steps yourself, or use this phone’s motion sensor instead.'
-            : 'No problem — you can log steps yourself any time.'
-          : s.fallback
-            ? 'No problem — you can log steps yourself any time.'
-            : `No problem — tap “Count my steps automatically” whenever you’d like to turn on ${steps.permissionName}.`
-      );
-    }
-  };
-
-  const onContinue = () => {
-    if (!disclosure || asking) return;
-    promptNext.current = disclosure;
-    setAsking(true);
-    setOpen(false);
-  };
-
-  const onClosed = () => {
-    const s = promptNext.current;
-    promptNext.current = null;
-    if (!s) return;
-    setTimeout(() => {
-      void (async () => {
-        try {
-          answer(s, s.fallback ? await steps.motionInstead() : await steps.requestAccess(s.kind));
-        } catch {
-          toast.info('That didn’t open — please try again in a moment.');
-        } finally {
-          setAsking(false);
-        }
-      })();
-    }, PROMPT_AFTER_SHEET_MS);
-  };
-
-  const onTurnOn = async () => {
-    if (!disclosure || turningOn) return;
-    setTurningOn(true);
-    try {
-      await steps.turnOn(disclosure.kind);
-      haptics.success();
-      toast.success('Step counting is on — Today fills in by itself.');
-      setOpen(false);
-    } catch {
-      toast.error('That didn’t work — please try again.');
-    } finally {
-      setTurningOn(false);
-    }
-  };
 
   const notNow = () => {
     steps.notNow();
@@ -311,7 +201,7 @@ export function StepsCard({
         variant="energy"
         icon="mci:shoe-print"
         block
-        loading={asking && !disclosure?.fallback}
+        loading={disclosure.asking}
         onPress={() => act(cta)}
         accessibilityHint={turnOn ? 'Explains step counting, then turns it on for your account' : 'Explains step counting, then asks for permission'}
       />
@@ -393,7 +283,7 @@ export function StepsCard({
               variant="secondary"
               icon="smartphone"
               block
-              loading={asking && !!disclosure?.fallback}
+              loading={disclosure.askingFallback}
               onPress={() => act(motion)}
               accessibilityHint={
                 motion.type !== 'sheet'
@@ -467,128 +357,29 @@ export function StepsCard({
         </View>
       ) : null}
 
-      {disclosure ? (
-        <StepsDisclosureSheet
-          visible={open}
-          sheet={disclosure}
-          fullBackfill={steps.fullBackfill}
-          android={android}
-          busy={turningOn}
-          onContinue={onContinue}
-          onTurnOn={() => void onTurnOn()}
-          onClose={() => setOpen(false)}
-          onClosed={onClosed}
-        />
+      {zone ? (
+        <Pressable
+          accessibilityRole="link"
+          accessibilityHint="Opens Preferences, where you can change your time zone"
+          onPress={() => {
+            haptics.tap();
+            router.push('/account/preferences');
+          }}
+          hitSlop={6}
+          style={({ pressed }) => [styles.zone, pressed && styles.pressed]}
+        >
+          <Icon name="globe" size={14} color={colors.cyan700} />
+          <Text variant="caption" tone="muted" style={styles.flex}>
+            {`Steps count by your days in ${tzLabel(zone.profile)}. This phone is set to ${tzLabel(zone.device)}.`}{' '}
+            <Text variant="caption" tone="cyan" weight="semibold">
+              Change time zone
+            </Text>
+          </Text>
+        </Pressable>
       ) : null}
+
+      {disclosure.sheet}
     </GlassCard>
-  );
-}
-
-/* ───────────────────────────── The disclosure (P6, §6) ───────────────────────────── */
-
-function Point({ icon, children, index }: { icon: IconName; children: string; index: number }) {
-  const reduce = useReducedMotion();
-  return (
-    <Animated.View entering={reduce ? undefined : FadeIn.delay(90 + index * 60)} style={styles.point}>
-      <View style={styles.pointIcon}>
-        <Icon name={icon} size={16} color={colors.energyInk} />
-      </View>
-      <Text variant="small" tone="text" style={styles.flex}>
-        {children}
-      </Text>
-    </Animated.View>
-  );
-}
-
-/** A small picture of what the sheet is about: the source → ÖRZA. */
-function SourceFlow({ icon }: { icon: IconName }) {
-  const reduce = useReducedMotion();
-  return (
-    <View style={styles.flow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <View style={styles.flowTile}>
-        <Icon name={icon} size={22} color={colors.energyInk} />
-      </View>
-      <View style={styles.flowLine}>
-        {[0, 1, 2].map((i) => (
-          <View key={i} style={styles.flowDot} />
-        ))}
-        <Icon name="mci:shoe-print" size={16} color={colors.coral} />
-        {[0, 1, 2].map((i) => (
-          <View key={i + 3} style={styles.flowDot} />
-        ))}
-      </View>
-      <Orb size={52} tone="light" orbits={false} paused={reduce} />
-    </View>
-  );
-}
-
-/**
- * P6: one button. "Continue" — the system prompt follows once the sheet has gone; there is no other way out on iPhone
- * (no close button, swipe or backdrop), only the system back on Android. "Turn on" — the permission is there already:
- * the member's OK only, and the sheet closes like any other.
- */
-function StepsDisclosureSheet({
-  visible,
-  sheet,
-  fullBackfill,
-  android,
-  busy,
-  onContinue,
-  onTurnOn,
-  onClose,
-  onClosed,
-}: {
-  visible: boolean;
-  sheet: DisclosureSheet;
-  fullBackfill: boolean;
-  android: boolean;
-  busy: boolean;
-  onContinue: () => void;
-  onTurnOn: () => void;
-  onClose: () => void;
-  onClosed: () => void;
-}) {
-  const copy = disclosureCopy(sheet.path, sheet.variant, fullBackfill);
-  const turnOn = sheet.variant === 'turn_on';
-  const lead = copy.points[0]?.icon ?? 'phone';
-  return (
-    <Sheet
-      visible={visible}
-      onClose={onClose}
-      onClosed={onClosed}
-      eyebrow="Steps"
-      title={copy.title}
-      dismissible={turnOn && !busy}
-      closeButton={turnOn}
-      onBack={!turnOn && android ? onClose : undefined}
-      footer={
-        <Button
-          label={copy.button}
-          variant="energy"
-          icon={turnOn ? 'check' : undefined}
-          iconRight={turnOn ? undefined : 'arrow-right'}
-          block
-          loading={busy}
-          haptic="firm"
-          onPress={turnOn ? onTurnOn : onContinue}
-          accessibilityHint={turnOn ? 'Turns on step counting for your account' : (copy.caption ?? undefined)}
-        />
-      }
-    >
-      <SourceFlow icon={POINT_ICON[lead]} />
-      <View style={styles.points}>
-        {copy.points.map((p, i) => (
-          <Point key={p.text} icon={POINT_ICON[p.icon]} index={i}>
-            {p.text}
-          </Point>
-        ))}
-      </View>
-      {copy.caption ? (
-        <Text variant="caption" tone="subtle" style={styles.next}>
-          {copy.caption}
-        </Text>
-      ) : null}
-    </Sheet>
   );
 }
 
@@ -613,21 +404,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.successBg,
   },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
-  flow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.md, marginBottom: spacing.xs },
-  flowTile: {
-    width: 52,
-    height: 52,
-    borderRadius: radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.energyBg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(194,65,12,0.16)',
+  zone: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.sm,
+    backgroundColor: colors.infoBg,
   },
-  flowLine: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  flowDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.hairlineStrong },
-  points: { gap: spacing.md },
-  point: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  pointIcon: { width: 32, height: 32, borderRadius: radii.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.energyBg },
-  next: { marginTop: spacing.sm },
+  pressed: { opacity: 0.7 },
 });

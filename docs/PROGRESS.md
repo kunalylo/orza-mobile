@@ -671,3 +671,8 @@ batch 1" log entry); 3 is still open.
   androidx.health.connect.client.devtool 2.3.5, Google's dev tool, debug-signed as shipped) — install on the EMULATOR only, in phase V1
   (E-3). Real Android phone: NOT available now → V2 (A-1…A-11) stays open; ask again before release. R1–R2 `c8b3d11`, R3–R4 `5b2f01e`
   done (test:steps 299/299); R5 onwards resumed (`wf_9fbaa2fe-3fe`).
+- 2026-11-02: steps v2 **U3–U5** done (one commit "steps v2: UI"): Health screen "Count steps automatically" card (§6 subtitles,
+  "both ways" line, off sheet; never agreed → switching on opens Today's own disclosure, also after "Not now"), ConnectCard with
+  the 4 P5 types and Disconnect = revoke, Settings › Privacy & data switch row + the web branch's privacy wording (footer,
+  data, memory, AI toggle), U5 Health Connect origin labels + the time-zone hint on Today. Today's disclosure flow now lives in
+  `features/today/StepsDisclosure.tsx`. test:steps 388, test:alarms 69. Next: phase V (device checks; nothing native changed).

@@ -248,7 +248,8 @@ export default function MemorySettings() {
       )}
 
       <Note icon="lock" tint={TINTS.violet} style={styles.note}>
-        These notes are private to your account and only used to personalise ÖRZA for you. We never share personal health information without your consent.
+        These notes are private to your account and only used to personalise ÖRZA for you. When you use an AI feature, the ones it
+        needs go with your request to our AI provider.
       </Note>
     </Screen>
   );

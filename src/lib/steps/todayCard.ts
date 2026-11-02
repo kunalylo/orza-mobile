@@ -13,7 +13,11 @@
  *   where Health Connect doesn't count it → "Include your watch or fitness app"; iPhone with Apple Health empty → "Use
  *   iPhone motion instead", once.
  * - §6: the disclosure's points and captions by path (`disclosureCopy`).
+ * - U5: where Health Connect's steps came from (`originLabel`: "From Samsung Health", "From this phone"); the hint when
+ *   the phone's time zone has another offset than the profile's (`zoneHint`: steps count by the profile's days, R8d).
  */
+import { isValidTimeZone, safeTimeZone, tzOffsetMinutes } from '../alarms/schedule';
+
 import type { CountingSource, StepsAskState } from './plan';
 import type { StepsAccess, StepsAsk } from './types';
 
@@ -153,10 +157,12 @@ function askButtons(a: StepsAccess, ask: StepsAskState, hcRefused: boolean): Pic
   return { cta, motion, notNow: cta.type !== 'sheet' || cta.sheet.variant === 'turn_on' };
 }
 
-/** Nothing could ever count here: the platform has no source, or the phone says none (§2.2 `none`). */
-function nothingCan(i: CardInputs): boolean {
-  if (i.platform === 'none') return true;
-  const a = i.access;
+/**
+ * Nothing could ever count here: the platform has no source, or the phone says none (§2.2 `none`). False while the
+ * phone's state isn't known.
+ */
+export function nothingCanCount(platform: CardInputs['platform'], a: StepsAccess | null): boolean {
+  if (platform === 'none') return true;
   return !!a && (a.firstAsk === 'none' || (!a.firstAsk && !a.phoneAvailable));
 }
 
@@ -186,7 +192,7 @@ export function todayCard(i: CardInputs): TodayCard {
     if (i.askFolded) return { ...manual, state: 'folded' };
     return { ...manual, state: 'asking', ...askButtons(a, i.ask, i.hcRefused) };
   }
-  return { ...manual, state: nothingCan(i) ? 'none' : 'unknown' };
+  return { ...manual, state: nothingCanCount(i.platform, i.access) ? 'none' : 'unknown' };
 }
 
 /**
@@ -298,4 +304,45 @@ export function disclosureCopy(path: DisclosurePath, variant: DisclosureSheet['v
     caption: variant === 'continue' ? p.caption : null,
     button: variant === 'continue' ? 'Continue' : 'Turn on',
   };
+}
+
+/* ───────────────────────────── U5: labels and hints ───────────────────────────── */
+
+/**
+ * Health Connect's record origins (package names) the card names (§6, U5). `android` is Health Connect's own count of
+ * this phone's steps (on-device step tracking, Android 14+).
+ */
+const ORIGIN_NAMES: Readonly<Record<string, string>> = {
+  android: 'this phone',
+  'com.sec.android.app.shealth': 'Samsung Health',
+  'com.fitbit.FitbitMobile': 'Fitbit',
+  'com.google.android.apps.fitness': 'Google Fit',
+  'com.garmin.android.apps.connectmobile': 'Garmin Connect',
+  'com.ouraring.oura': 'Oura',
+  'com.withings.wiscale2': 'Withings',
+};
+
+/**
+ * U5: "From Samsung Health" / "From Fitbit" / "From this phone" when one known app made up Health Connect's day total;
+ * null (the card keeps "From Health Connect") for several apps — Health Connect's priority list decided — or an
+ * unknown one.
+ */
+export function originLabel(origins: readonly string[] | undefined): string | null {
+  const apps = [...new Set((origins ?? []).filter((o) => typeof o === 'string' && !!o))];
+  if (apps.length !== 1) return null;
+  const name = ORIGIN_NAMES[apps[0]];
+  return name ? `From ${name}` : null;
+}
+
+/**
+ * U5 (R8d): the phone's time zone has another UTC offset than the profile's at `at` — steps (and Today) count by the
+ * profile's days, so a walk late in the phone's evening may land on the profile's next day. Null when the offsets
+ * match (another name for the same zone included) or the phone's zone isn't known.
+ */
+export function zoneHint(profileTz: string, deviceTz: string | null | undefined, at: number): { profile: string; device: string } | null {
+  if (!deviceTz || !isValidTimeZone(deviceTz)) return null;
+  const profile = safeTimeZone(profileTz);
+  if (profile === deviceTz) return null;
+  const when = new Date(at);
+  return tzOffsetMinutes(profile, when) === tzOffsetMinutes(deviceTz, when) ? null : { profile, device: deviceTz };
 }

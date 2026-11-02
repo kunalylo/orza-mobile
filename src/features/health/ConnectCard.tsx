@@ -1,6 +1,11 @@
 /**
  * The Health screen's connection panel — every state of "is this phone's health store linked to ÖRZA?":
  * checking → unsupported / install Health Connect → connect → connected (sync now, manage, disconnect, errors).
+ *
+ * Steps v2 (U3): ÖRZA reads only steps, sleep, resting heart rate and weight (P5). Connecting is also the member's OK
+ * to count their steps from the store (`consent.store`, the copy says so); the import itself carries sleep, resting
+ * heart rate and weight. Disconnect stops both at once and, on Android, revokes every ÖRZA permission in Health
+ * Connect (P9); on iPhone HealthKit has no such call, so the member is shown where to remove ÖRZA in Settings.
  */
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -17,15 +22,19 @@ import { timeAgo } from './format';
 
 type Health = ReturnType<typeof useHealthSync>;
 
+/** What ÖRZA reads (P5): the four types app.json declares and the bridges request. */
 const METRICS: { label: string; icon: IconName }[] = [
   { label: 'Steps', icon: 'mci:shoe-print' },
-  { label: 'Active energy', icon: 'zap' },
-  { label: 'Distance', icon: 'map-pin' },
   { label: 'Sleep', icon: 'moon' },
-  { label: 'Heart rate', icon: 'heart' },
+  { label: 'Resting heart rate', icon: 'heart' },
   { label: 'Weight', icon: 'mci:scale-bathroom' },
-  { label: 'Water', icon: 'droplet' },
 ];
+
+/** Where the member removes ÖRZA's access themselves (iPhone; Android after a revoke Health Connect didn't confirm). */
+const REMOVE_PATH = {
+  android: 'Health Connect › App permissions › ÖRZA',
+  ios: 'Settings › Health › Data Access & Devices › ÖRZA',
+} as const;
 
 export function openWebHealth() {
   void WebBrowser.openBrowserAsync(`${WEB_URL}/dashboard/health`, { toolbarColor: colors.canvas, controlsColor: colors.ink }).catch(() => {});
@@ -178,9 +187,9 @@ function ConnectState({ health }: { health: Health }) {
       </View>
       <Text variant="callout" tone="text">
         ÖRZA reads your daily totals — never raw samples or locations — so your targets, reports and coaching reflect how you
-        really move, sleep and recover.
+        really move, sleep and recover. Connecting also lets Today count your steps from {health.name}.
       </Text>
-      <View style={styles.metrics} accessibilityLabel="Read: steps, active energy, distance, sleep, heart rate, weight and water">
+      <View style={styles.metrics} accessibilityLabel="Read: steps, sleep, resting heart rate and weight">
         {METRICS.map((m, i) => (
           <Animated.View key={m.label} entering={reduce ? undefined : FadeIn.delay(120 + i * 40)}>
             <Tag label={m.label} icon={m.icon} tone="neutral" />
@@ -204,7 +213,8 @@ function ConnectState({ health }: { health: Health }) {
         </AllowInHealthConnect>
       ) : (
         <Text variant="caption" tone="subtle" align="center">
-          You choose exactly what to share on the next screen, and you can stop syncing any time.
+          You choose exactly what to share on the next screen. Only daily totals are saved to your ÖRZA account, and you can
+          disconnect any time.
         </Text>
       )}
     </View>
@@ -249,25 +259,30 @@ function ConnectedState({ health }: { health: Health }) {
     }
   }
 
+  /**
+   * Disconnect (P9): ÖRZA stops reading the store at once — the import and steps from it. Android: every ÖRZA permission
+   * in Health Connect is revoked too; iPhone (nothing to revoke) or a revoke Health Connect didn't confirm: where the
+   * member removes ÖRZA themselves.
+   */
+  async function runDisconnect() {
+    const { revoked } = await health.disconnect();
+    haptics.success();
+    if (revoked) toast.success(`${name} disconnected — ÖRZA’s access is removed there too.`);
+    else toast.info(`${name} disconnected. To remove ÖRZA’s access too, open ${REMOVE_PATH[platform === 'android' ? 'android' : 'ios']}.`, 7000);
+  }
+
   function disconnect() {
     haptics.warning();
     Alert.alert(
-      `Stop syncing ${name}?`,
+      `Disconnect ${name}?`,
       platform === 'android'
-        ? 'ÖRZA will stop reading Health Connect on this phone. Days already synced stay in ÖRZA. To remove its access completely, open Health Connect › App permissions › ÖRZA.'
-        : 'ÖRZA will stop reading Apple Health on this phone. Days already synced stay in ÖRZA. To remove its access completely, open the Health app › your profile › Apps › ÖRZA.',
+        ? 'ÖRZA stops reading Health Connect on this phone — steps, sleep, resting heart rate and weight — and gives up its access there. Days already synced stay in ÖRZA.'
+        : `ÖRZA stops reading Apple Health on this phone — steps, sleep, resting heart rate and weight. Days already synced stay in ÖRZA. To remove its access too, open ${REMOVE_PATH.ios}.`,
       [
-        { text: 'Keep syncing', style: 'cancel' },
-        {
-          text: 'Stop syncing',
-          style: 'destructive',
-          onPress: () => {
-            void health.disconnect();
-            haptics.success();
-            toast.info(`${name} disconnected`);
-          },
-        },
-      ]
+        { text: 'Keep connected', style: 'cancel' },
+        { text: 'Disconnect', style: 'destructive', onPress: () => void runDisconnect() },
+      ],
+      { cancelable: true }
     );
   }
 
@@ -287,7 +302,8 @@ function ConnectedState({ health }: { health: Health }) {
       </View>
 
       <Text variant="small" tone="muted">
-        ÖRZA syncs your last 30 days whenever you open the app — at most every 3 hours — and you can sync now any time.
+        Sleep, resting heart rate and weight from your last 30 days sync whenever you open the app — at most every 3 hours —
+        and you can sync now any time. Steps count on their own, below.
       </Text>
 
       {record.lastError ? (
@@ -302,8 +318,8 @@ function ConnectedState({ health }: { health: Health }) {
           <Icon name="info" size={16} color={colors.cyan700} />
           <Text variant="caption" tone="text" style={styles.flex}>
             {platform === 'android'
-              ? 'Health Connect has nothing for the last 30 days yet. Apps like Google Fit, Samsung Health or your watch’s app need to share with Health Connect first.'
-              : 'Nothing came through from Apple Health. If you switched categories off, open Settings › Health › Data Access & Devices › ÖRZA and turn them on.'}
+              ? 'Health Connect has no sleep, resting heart rate or weight for the last 30 days yet. Apps like Google Fit, Samsung Health or your watch’s app need to share with Health Connect first.'
+              : 'No sleep, resting heart rate or weight came through from Apple Health. If you switched categories off, open Settings › Health › Data Access & Devices › ÖRZA and turn them on.'}
           </Text>
         </Animated.View>
       ) : record.lastDaysSent ? (
@@ -333,7 +349,13 @@ function ConnectedState({ health }: { health: Health }) {
           runs again as soon as you come back.
         </AllowInHealthConnect>
       ) : null}
-      <Button label="Stop syncing" variant="ghost" icon="x-circle" onPress={disconnect} accessibilityHint={`Stops reading ${name} on this phone`} />
+      <Button
+        label="Disconnect"
+        variant="ghost"
+        icon="x-circle"
+        onPress={disconnect}
+        accessibilityHint={platform === 'android' ? 'Stops reading Health Connect and removes ÖRZA’s access there' : `Stops reading ${name} on this phone`}
+      />
     </View>
   );
 }
@@ -385,7 +407,11 @@ function announce(outcome: Awaited<ReturnType<Health['syncNow']>>, name: string,
   } else if (outcome.status === 'empty') {
     haptics.warning();
     // "Connected —" only right after connecting; a later Sync now just reports what it found.
-    toast.info(justConnected ? `Connected — ${name} has no data for the last 30 days yet` : `${name} still has no data for the last 30 days`);
+    toast.info(
+      justConnected
+        ? `Connected — ${name} has no sleep, heart rate or weight for the last 30 days yet`
+        : `${name} still has no sleep, heart rate or weight for the last 30 days`
+    );
   } else if (outcome.status === 'error') {
     haptics.error();
     toast.error(outcome.message);

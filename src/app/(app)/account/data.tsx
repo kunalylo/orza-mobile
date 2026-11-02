@@ -149,7 +149,7 @@ export default function DataSettings() {
         large={false}
         eyebrow="Privacy & data"
         title="Your data, your call"
-        subtitle="Your data is stored securely. We never share personal health information without your consent."
+        subtitle="Your data is stored securely and never sold. We share it only to run ÖRZA — for example with our AI provider when you use an AI feature — as our privacy policy explains."
       />
 
       <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}>

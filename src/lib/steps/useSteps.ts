@@ -6,9 +6,9 @@
  * - `useTodaySteps()` — the Today card: reads on focus, every minute while Today is visible and on return to the app;
  *   the live reading, what counts (`sources`), what Today asks (`ask`: "Continue" before a system prompt, "Turn on" when
  *   the permission is already there) and the member's answers — `requestAccess(kind)`, `turnOn()`, `notNow()`,
- *   `motionInstead()`, `setAutoSteps(on)`.
- * - `useStepsSwitch()` — "Count steps automatically" for Settings › Privacy & data and the Health screen (no reads of
- *   its own).
+ *   `motionInstead()`, `setAutoSteps(on)`. `useTodaySteps({live: false})`: the same without reads of its own — "Count
+ *   steps automatically" on the Health screen and in Settings › Privacy & data (U3, U4: the app reads at launch and on
+ *   every return, and an answer reads at once).
  * - `refreshStepsNow(member, qc)` — a read right after a consent changed elsewhere (the Health screen's connect /
  *   disconnect), so Today follows at once.
  * Nothing is read or saved for a member without their consent on this install (P8) or with the switch off (P9): the
@@ -101,8 +101,16 @@ export function useStepsAutoSync() {
   useEffect(() => () => bindStepsMember(null), []);
 }
 
-/** Everything the Today steps card needs. */
-export function useTodaySteps() {
+export interface TodayStepsOptions {
+  /**
+   * Read on focus, every minute while the screen is visible and on return to the app (default true: Today). False: no
+   * reads of its own — the switch outside Today shows the last read's state.
+   */
+  live?: boolean;
+}
+
+/** Everything the Today steps card needs (and the "Count steps automatically" switch, with `live: false`). */
+export function useTodaySteps({ live = true }: TodayStepsOptions = {}) {
   const user = useSignedInUser();
   const qc = useQueryClient();
   const s = useSyncExternalStore(subscribeStepsState, getStepsState);
@@ -116,6 +124,7 @@ export function useTodaySteps() {
 
   useFocusEffect(
     useCallback(() => {
+      if (!live) return undefined;
       const m: StepsMember = { id: userId, timeZone: tz };
       const run = () => {
         // Timers keep running for a while in the background on Android; a sensor read there would only time out.
@@ -131,7 +140,7 @@ export function useTodaySteps() {
         clearInterval(timer);
         sub.remove();
       };
-    }, [userId, tz, qc])
+    }, [live, userId, tz, qc])
   );
 
   /** A read now, in the background — never waiting on a run already in flight (its saves can take a while). */
@@ -244,6 +253,8 @@ export function useTodaySteps() {
     healthEmpty: mine && s.healthEmpty,
     /** "Count steps automatically" is on (the member hasn't switched it off). */
     autoOn: !consent?.off,
+    /** The member agreed to some source on this install (the steps disclosure, the Health screen's connect). */
+    agreed: !!(consent?.store || consent?.phone),
     /** iPhone: the one-time motion offer was made. */
     motionOffered: !!consent?.motionOffered,
     /** M9: the next consent brings each source's full history (the disclosure's "Your steps from the last 30 days…"). */
@@ -273,40 +284,3 @@ export function useTodaySteps() {
   };
 }
 
-/**
- * "Count steps automatically" (P9) outside Today — Settings › Privacy & data and the Health screen's Steps card. Reads
- * nothing itself: `sources` is the last read's (the app reads at launch and on every return).
- */
-export function useStepsSwitch() {
-  const user = useSignedInUser();
-  const qc = useQueryClient();
-  const userId = user.id;
-  const tz = safeTimeZone(user.profile?.timezone);
-  const consent = useStepsConsent(userId);
-  const s = useSyncExternalStore(subscribeStepsState, getStepsState);
-  const mine = s.userId === userId;
-
-  /** Off: every source stops for the member at once, nothing more is read or saved; on: their consents count again. */
-  const setOn = useCallback(
-    async (on: boolean) => {
-      await setAutoSteps(userId, on);
-      void refreshStepsNow({ id: userId, timeZone: tz }, qc);
-    },
-    [userId, tz, qc]
-  );
-
-  return {
-    platform: stepsReader.platform,
-    /** "Apple Health" / "Health Connect". */
-    storeName: healthBridge.name,
-    /** The switch: on unless the member switched it off. */
-    on: !consent?.off,
-    /** The member agreed to some source on this install (the steps disclosure, the Health screen's connect). */
-    agreed: !!(consent?.store || consent?.phone),
-    /** The sources ON at the last read (the subtitle, §6: Health Connect / this phone / Apple Health / iPhone motion / off). */
-    sources: mine ? s.on : NO_SOURCES,
-    setOn,
-    /** The off sheet's "Open Health Connect" (Android) / the app's Settings page (iPhone). */
-    openStoreSettings: healthBridge.openManage,
-  };
-}
