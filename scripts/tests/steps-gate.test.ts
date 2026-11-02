@@ -8,11 +8,23 @@
  * reads stop; a consent withdrawn while a read was running → its readings are dropped. Also: what Today asks first
  * (§2.2: "Continue" before a system prompt, "Turn on" when the OS permission is already there), how far back the sync
  * reads (the sources ON), the shared phone's floor (M9) and the bases' instants the readers measure a count after (M5).
+ * R6: what Today's answers record (`useSteps`: the consent a granted ask means, "Not now", the disclosure's backfill line).
  */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { grantConsent, readConsent, sinceAtOf, stepsAsk, stepsGate, stillAllowed } from '../../src/lib/steps/plan';
+import {
+  consentKindOf,
+  fullBackfill,
+  grantConsent,
+  NOT_NOW_MS,
+  notNowActive,
+  readConsent,
+  sinceAtOf,
+  stepsAsk,
+  stepsGate,
+  stillAllowed,
+} from '../../src/lib/steps/plan';
 import type { DayRecord } from '../../src/lib/steps/policy';
 import type { StepFeatures, StepsAccess, StepsConsent } from '../../src/lib/steps/types';
 
@@ -157,5 +169,41 @@ describe('the bases’ instants each source measures a count after (M5, S-R4)', 
     };
     assert.deepEqual(sinceAtOf(['2026-10-25', '2026-10-24', '2026-10-23'], (d) => recs[d]), { '2026-10-25': t2 });
     assert.deepEqual(sinceAtOf(['2026-10-24'], (d) => recs[d]), {});
+  });
+});
+
+describe('Today’s answers to the ask (R6: `useSteps`, §2.2, §6, P19, M9)', () => {
+  test('a granted ask records the matching consent: Health Connect / Apple Health → the store; the phone’s counter → the phone', () => {
+    assert.equal(consentKindOf('hc'), 'store');
+    assert.equal(consentKindOf('healthkit'), 'store');
+    assert.equal(consentKindOf('phone'), 'phone');
+  });
+
+  test('“Not now — I’ll log steps” folds the ask for 30 days, per member', () => {
+    assert.equal(NOT_NOW_MS, 30 * 24 * 3_600_000);
+    assert.equal(notNowActive(undefined, t1), false);
+    assert.equal(notNowActive(agreed({}), t1), false, 'never said “Not now”');
+    assert.equal(notNowActive(agreed({ notNowUntil: t1 + NOT_NOW_MS }), t1), true);
+    assert.equal(notNowActive(agreed({ notNowUntil: t1 + NOT_NOW_MS }), t1 + NOT_NOW_MS), false, '30 days later: asked again');
+  });
+
+  test('M9, for the disclosure’s “Your steps from the last 30 days come in too”: the full backfill applies to the next consent?', () => {
+    assert.equal(fullBackfill({}, 'amy'), true, 'the first member on the install');
+    const amy = grantConsent({}, 'amy', 'store', t1);
+    assert.equal(fullBackfill(amy, 'amy'), true, 'Amy adding the phone’s counter: still hers');
+    assert.equal(fullBackfill(amy, 'ben'), false, 'Ben on Amy’s phone: from his consent only');
+    const both = grantConsent(amy, 'ben', 'phone', t2);
+    assert.equal(fullBackfill(both, 'ben'), false, 'Ben adding Health Connect: still a shared phone’s');
+    assert.equal(fullBackfill({}, 'cat', true), false, 'a member who had agreed deleted their account');
+    assert.equal(fullBackfill({ dan: agreed({ notNowUntil: t2 }) }, 'cat'), true, '“Not now” only is no consent');
+    // The same rule as the consent it predicts.
+    for (const [consents, id, former] of [
+      [{}, 'amy', false],
+      [amy, 'ben', false],
+      [both, 'amy', false],
+      [{}, 'cat', true],
+    ] as const) {
+      assert.equal(fullBackfill(consents, id, former), !grantConsent(consents, id, 'phone', t2, former)[id].sharedAtConsent);
+    }
   });
 });

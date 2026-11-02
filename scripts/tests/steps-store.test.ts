@@ -6,13 +6,14 @@
  *
  * T40 (the store's part): a member's day records go at sign-out, another member's stay; the prefs (consents, the
  * permission history) are not health data and stay in the backed-up documents folder, the day records go to the cache
- * folder; the v1 file keeps only its permission flags.
+ * folder; the v1 file keeps only its permission flags. R6: the Health screen's Disconnect withdraws the store consent
+ * (and, revoking Health Connect, forgets its first grant).
  */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { addDays } from '../../src/lib/alarms/schedule';
-import { grantConsent } from '../../src/lib/steps/plan';
+import { backfill, fullBackfill, grantConsent, readConsent } from '../../src/lib/steps/plan';
 import type { DayRecord } from '../../src/lib/steps/policy';
 import {
   KEEP_DAYS,
@@ -25,6 +26,8 @@ import {
   withAutoSave,
   withHcGrant,
   withoutConsent,
+  withoutConsentKind,
+  withoutHcGrant,
   withoutUserDays,
   type StepsDays,
   type StepsPrefs,
@@ -179,5 +182,59 @@ describe('prefs: consents, Health Connect’s first grant, the v1 file', () => {
     assert.equal(prefs.hcGrantAt, 1_000);
     assert.equal(withHcGrant(prefs, 2_000), prefs, 'a later sighting changes nothing');
     assert.equal(withHcGrant(prefs, Number.NaN), prefs);
+  });
+});
+
+describe('the Health screen’s Disconnect (R6: P9, M9, S-H2)', () => {
+  const agreedBoth = (): StepsPrefs => {
+    let prefs = loadPrefs(null, null).prefs;
+    prefs = withConsents(prefs, grantConsent(prefs.consents, 'a', 'store', 10));
+    prefs = withConsents(prefs, grantConsent(prefs.consents, 'a', 'phone', 20));
+    return withConsentPatch(prefs, 'a', { notNowUntil: 40, motionOffered: true });
+  };
+
+  test('withdraws only that kind: the member’s other consent and choices stay, other members are untouched', () => {
+    let prefs = agreedBoth();
+    prefs = withConsents(prefs, grantConsent(prefs.consents, 'b', 'store', 30));
+    const next = withoutConsentKind(prefs, 'a', 'store');
+    assert.deepEqual(next.consents.a, { phone: { at: 20 }, notNowUntil: 40, motionOffered: true, sharedAtConsent: false });
+    assert.deepEqual(readConsent(next.consents.a), { store: false, phone: true });
+    assert.equal(next.consents.b, prefs.consents.b);
+    assert.equal(next.formerConsent, undefined, 'still agreed to the phone: nothing for the install');
+    assert.equal(backfill(next.consents, 'a'), null, 'the first member keeps the full backfill');
+  });
+
+  test('nothing to withdraw → unchanged', () => {
+    const prefs = withoutConsentKind(agreedBoth(), 'a', 'store');
+    assert.equal(withoutConsentKind(prefs, 'a', 'store'), prefs);
+    assert.equal(withoutConsentKind(prefs, 'nobody', 'phone'), prefs);
+  });
+
+  test('the switch stays as the member set it (Disconnect is not the switch)', () => {
+    const off = withConsentPatch(agreedBoth(), 'a', { off: { at: 50 } });
+    assert.deepEqual(withoutConsentKind(off, 'a', 'store').consents.a.off, { at: 50 });
+  });
+
+  test('the member’s last consent withdrawn → the install keeps `formerConsent`: their walking stays in the phone’s history', () => {
+    let prefs = loadPrefs(null, null).prefs;
+    prefs = withConsents(prefs, grantConsent(prefs.consents, 'a', 'store', 10));
+    const gone = withoutConsentKind(prefs, 'a', 'store');
+    assert.equal(readConsent(gone.consents.a), null, 'nothing is read for them');
+    assert.equal(gone.formerConsent, true);
+    // Another member's first consent is a shared phone's; so is the same member's next one (the stretch without their
+    // consent may hold someone else's walking) — the disclosure's backfill line follows the same rule.
+    assert.equal(grantConsent(gone.consents, 'b', 'phone', 60, gone.formerConsent).b.sharedAtConsent, true);
+    assert.equal(fullBackfill(gone.consents, 'b', gone.formerConsent), false);
+    const back = grantConsent(gone.consents, 'a', 'store', 70, gone.formerConsent);
+    assert.equal(back.a.sharedAtConsent, true);
+    assert.equal(backfill(back, 'a'), 70, 'read again from the new consent');
+  });
+
+  test('S-H2: revoking Health Connect forgets its first grant, so the next grant’s day is measured again', () => {
+    const prefs = withHcGrant(loadPrefs(null, null).prefs, 1_000);
+    const revoked = withoutHcGrant(prefs);
+    assert.equal(revoked.hcGrantAt, undefined);
+    assert.equal(withHcGrant(revoked, 5_000).hcGrantAt, 5_000);
+    assert.equal(withoutHcGrant(revoked), revoked, 'none → unchanged');
   });
 });

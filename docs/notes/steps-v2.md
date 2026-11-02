@@ -1216,8 +1216,42 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
     re-subscribes on every flip to true (the native configure drops callbacks), unsubscribes on false; callback →
     `syncStepsInBackground()`; lazy `import()`, try/catch. kingstinct queues a wake-up's event until JS subscribes.
     No app.json change.
-- [ ] **R6.** `health/sync.ts`: the import without steps, connect sets `consent.store`, disconnect revokes.
+- [x] **R6.** `health/sync.ts`: the import without steps, connect sets `consent.store`, disconnect revokes.
   `useSteps.ts` API. Commit "steps v2: readers + sync".
+  - Import: only sleep / resting HR / weight (`aggregate.importRows` = `health/types.IMPORT_METRICS`; `PHONE_METRICS` = the
+    4 read, P5; `HEALTH_METRICS` stays the server's 8 for the Health screen's types); both bridges' `readDays` no longer
+    read steps (the import must not read them for a member who never agreed or switched off). Connect → `sync.agreeToSteps(
+    user, 'store')` + a steps read (Android: S-H2's grant noted when Steps was granted). Disconnect (now async →
+    `{revoked}`): record off, `sync.withdrawSteps(user, 'store')` (a read in flight dropped, today's published reading
+    cleared), `bridge.revokeAll()` (iPhone: false → U3 shows the §6 Settings path), on a revoke `store.forgetHcGrant()`; a
+    steps read follows. Admins skipped. Pure parts tested: `plan.consentKindOf` / `NOT_NOW_MS` / `notNowActive` /
+    `fullBackfill`, `storeData.withoutConsentKind` / `withoutHcGrant` (steps-gate / steps-store), new
+    `health-import.test.ts` (in `test:steps`). test:steps 326, test:alarms 69.
+  - `useSteps.ts`: `useTodaySteps()` adds `requestAccess(kind = 'phone')` (granted → that kind's consent, the switch on,
+    "Not now" cleared; a refusal records nothing), `turnOn(kind?)` (consent only; default the ask's kind, none → the switch
+    only), `setAutoSteps(on)`, `notNow()` (`sync.foldStepsAsk`: +30 days), `motionInstead()`, `markMotionOffered()`,
+    `openStoreSettings` / `openStoreInstall`; exposes `firstAsk`, `store`, `storeName`, `consent`, `sources`, `counter`,
+    `countingToday` (some source has a reading today: U1's `manual = !countingToday`, E-1's "HC 0 → Log steps"), `ask`,
+    `askFolded` (published per read as `StepsState.notNow`: time-based, no `Date.now()` in render), `healthEmpty`,
+    `autoOn`, `motionOffered`, `fullBackfill` (M9: the disclosure's "last 30 days" line). New `useStepsSwitch()` (Settings
+    / Health screen: `on`, `agreed`, `sources`, `setOn`, `openStoreSettings`; no reads of its own) and
+    `refreshStepsNow(member, qc)`.
+  - Deviations: (1) No migration of v1 Health connections to `consent.store` (R5a's "may"): P8 wants the v2 disclosure,
+    and v1 Physical-activity grants get no phone consent (R5a) — a store-only migration would leave a non-stepTracking
+    tester counting from HC alone with no "Turn on" for the phone (the ask hides once something is ON). Only tester builds
+    had v1; one "Turn on" restores it. (2) Withdrawing a member's last consent sets the install's `formerConsent` (M9),
+    else a later member's first consent would back-fill over the withdrawn member's walking; that member's own re-consent
+    then also reads from the consent on (conservative). (3) A Disconnect that revoked HC forgets `hcGrantAt` (S-H2: HC may
+    not count the phone between revoke and re-grant) and ignores the readers' sightings of the still-reported grant until
+    the process restarts; a sheet answered with Steps (Today's `hc`, the Health connect) notes it explicitly
+    (`noteHcGrant(at, true)`). (4) Health connect records `consent.store` but leaves "Count steps automatically" as set
+    (off stays off); only Today's flows switch it on. (5) §5's `useMotionInstead()` is `motionInstead()` (a `use…` name
+    reads as a hook). (6) `ConnectCard`: `void health.disconnect()` only — its copy is U3's.
+  - For U1–U4: now-inaccurate Health screen copy — ConnectCard's 7 metric tags, its Stop-syncing alert (Android now
+    revokes; iPhone: show the Settings path when `revoked` is false), `lastEmpty` / "No health data yet" (they now mean no
+    sleep / resting HR / weight: steps aren't imported), StepsAutoCard's v1 "whichever counted more". An `hc` refusal isn't
+    persisted (U2's "after an HC refusal" button: `requestAccess('hc')` → `denied` in card state, or add a prefs flag).
+    v1 members (Health connected or Physical activity granted) see "Turn on" (`ask.granted`).
 
 **Phase U: UI**
 

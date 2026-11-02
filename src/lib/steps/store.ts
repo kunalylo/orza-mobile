@@ -14,7 +14,7 @@
 import { File, Paths } from 'expo-file-system';
 import { useSyncExternalStore } from 'react';
 
-import { grantConsent } from './plan';
+import { fullBackfill, grantConsent } from './plan';
 import type { DayRecord } from './policy';
 import {
   loadDays,
@@ -26,6 +26,8 @@ import {
   withDayRecord,
   withHcGrant,
   withoutConsent,
+  withoutConsentKind,
+  withoutHcGrant,
   withoutUserDays,
   type ConsentChoices,
   type StepsDays,
@@ -167,9 +169,23 @@ export function updateStepsConsent(userId: string, patch: ConsentChoices) {
   setPrefs(withConsentPatch(prefs(), userId, patch));
 }
 
+/**
+ * `userId` withdrew `kind` (the Health screen's Disconnect: the store): nothing of it is read for them from now on; the
+ * rest of their record stays (`storeData.withoutConsentKind`; their last consent → the install's `formerConsent`).
+ */
+export function withdrawStepsConsent(userId: string, kind: keyof ReadConsent) {
+  setPrefs(withoutConsentKind(prefs(), userId, kind));
+}
+
 /** Account deletion: `userId`'s consent record goes too (and their last-save time; the install keeps `formerConsent`). */
 export function removeStepsConsent(userId: string) {
   setPrefs(withoutConsent(prefs(), userId));
+}
+
+/** M9: `userId`'s next consent reads each source's full history (the disclosure says so); false on a shared phone. */
+export function stepsFullBackfill(userId: string): boolean {
+  const p = prefs();
+  return fullBackfill(p.consents, userId, !!p.formerConsent);
 }
 
 /** When this phone last had an automatic save of `userId`'s steps applied (null: never) — survives sign-out (M5c3). */
@@ -188,9 +204,27 @@ export function hcGrantAt(): number | null {
   return prefs().hcGrantAt ?? null;
 }
 
-/** Health Connect's `READ_STEPS` seen granted now: kept only the first time. */
-export function noteHcGrant(at = Date.now()) {
+/**
+ * Health Connect's permissions were revoked in this process (the Health screen's Disconnect): Health Connect goes on
+ * reporting them granted until the app process restarts (RNHC), so a sighting no longer counts as a grant until then.
+ */
+let hcRevokedThisRun = false;
+
+/**
+ * Health Connect's `READ_STEPS` seen granted now: kept only the first time. `explicit`: the member has just granted it
+ * (a permission sheet answered) — noted even after a revoke in this process; a mere sighting (the readers' checks) isn't
+ * then, as it may be the revoked grant still reported.
+ */
+export function noteHcGrant(at = Date.now(), explicit = false) {
+  if (explicit) hcRevokedThisRun = false;
+  else if (hcRevokedThisRun) return;
   setPrefs(withHcGrant(prefs(), at));
+}
+
+/** The Health screen's Disconnect revoked Health Connect: its first grant is forgotten, the next one is noted anew (S-H2). */
+export function forgetHcGrant() {
+  hcRevokedThisRun = true;
+  setPrefs(withoutHcGrant(prefs()));
 }
 
 /** iPhone: Apple Health's background delivery of steps is configured (§4.3). */

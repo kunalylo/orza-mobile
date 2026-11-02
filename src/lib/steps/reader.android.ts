@@ -291,7 +291,7 @@ export const stepsReader: StepsReader = {
       if ((await availability()) !== 'available') return 'unavailable';
       const grant = await healthBridge.requestSteps();
       if (!grant.granted) return 'denied'; // a refusal, or Health Connect's lockout after two (it can't be told apart)
-      noteHcGrant();
+      noteHcGrant(Date.now(), true); // the member's own grant: noted even after a Disconnect in this process
       return 'granted';
     }
     if (kind !== 'phone' || !(await phoneAvailable())) return 'unavailable';

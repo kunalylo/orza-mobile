@@ -13,7 +13,8 @@
  *   prompt, "Turn on" when the permission is already there). With consent the readers read only the kinds agreed to,
  *   never before a shared phone's floor (M9), as far back as the sources ON reach, plus each base's count since its
  *   instant (M5, `ReadOptions.sinceAt`). A read that finishes after the member switched off / withdrew a kind is
- *   dropped; a save job stops before its next day.
+ *   dropped; a save job stops before its next day. The member's answers: `agreeToSteps` (Today's disclosure, the Health
+ *   screen's connect), `withdrawSteps` (its Disconnect), `setAutoSteps` (the switch), `foldStepsAsk` ("Not now", P19).
  * - `refreshSteps(member, opts)`: the read + publish is single-flight; a call during a run queues one follow-up run that
  *   keeps the most important reason (`plan.mergeReason`). Every native / health call is time-bounded.
  * - Saving runs on its own queue (the newest readings win, pending past days are kept): a slow network never holds up
@@ -47,6 +48,8 @@ import {
   healthEmpty,
   mergeDays,
   mergeReason,
+  NOT_NOW_MS,
+  notNowActive,
   pendingPastDays,
   readConsent,
   shouldReadPast,
@@ -67,12 +70,14 @@ import {
   deleteUserDays,
   getDayRecord,
   getStepsConsent,
+  grantStepsConsent,
   lastAutoSave,
   noteAutoSave,
   removeStepsConsent,
   stepsConsents,
   updateDayRecord,
   updateStepsConsent,
+  withdrawStepsConsent,
 } from './store';
 import type { DayReading, ReadConsent, RefreshReason, StepsAccess } from './types';
 
@@ -132,6 +137,8 @@ export interface StepsState {
   on: CountingSource[];
   /** What Today asks the member for (§2.2; null: nothing — something counts, or nothing can on this phone). */
   ask: StepsAskState | null;
+  /** P19: the member said "Not now — I'll log steps" less than 30 days ago — Today's ask stays folded. */
+  notNow: boolean;
   /**
    * iPhone with Apple Health ON: it has no steps for today nor the 7 days before (§2.2) — Today offers "Log steps" and,
    * once, the iPhone's motion. Never "you denied": HealthKit can't tell.
@@ -152,6 +159,7 @@ const EMPTY: StepsState = {
   consent: null,
   on: [],
   ask: null,
+  notNow: false,
   healthEmpty: false,
   date: null,
   today: null,
@@ -246,7 +254,8 @@ async function readAndPublish(member: StepsMember, opts: RefreshOptions) {
   const today = utcToZoned(new Date(now), tz).date;
   const background = opts.reason === 'background';
   const healthConnected = getHealthRecord(member.id).connected;
-  setState(sameMember ? { reading: true, healthConnected } : { ...EMPTY, userId: member.id, healthConnected, reading: true });
+  const notNow = notNowActive(getStepsConsent(member.id), now);
+  setState(sameMember ? { reading: true, healthConnected, notNow } : { ...EMPTY, userId: member.id, healthConnected, notNow, reading: true });
 
   let job: SaveJob | null = null;
   try {
@@ -349,19 +358,68 @@ function appleHealthEmpty(userId: string, today: string, gate: StepsGate, access
  * "Count steps automatically" (Settings › Privacy & data, the Health screen). Off: nothing is read or saved for the
  * member from now on, and every source this phone runs for them stops (the Recording API unsubscribed, the sampler
  * stopped, Apple Health's background delivery cleared); steps already saved stay. On: the member's consents count again
- * (none yet: Today asks, §2.2). The caller then refreshes (`refreshSteps`, reason `permission`) so Today follows at
- * once. Never throws.
+ * (none yet: Today asks, §2.2 — no longer folded by an earlier "Not now"). The caller then refreshes (`refreshSteps`,
+ * reason `permission`) so Today follows at once. Never throws.
  */
 export async function setAutoSteps(userId: string, on: boolean): Promise<void> {
-  const off = !!getStepsConsent(userId)?.off;
-  if (off !== !on) updateStepsConsent(userId, { off: on ? undefined : { at: Date.now() } });
+  const c = getStepsConsent(userId);
+  if (!!c?.off !== !on) updateStepsConsent(userId, { off: on ? undefined : { at: Date.now() } });
   switchedOff = null;
   preparedFor = null;
   lastPastRead = null;
-  if (on) return;
+  if (on) {
+    unfold(userId);
+    return;
+  }
   if (nextSave?.userId === userId) nextSave = null;
   if (state.userId === userId) setState({ consent: null, on: [], today: null, healthEmpty: false, ask: stepsAsk(state.access, null) });
   await switchOff(userId, foregroundMember?.id === userId ? foregroundMember.timeZone : 'UTC');
+}
+
+/* ───────────────────────────── The member's answers (R6) ───────────────────────────── */
+
+/** "Not now" no longer folds Today's ask (the member agreed, or switched counting on). */
+function unfold(userId: string) {
+  if (getStepsConsent(userId)?.notNowUntil != null) updateStepsConsent(userId, { notNowUntil: undefined });
+  if (state.userId === userId && state.notNow) setState({ notNow: false });
+}
+
+/**
+ * `userId` agreed to ÖRZA reading `kind` for them (P8): Today's disclosure ("Continue" and the system prompt granted,
+ * or "Turn on" when the permission was already there), the Health screen's connect (the store). Recorded per member on
+ * this install (`plan.grantConsent`: a shared phone reads only from now on, M9); "Not now" no longer folds the ask; the
+ * kind's history is read at the next run. `switchOn`: "Count steps automatically" goes back on too — Today's flows, where
+ * the member asked to count; the Health screen's connect leaves the switch as the member set it. The caller then
+ * refreshes (reason `permission`). Never throws.
+ */
+export async function agreeToSteps(userId: string, kind: keyof ReadConsent, opts: { switchOn?: boolean } = {}): Promise<void> {
+  grantStepsConsent(userId, kind);
+  unfold(userId);
+  lastPastRead = null;
+  if (opts.switchOn) await setAutoSteps(userId, true);
+}
+
+/**
+ * `userId` withdrew `kind` (the Health screen's Disconnect: the store, P9): nothing of it is read or saved for them from
+ * now on — a read in flight is dropped and a save job stops before its next day (`plan.stillAllowed`), and today's
+ * published reading goes at once. The next read (the caller refreshes, reason `permission`) publishes what still counts
+ * and switches the kind's sources off (iPhone: Apple Health's background delivery; with no consent left, every source).
+ * The switch and the member's other consent stay. Never throws.
+ */
+export function withdrawSteps(userId: string, kind: keyof ReadConsent) {
+  withdrawStepsConsent(userId, kind);
+  lastPastRead = null;
+  if (nextSave?.userId === userId && nextSave.consent[kind]) nextSave = null;
+  if (state.userId === userId && state.consent?.[kind]) setState({ today: null, healthEmpty: false });
+}
+
+/**
+ * P19: "Not now — I'll log steps" — Today's ask stays folded for 30 days for `userId` (the switch and the Health screen
+ * keep the way back).
+ */
+export function foldStepsAsk(userId: string, now = Date.now()) {
+  updateStepsConsent(userId, { notNowUntil: now + NOT_NOW_MS });
+  if (state.userId === userId) setState({ notNow: true });
 }
 
 /* ───────────────────────────── Save queue ───────────────────────────── */

@@ -6,7 +6,8 @@
  *
  * Steps v2 (`docs/notes/steps-v2.md`): ÖRZA reads only Steps, Sleep, Resting heart rate and Weight (P5) — the Health
  * screen asks for those four (`requestAccess`), Today's steps card for Steps alone plus background reading
- * (`requestSteps`). Automatic steps read `stepsBetween` (an aggregate per instant range, with the apps it came from).
+ * (`requestSteps`). The Health import (`readDays`) reads the other three; automatic steps read `stepsBetween` (an
+ * aggregate per instant range, with the apps it came from).
  */
 import Constants from 'expo-constants';
 import { Linking, Platform } from 'react-native';
@@ -200,8 +201,9 @@ export const healthBridge: HealthBridge = {
     const range: TimeRange = { operator: 'between', startTime: start.toISOString(), endTime: end.toISOString() };
     const can = (t: ReadType) => allowed.has(t);
 
+    // Never steps (steps v2 §0.5): the import doesn't carry them, and Steps are read only for a member who agreed to it
+    // (`lib/steps`, through `stepsBetween`).
     const jobs: Promise<unknown>[] = [];
-    if (can('Steps')) jobs.push(daily(hc, collector, 'Steps', 'steps', range, (r) => r.COUNT_TOTAL));
     if (can('RestingHeartRate')) jobs.push(daily(hc, collector, 'RestingHeartRate', 'resting_hr', range, (r) => r.BPM_AVG));
     if (can('Weight')) {
       jobs.push(

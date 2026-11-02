@@ -7,6 +7,12 @@
  * - `useHealthSync()` — everything the Health screen needs: availability, connect / disconnect / sync now, state.
  * - `useHealthAutoSync()` — mount once (signed-in area): syncs on launch and whenever the app returns to the
  *   foreground, at most every 3 hours, only after the user connected.
+ *
+ * Steps v2 (`docs/notes/steps-v2.md` §0.5, §5): the import carries sleep, resting heart rate and weight — never steps
+ * (`aggregate.importRows`; the bridges no longer read them for it). Steps reach the account only through the steps sync
+ * (`lib/steps`, `POST /api/track/steps`), for a member who agreed and with "Count steps automatically" on. Connecting
+ * is that agreement for the store's steps (`consent.store`, P8); Disconnect withdraws it at once and, on Android,
+ * revokes every ÖRZA permission in Health Connect (P9).
  */
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
@@ -14,7 +20,11 @@ import { AppState, type AppStateStatus } from 'react-native';
 
 import { api, ApiError, errorMessage } from '@/lib/api';
 import { useAuth, useSignedInUser } from '@/lib/auth';
+import { forgetHcGrant, noteHcGrant } from '@/lib/steps/store';
+import { agreeToSteps, stepsMemberOf, withdrawSteps } from '@/lib/steps/sync';
+import { refreshStepsNow } from '@/lib/steps/useSteps';
 
+import { importRows } from './aggregate';
 import { healthBridge } from './bridge';
 import { getHealthRecord, isSyncing, setSyncing, updateHealthRecord, useHealthRecord, type HealthSyncRecord } from './store';
 import {
@@ -119,7 +129,8 @@ export async function syncHealth(userId: string, opts: SyncOptions): Promise<Hea
       updateHealthRecord(userId, { lastAttemptAt: startedAt });
       return { status: 'skipped', reason: 'unsupported' };
     }
-    const days = await healthBridge.readDays(SYNC_DAYS);
+    // Never steps (§0.5): they go through the steps sync alone.
+    const days = importRows(await healthBridge.readDays(SYNC_DAYS));
     if (!days.length) {
       updateHealthRecord(userId, {
         lastAttemptAt: startedAt,
@@ -180,6 +191,15 @@ export type ConnectResult =
   | { status: 'unavailable'; availability: HealthAvailability }
   | { status: 'error'; message: string };
 
+export interface DisconnectResult {
+  /**
+   * The store took away every ÖRZA permission (Android: Health Connect). False on iPhone — HealthKit has no such call:
+   * the member removes ÖRZA in Settings › Health › Data Access & Devices (the screen says so) — or when Health Connect
+   * didn't answer. Either way ÖRZA stopped reading at once (the import is off, the steps consent withdrawn).
+   */
+  revoked: boolean;
+}
+
 /** State + actions for the Health screen. */
 export function useHealthSync() {
   const user = useSignedInUser();
@@ -215,13 +235,23 @@ export function useHealthSync() {
   /**
    * `onlyIfGranted`: don't show the permission sheet — connect only if ÖRZA can already read something (the person just
    * allowed it in Health Connect's settings), otherwise report `denied`.
+   *
+   * Connected = the member's consent to ÖRZA counting their steps from the store too (`consent.store`, P8 — the card
+   * says so); "Count steps automatically" stays as the member set it. Today then reads at once.
    */
   const connect = useCallback(async (opts?: { onlyIfGranted?: boolean }): Promise<ConnectResult> => {
     setConnecting(true);
     try {
       const a = await recheck();
       if (a !== 'available') return { status: 'unavailable', availability: a };
-      const granted = opts?.onlyIfGranted ? await healthBridge.hasAccess() : (await healthBridge.requestAccess()).granted;
+      let granted: boolean;
+      if (opts?.onlyIfGranted) granted = await healthBridge.hasAccess();
+      else {
+        const r = await healthBridge.requestAccess();
+        granted = r.granted;
+        // S-H2: the member's own grant of Health Connect's steps (noted even right after a Disconnect in this process).
+        if (r.granted && healthBridge.platform === 'android' && r.metrics.includes('steps')) noteHcGrant(Date.now(), true);
+      }
       if (!granted) return { status: 'denied' };
       updateHealthRecord(user.id, {
         connected: true,
@@ -231,6 +261,10 @@ export function useHealthSync() {
         needsReconnect: false,
         lastEmpty: false,
       });
+      if (!user.is_admin) {
+        await agreeToSteps(user.id, 'store');
+        void refreshStepsNow(stepsMemberOf(user), qc);
+      }
       const outcome = await syncHealth(user.id, { reason: 'connect', queryClient: qc });
       return { status: 'connected', outcome };
     } catch (e) {
@@ -238,11 +272,23 @@ export function useHealthSync() {
     } finally {
       setConnecting(false);
     }
-  }, [qc, recheck, user.id]);
+  }, [qc, recheck, user]);
 
-  const disconnect = useCallback(() => {
+  /**
+   * Stop syncing: the import stops, and steps from the store stop at once (`consent.store` withdrawn — Health Connect
+   * goes on answering until the app restarts, so the consent is what stops the reads; the phone's own counter goes on
+   * if the member agreed to it). Android: every ÖRZA permission in Health Connect is revoked (P9) and its first grant
+   * forgotten, so the next grant's day is measured again (S-H2). iPhone: nothing to revoke (`revoked: false`). Never
+   * throws.
+   */
+  const disconnect = useCallback(async (): Promise<DisconnectResult> => {
     updateHealthRecord(user.id, { connected: false, lastError: null, needsReconnect: false, lastEmpty: false });
-  }, [user.id]);
+    withdrawSteps(user.id, 'store');
+    const revoked = await healthBridge.revokeAll();
+    if (revoked) forgetHcGrant();
+    if (!user.is_admin) void refreshStepsNow(stepsMemberOf(user), qc);
+    return { revoked };
+  }, [qc, user]);
 
   const syncNow = useCallback(() => syncHealth(user.id, { reason: 'manual', queryClient: qc }), [qc, user.id]);
 

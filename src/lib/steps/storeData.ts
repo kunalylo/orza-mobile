@@ -5,7 +5,7 @@
  * - **Prefs** (`orza-steps-prefs.json`, the documents folder — kept, backed up): not health data. Per install: the
  *   Android "Physical activity" history (asked / refused for good), when ÖRZA first saw Health Connect's steps read
  *   granted (S-H2), whether Apple Health's background delivery is set up (§4.3), whether a member who had agreed has
- *   deleted their account (M9). Per member: the steps consent (M9), and when this phone last saved their steps
+ *   deleted their account or withdrawn every consent (M9). Per member: the steps consent (M9), and when this phone last saved their steps
  *   automatically (a time, no steps: M5c3).
  * - **Day records** (`orza-steps-days.json`, the cache folder — out of iCloud / Android backups, and the system may
  *   purge it): per member and day, what this phone saved and saw on the server (`policy.DayRecord`). Safe to lose: the
@@ -38,8 +38,9 @@ export interface StepsPrefs {
   /** iPhone: Apple Health's background delivery of steps is configured (the observer subscribes at launch). */
   hkBackground?: boolean;
   /**
-   * A member who had agreed deleted their account (their consent record is gone): a later member's first consent is
-   * still a shared phone's (M9) — the phone's history holds the deleted member's walking.
+   * A member who had agreed deleted their account (their consent record is gone) or withdrew every consent (the Health
+   * screen's Disconnect, R6): a later first consent — theirs too — is still a shared phone's (M9): the phone's history
+   * holds that member's walking.
    */
   formerConsent?: boolean;
   /** Per member: their steps consent (M9). */
@@ -204,6 +205,31 @@ export function withoutConsent(prefs: StepsPrefs, userId: string): StepsPrefs {
     consents,
     ...(Object.keys(autoSavedAt).length ? { autoSavedAt } : {}),
   };
+}
+
+/**
+ * `userId` withdrew `kind` (the Health screen's Disconnect: the store, R6): its stamp goes, nothing of that kind is read
+ * for them; their other consent and choices (the switch, "Not now", the motion offer, `sharedAtConsent`) stay.
+ * Unchanged when they hadn't agreed to it. Their last consent withdrawn → `formerConsent` (M9: their walking stays in
+ * the phone's history, so the next first consent on this install — theirs too — reads from the consent on).
+ */
+export function withoutConsentKind(prefs: StepsPrefs, userId: string, kind: 'store' | 'phone'): StepsPrefs {
+  const mine = prefs.consents[userId];
+  if (!mine?.[kind]) return prefs;
+  const next: StepsConsent = { ...mine };
+  delete next[kind];
+  const left = !!(next.store || next.phone);
+  return { ...prefs, ...(left ? {} : { formerConsent: true }), consents: { ...prefs.consents, [userId]: next } };
+}
+
+/**
+ * S-H2 after a revoke (the Health screen's Disconnect, R6): Health Connect's first grant forgotten, so the next grant's
+ * day is measured again — Health Connect may not have counted this phone in between (unchanged when none is known).
+ */
+export function withoutHcGrant(prefs: StepsPrefs): StepsPrefs {
+  if (prefs.hcGrantAt == null) return prefs;
+  const { hcGrantAt: _gone, ...rest } = prefs;
+  return rest;
 }
 
 /** This phone's automatic save of `userId`'s steps was applied at `at` (kept only when later than the one known). */

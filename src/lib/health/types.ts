@@ -5,6 +5,7 @@
  * `POST /api/health/import` accepts: one row of daily totals / averages per local calendar day.
  */
 
+/** Every metric the server knows (its import and `GET /api/health/days`; the website and other sources send them all). */
 export const HEALTH_METRICS = [
   'steps',
   'active_kcal',
@@ -17,6 +18,19 @@ export const HEALTH_METRICS = [
 ] as const;
 
 export type HealthMetric = (typeof HEALTH_METRICS)[number];
+
+/**
+ * Steps v2 (P5): what this phone reads from Apple Health / Health Connect — the minimum the app shows. Active energy,
+ * distance, heart rate and water are neither asked for nor read.
+ */
+export const PHONE_METRICS = ['steps', 'sleep_minutes', 'resting_hr', 'weight_kg'] as const satisfies readonly HealthMetric[];
+
+/**
+ * Steps v2 (§0.5): what the Health import sends — never steps. They reach the account only through
+ * `POST /api/track/steps` (`lib/steps`: the member's steps consent, the "Count steps automatically" switch, the edit
+ * marker), so the import can't raise a day the member edited or switched off.
+ */
+export const IMPORT_METRICS = ['sleep_minutes', 'resting_hr', 'weight_kg'] as const satisfies readonly HealthMetric[];
 export type HealthDayValues = Partial<Record<HealthMetric, number>>;
 /** One local calendar day (`YYYY-MM-DD`) of daily totals / averages. */
 export type HealthDayInput = { date: string } & HealthDayValues;

@@ -262,7 +262,7 @@ function ConnectedState({ health }: { health: Health }) {
           text: 'Stop syncing',
           style: 'destructive',
           onPress: () => {
-            health.disconnect();
+            void health.disconnect();
             haptics.success();
             toast.info(`${name} disconnected`);
           },

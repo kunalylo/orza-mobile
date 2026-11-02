@@ -9,7 +9,9 @@
  * - the shared-phone backfill (M9): the first member to agree on an install gets each source's full history, a later
  *   member only what was counted from their own consent on;
  * - what Today asks first and which sources are ON (§2.1, §2.2, S-A3: on Android 14+ Health Connect counts the phone
- *   itself, so the phone's own sources go off); Apple Health's "no steps" state (§2.2).
+ *   itself, so the phone's own sources go off); Apple Health's "no steps" state (§2.2);
+ * - what the member's answers record (R6, `useSteps.ts`): the consent a granted ask means, "Not now" (P19), whether the
+ *   disclosure promises the full backfill (M9).
  */
 import { addDays } from '../alarms/schedule';
 
@@ -138,11 +140,22 @@ export function pendingPastDays(
 const agreed = (c: StepsConsent | undefined) => !!(c?.store || c?.phone);
 
 /**
+ * The `sharedAtConsent` that `userId`'s next consent carries: their own while they still agree to a kind; at a first
+ * consent (or one after they withdrew every kind), whether another member on this install agreed — or one who had
+ * agreed left (`formerConsent`: an account deleted, every consent withdrawn).
+ */
+function sharedOnConsent(consents: Readonly<Record<string, StepsConsent>>, userId: string, formerConsent: boolean): boolean {
+  const mine = consents[userId];
+  if (mine && agreed(mine)) return mine.sharedAtConsent;
+  return formerConsent || Object.entries(consents).some(([id, c]) => id !== userId && agreed(c));
+}
+
+/**
  * `userId` agreed at `at` to ÖRZA reading `kind` (the steps disclosure): the install's consent records with it added
  * (unchanged when already agreed). At the member's first consent, `sharedAtConsent` = another member on this install
  * already agreed — a shared phone: nothing from before this consent is read for them (`backfill`). That includes a
- * member who agreed and has since deleted their account (`formerConsent`, the prefs' install flag: their record is
- * gone, their walking is still in the phone's history). A member coming back keeps their record, so neither flag nor
+ * member who agreed and has since deleted their account or withdrawn every consent (`formerConsent`, the prefs' install
+ * flag: their walking is still in the phone's history). A member coming back keeps their record, so neither flag nor
  * floor moves.
  */
 export function grantConsent(
@@ -154,9 +167,15 @@ export function grantConsent(
 ): Record<string, StepsConsent> {
   const mine = consents[userId];
   if (mine?.[kind]) return consents as Record<string, StepsConsent>;
-  const shared =
-    mine && agreed(mine) ? mine.sharedAtConsent : formerConsent || Object.entries(consents).some(([id, c]) => id !== userId && agreed(c));
-  return { ...consents, [userId]: { ...mine, [kind]: { at }, sharedAtConsent: shared } };
+  return { ...consents, [userId]: { ...mine, [kind]: { at }, sharedAtConsent: sharedOnConsent(consents, userId, formerConsent) } };
+}
+
+/**
+ * M9, for the disclosure (§6: "Your steps from the last 30 days come in too"): does `userId`'s next consent read each
+ * source's full history? False on a shared phone (`grantConsent` would mark it `sharedAtConsent`: from the consent on).
+ */
+export function fullBackfill(consents: Readonly<Record<string, StepsConsent>>, userId: string, formerConsent = false): boolean {
+  return !sharedOnConsent(consents, userId, formerConsent);
 }
 
 /**
@@ -295,6 +314,22 @@ export function stepsAsk(access: StepsAccess | null | undefined, gate: StepsGate
   const kind = access?.firstAsk;
   if (!access || !kind || kind === 'none' || (gate && gate.on.length > 0)) return null;
   return { kind, granted: kind === 'phone' ? access.phonePermission === 'granted' : access.store === 'granted' };
+}
+
+/** The consent a granted ask records (§2.2): Health Connect / Apple Health → the store; the phone's counter → phone. */
+export function consentKindOf(ask: StepsAsk): keyof ReadConsent {
+  return ask === 'phone' ? 'phone' : 'store';
+}
+
+/**
+ * P19: "Not now — I'll log steps" folds Today's ask for this long (per member; the switch and the Health screen keep the
+ * way back).
+ */
+export const NOT_NOW_MS = 30 * 24 * H;
+
+/** P19: the member's "Not now" still folds Today's ask at `now`. */
+export function notNowActive(c: StepsConsent | null | undefined, now: number): boolean {
+  return typeof c?.notNowUntil === 'number' && c.notNowUntil > now;
 }
 
 /**

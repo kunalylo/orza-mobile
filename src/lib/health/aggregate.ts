@@ -2,7 +2,7 @@
  * Pure helpers shared by the Apple Health and Health Connect readers: local dates, value cleaning and
  * "sleep credited to the morning you woke up". No native imports — safe on every platform.
  */
-import { HEALTH_METRICS, METRIC_INFO, type HealthDayInput, type HealthDayValues, type HealthMetric } from './types';
+import { HEALTH_METRICS, IMPORT_METRICS, METRIC_INFO, type HealthDayInput, type HealthDayValues, type HealthMetric } from './types';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -76,6 +76,27 @@ export class DayCollector {
     }
     return out;
   }
+}
+
+/**
+ * Steps v2 (§0.5, P5): the rows `POST /api/health/import` gets — only `IMPORT_METRICS` (never steps: they reach the
+ * account through `POST /api/track/steps` alone); a day left with nothing is not sent. The input is left as it was.
+ */
+export function importRows(days: readonly HealthDayInput[]): HealthDayInput[] {
+  const out: HealthDayInput[] = [];
+  for (const day of days) {
+    const row: HealthDayInput = { date: day.date };
+    let any = false;
+    for (const m of IMPORT_METRICS) {
+      const v = day[m];
+      if (v !== undefined) {
+        row[m] = v;
+        any = true;
+      }
+    }
+    if (any) out.push(row);
+  }
+  return out;
 }
 
 /* ───────────────────────────── Sleep ───────────────────────────── */

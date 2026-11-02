@@ -8,10 +8,10 @@
  *
  * Steps v2 (`docs/notes/steps-v2.md`): ÖRZA reads only Steps, Sleep, Resting heart rate and Weight (P5) and writes
  * nothing (no share types: app.json's `NSHealthUpdateUsageDescription` is off, P10). The Health screen asks for the
- * four (`requestAccess`), Today's steps card for StepCount alone (`requestSteps`). Automatic steps read `stepsBetween`
- * (a statistics sum per instant range: iPhone + Apple Watch counted once, like the Health app) and set up background
- * delivery of new steps (`configureStepsBackground`, §4.3; the app.json entitlement comes from the plugin's
- * `background: true`).
+ * four (`requestAccess`), Today's steps card for StepCount alone (`requestSteps`). The Health import (`readDays`) reads
+ * the other three; automatic steps read `stepsBetween` (a statistics sum per instant range: iPhone + Apple Watch counted
+ * once, like the Health app) and set up background delivery of new steps (`configureStepsBackground`, §4.3; the
+ * app.json entitlement comes from the plugin's `background: true`).
  */
 import type {
   QuantityTypeIdentifier,
@@ -22,7 +22,7 @@ import type {
 import { Linking } from 'react-native';
 
 import { DayCollector, datesSince, localDate, rangeStart, sleepMinutesByWakeDate, type SleepInterval } from './aggregate';
-import { HealthNotAuthorizedError, type HealthBridge, type HealthMetric, type StepsGrant } from './types';
+import { HealthNotAuthorizedError, PHONE_METRICS, type HealthBridge, type HealthMetric, type StepsGrant } from './types';
 
 type HealthKit = typeof import('@kingstinct/react-native-healthkit');
 
@@ -44,7 +44,7 @@ const STEPS = 'HKQuantityTypeIdentifierStepCount' as const;
  */
 const READ_TYPES = [STEPS, 'HKQuantityTypeIdentifierRestingHeartRate', 'HKQuantityTypeIdentifierBodyMass', SLEEP] as const;
 /** The metrics READ_TYPES feed (HealthKit can't say which were allowed: all of them, `HealthAccessResult`). */
-const METRICS: HealthMetric[] = ['steps', 'resting_hr', 'weight_kg', 'sleep_minutes'];
+const METRICS: HealthMetric[] = [...PHONE_METRICS];
 
 const NOTHING_GRANTED: StepsGrant = { granted: false, background: false };
 
@@ -140,12 +140,12 @@ export const healthBridge: HealthBridge = {
     const start = rangeStart(days, end);
     const collector = new DayCollector(new Set(datesSince(start, end)));
 
-    const sum: Pick = (r) => r.sumQuantity?.quantity;
     const avg: Pick = (r) => r.averageQuantity?.quantity;
     const latest: Pick = (r) => r.mostRecentQuantity?.quantity;
 
+    // Never steps (steps v2 §0.5): the import doesn't carry them, and StepCount is read only for a member who agreed to
+    // it (`lib/steps`, through `stepsBetween`).
     const jobs: Promise<unknown>[] = [
-      dailyStatistic(hk, collector, 'steps', STEPS, 'cumulativeSum', 'count', sum, start, end),
       dailyStatistic(hk, collector, 'resting_hr', 'HKQuantityTypeIdentifierRestingHeartRate', 'discreteAverage', 'count/min', avg, start, end),
       dailyStatistic(hk, collector, 'weight_kg', 'HKQuantityTypeIdentifierBodyMass', 'mostRecent', 'kg', latest, start, end),
       sleepIntervals(hk, start, end).then((intervals) => {
