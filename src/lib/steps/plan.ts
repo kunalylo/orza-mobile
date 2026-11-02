@@ -1,13 +1,14 @@
 /**
  * Scheduling decisions of the step sync (`sync.ts`) — pure, so `npm run test:steps` covers them (steps v2,
  * `docs/notes/steps-v2.md` §2.1, §2.2, §2.6, §2.7):
- * - which reason a queued run keeps, and how two pending save jobs combine;
+ * - which reason a queued run keeps, and how two pending save jobs combine (only read in the same zone and day);
  * - which past days are still read: a day is final once settled (M7: 72 h after it ends while a health store is ON —
  *   a watch syncs late; a phone-only day an hour after it ends once its count is complete), within the largest
  *   lookback of the sources that are ON, never before a shared phone's coverage floor (M9), and never a day saved under
  *   another profile time zone (M8: after a zone change only today is recomputed);
  * - the shared-phone backfill (M9): the first member to agree on an install gets each source's full history, a later
- *   member only what was counted from their own consent on;
+ *   member only what was counted from their own consent on — and nobody reads from before another member last left
+ *   the phone (signed out);
  * - what Today asks first and which sources are ON (§2.1, §2.2, S-A3: on Android 14+ Health Connect counts the phone
  *   itself, so the phone's own sources go off); Apple Health's "no steps" state (§2.2);
  * - what the member's answers record (R6, `useSteps.ts`): the consent a granted ask means, "Not now" (P19), whether the
@@ -69,6 +70,42 @@ export function shouldReadPast(
 export function mergeDays<T extends { date: string }>(older: readonly T[], newer: readonly T[]): T[] {
   const dates = new Set(newer.map((d) => d.date));
   return [...newer, ...older.filter((d) => !dates.has(d.date))];
+}
+
+/** What decides whether two save jobs may combine (`sync.ts`'s queue). */
+export interface SaveJobKey<D extends { date: string } = { date: string }> {
+  userId: string;
+  /** The sign-out epoch the days were read in. */
+  epoch: number;
+  /** The consent the days were read under. */
+  consent: ReadConsent;
+  /** The profile time zone they were read in (M8). */
+  tz: string;
+  /** The member's today when they were read. */
+  today: string;
+  days: readonly D[];
+  /** A health store was ON for the member (M7). */
+  storeOn: boolean;
+}
+
+/**
+ * The save job to run next when `job` arrives while `waiting` (null: none) waits for the slot: the two combine
+ * (`mergeDays`: the newer readings, plus past days only the waiting one read; a store seen ON by either) only when they
+ * are the same member, sign-out epoch, consent, profile time zone and today. Otherwise `job` replaces it: its run
+ * re-reads whatever is still pending — under a new zone, the days M8 froze aren't pending, and a waiting old-zone
+ * reading of one must never be saved (it would write the new zone on the record and undo the freeze; R/U review).
+ */
+export function nextSaveJob<J extends SaveJobKey>(waiting: J | null, job: J): J {
+  const same =
+    !!waiting &&
+    waiting.userId === job.userId &&
+    waiting.epoch === job.epoch &&
+    waiting.consent.store === job.consent.store &&
+    waiting.consent.phone === job.consent.phone &&
+    waiting.tz === job.tz &&
+    waiting.today === job.today;
+  if (!same || !waiting) return job;
+  return { ...job, days: mergeDays(waiting.days, job.days), storeOn: job.storeOn || waiting.storeOn };
 }
 
 /* ───────────────────────────── M7: final ───────────────────────────── */
@@ -172,9 +209,17 @@ export function grantConsent(
 
 /**
  * M9, for the disclosure (§6: "Your steps from the last 30 days come in too"): does `userId`'s next consent read each
- * source's full history? False on a shared phone (`grantConsent` would mark it `sharedAtConsent`: from the consent on).
+ * source's full history? False on a shared phone (`grantConsent` would mark it `sharedAtConsent`: from the consent on),
+ * and when another member left this phone (`othersLeftAt`, R/U review) within the store's lookback before `now`.
  */
-export function fullBackfill(consents: Readonly<Record<string, StepsConsent>>, userId: string, formerConsent = false): boolean {
+export function fullBackfill(
+  consents: Readonly<Record<string, StepsConsent>>,
+  userId: string,
+  formerConsent = false,
+  othersLeftAt: number | null = null,
+  now = Date.now()
+): boolean {
+  if (othersLeftAt != null && Number.isFinite(othersLeftAt) && now - othersLeftAt < LOOKBACK_DAYS.store * 24 * H) return false;
   return !sharedOnConsent(consents, userId, formerConsent);
 }
 
@@ -272,22 +317,27 @@ export interface StepsGate {
 /**
  * The gate (T40): null — nothing is read or saved for `userId` (no consent of theirs on this install, or the switch is
  * off), whatever the phone's permissions. Else the sources ON (`sourcesOn` with the phone's `access`), how far back to
- * read and the shared phone's floor (`backfill`). `access` null / without features: the phone's state isn't known
+ * read and the shared phone's floor: the later of `backfill` and `othersLeftAt` — when another member last left this
+ * phone (R/U review: a member coming back after someone else used it; their day records went at their sign-out, so
+ * every day back to the lookback would be read again). `access` null / without features: the phone's state isn't known
  * (the check timed out) — today only, and a store consent counts as a store ON (a past day never settles early).
  */
 export function stepsGate(
   consents: Readonly<Record<string, StepsConsent>>,
   userId: string,
-  access: StepsAccess | null | undefined
+  access: StepsAccess | null | undefined,
+  othersLeftAt: number | null = null
 ): StepsGate | null {
   const consent = readConsent(consents[userId]);
   if (!consent) return null;
-  const coverFloor = backfill(consents, userId);
+  const floors = [backfill(consents, userId), othersLeftAt].filter((n): n is number => n != null && Number.isFinite(n));
+  const coverFloor = floors.length ? Math.max(...floors) : null;
   const f = access?.features;
   if (!access || !f) return { consent, on: [], maxBack: 0, storeOn: consent.store, coverFloor };
   const on = sourcesOn(f, {
     consent,
-    storeGranted: access.store === 'granted',
+    // iPhone: a status check that failed is no "not granted" (R/U review) — the store stays ON, its reads unread.
+    storeGranted: access.store === 'granted' || access.storeUnknown === true,
     phoneGranted: access.phonePermission === 'granted',
     recordingReady: access.recordingReady,
   });

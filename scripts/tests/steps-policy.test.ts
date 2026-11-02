@@ -65,6 +65,15 @@ const sampler = (steps: number, coverFrom = S, extra: Partial<SourceReading> = {
   ...extra,
 });
 
+const pedometer = (steps: number, coverFrom = S, extra: Partial<SourceReading> = {}): SourceReading => ({
+  source: 'phone',
+  counter: 'pedometer',
+  steps,
+  coverFrom,
+  ...extra,
+});
+const health = (steps: number, coverFrom = S): SourceReading => ({ source: 'apple_health', steps, coverFrom });
+
 /** A source's count after a base's `at` (what the reader measures for `ReadOptions.sinceAt`). */
 const after = (at: number, steps: number, estimated?: number) => ({ since: { at, steps, ...(estimated != null ? { estimated } : {}) } });
 
@@ -159,13 +168,15 @@ describe('savePlan — today: raise only, throttled (T24, M6)', () => {
 describe('savePlan — a past day: raise at once, or reconcile this phone’s own save (T25, M6)', () => {
   const now = ist(addDays(D, 1), '09:00');
   const store = (steps: number) => value([hc(steps, S, { complete: true })], false);
+  /** This phone's last automatic save came from Health Connect's whole-day count. */
+  const byHc: DayRecord['autoBy'] = { source: 'health_connect', coverFrom: S };
 
   test('higher → auto, at once (no throttle)', () => {
     assert.equal(plan(savePlan(store(12_001), { autoSent: 12_000, autoAt: now - MIN, server: 12_000, serverModes: true }, false, now)), 'auto 12001 ref null');
   });
 
   test('lower, and the server still holds this phone’s last automatic save → reconcile (expect it)', () => {
-    const rec: DayRecord = { autoSent: 12_000, autoAt: now - 10 * H, server: 12_000, serverModes: true, editRef: 'm1' };
+    const rec: DayRecord = { autoSent: 12_000, autoAt: now - 10 * H, server: 12_000, serverModes: true, editRef: 'm1', autoBy: byHc };
     assert.equal(plan(savePlan(store(11_500), rec, false, now)), 'reconcile 11500 expect 12000 ref m1');
   });
 
@@ -201,7 +212,9 @@ describe('savePlan — a past day: raise at once, or reconcile this phone’s ow
     // 10:00 the member typed 3 000 while the Recording API counted; today's reads (with `since`) saved 10 000. The
     // next morning the past day is read without a count since 10:00: 3 000 is not the day.
     const edit: DayBase = { kind: 'edit', steps: 3_000, at: ist(D, '10:00'), editRef: 'm1' };
-    const rec: DayRecord = { base: edit, editRef: 'm1', autoSent: 10_000, autoAt: ist(D, '22:00'), server: 10_000, serverModes: true };
+    // That save was the edit + the Recording API's count since 10:00.
+    const autoBy: DayRecord['autoBy'] = { source: 'phone', counter: 'recording', coverFrom: edit.at };
+    const rec: DayRecord = { base: edit, editRef: 'm1', autoSent: 10_000, autoAt: ist(D, '22:00'), server: 10_000, serverModes: true, autoBy };
     const blind = value([recording(10_000, S, { complete: true })], false, edit);
     assert.equal(blind?.sinceUnknown, true);
     assert.equal(savePlan(blind, rec, false, now), null);
@@ -231,8 +244,65 @@ describe('savePlan — a past day: raise at once, or reconcile this phone’s ow
     assert.equal(savePlan(mine, { ...rec, serverModes: false }, false, now, undefined, { settling: true }), null);
     assert.equal(savePlan(value([recording(0, S, { complete: true })], false), rec, false, now, undefined, { settling: true }), null);
     // A reconcile still comes first; today is never settling.
-    assert.equal(plan(savePlan(mine, { autoSent: 12_000, autoAt: now - 12 * H, server: 12_000, serverModes: true }, false, now, undefined, { settling: true })), 'reconcile 9100 expect 12000 ref null');
+    const byRecording: DayRecord['autoBy'] = { source: 'phone', counter: 'recording', coverFrom: S };
+    assert.equal(
+      plan(savePlan(mine, { autoSent: 12_000, autoAt: now - 12 * H, server: 12_000, serverModes: true, autoBy: byRecording }, false, now, undefined, { settling: true })),
+      'reconcile 9100 expect 12000 ref null'
+    );
     assert.equal(savePlan(value([recording(9_100)], true), { ...rec, autoAt: now - H }, true, now, undefined, { settling: true }), null);
+  });
+});
+
+describe('savePlan — a reconcile replaces only what made this phone’s own save (R/U review, M4, M6)', () => {
+  // Nov 1's live tail: 9 000 saved at 23:30 from the Recording API (Health Connect held 4 000: a Fitbit worn part of the
+  // day — not this phone's steps). Read again after midnight.
+  const now = ist(addDays(D, 1), '00:40');
+  const byRecording: DayRecord['autoBy'] = { source: 'phone', counter: 'recording', coverFrom: S };
+  const mine = (autoBy: DayRecord['autoBy']): DayRecord => ({ autoSent: 9_000, autoAt: ist(D, '23:30'), server: 9_000, serverModes: true, autoBy });
+  const partial = (sources: SourceReading[]) => dayValue({ ...dayOf(sources), phonePartial: true }, null, false);
+
+  test('the phone counter that made the save can’t see the day any more → Health Connect without the phone’s steps never lowers it', () => {
+    // Switched off and on after midnight (a new subscription), Play services gone (a fresh sampler), or a day older than
+    // the Recording API's 10 days: Health Connect's 4 000 alone.
+    assert.equal(savePlan(value([hc(4_000, S, { complete: true })], false), mine(byRecording), false, now), null);
+    assert.equal(savePlan(partial([hc(4_000, S, { complete: true })]), mine(byRecording), false, now), null);
+    // The same counter re-subscribed: it sees the day only from 20:00 → nothing either.
+    assert.equal(savePlan(value([recording(600, ist(D, '20:00'), { complete: true })], false), mine(byRecording), false, now), null);
+  });
+
+  test('the phone counter ON but blind for the day is a lower bound even when the store made the save (it may have counted more)', () => {
+    const byHc: DayRecord['autoBy'] = { source: 'health_connect', coverFrom: S };
+    assert.equal(savePlan(partial([hc(4_000, S, { complete: true })]), mine(byHc), false, now), null);
+    // Raises still go through.
+    assert.equal(plan(savePlan(partial([hc(9_400, S, { complete: true })]), mine(byHc), false, now)), 'auto 9400 ref null');
+  });
+
+  test('re-read whole by what made it → reconcile; a store holding the phone’s steps from as early → reconcile (M4)', () => {
+    assert.equal(plan(savePlan(value([recording(8_800, S, { complete: true })], false), mine(byRecording), false, now)), 'reconcile 8800 expect 9000 ref null');
+    const samsung = hc(8_500, S, { includesPhone: true, complete: true });
+    assert.equal(plan(savePlan(value([samsung], false), mine(byRecording), false, now)), 'reconcile 8500 expect 9000 ref null');
+    assert.equal(plan(savePlan(partial([samsung]), mine(byRecording), false, now)), 'reconcile 8500 expect 9000 ref null', 'the phone blind: the store has its steps');
+    // iPhone: the motion fallback's live tail, Apple Health the next morning (§2.9).
+    const byPedometer: DayRecord['autoBy'] = { source: 'phone', counter: 'pedometer', coverFrom: S };
+    assert.equal(plan(savePlan(value([health(8_700)], false), mine(byPedometer), false, now)), 'reconcile 8700 expect 9000 ref null');
+  });
+
+  test('the store that made the save withdrawn (Disconnect): the phone’s own count never lowers it', () => {
+    const byStore: DayRecord['autoBy'] = { source: 'health_connect', coverFrom: S };
+    assert.equal(savePlan(value([recording(7_000, S, { complete: true })], false), mine(byStore), false, now), null);
+    const byHealth: DayRecord['autoBy'] = { source: 'apple_health', coverFrom: S };
+    assert.equal(savePlan(value([pedometer(7_000, S, { complete: true })], false), mine(byHealth), false, now), null);
+  });
+
+  test('a save whose origin isn’t known (a record from before this rule) is never reconciled; raises still are', () => {
+    assert.equal(savePlan(value([hc(8_500, S, { includesPhone: true, complete: true })], false), mine(undefined), false, now), null);
+    assert.equal(plan(savePlan(value([hc(9_500, S, { includesPhone: true, complete: true })], false), mine(undefined), false, now)), 'auto 9500 ref null');
+  });
+
+  test('the plan names what its number comes from (kept on the record when applied)', () => {
+    assert.deepEqual(savePlan(value([recording(9_500, S, { complete: true })], false), mine(byRecording), false, now)?.by, byRecording);
+    const typed: DayBase = { kind: 'start', steps: 6_000, at: ist(D, '09:00') };
+    assert.equal(savePlan(value([], false, typed), { server: 5_000, serverModes: true }, false, now)?.by, null, 'the base alone: no source');
   });
 });
 
@@ -306,14 +376,6 @@ describe('shownSteps — what Today shows (T26, §2.4)', () => {
 /* ───────────────────────────── T27–T28: when a past day is final ───────────────────────────── */
 
 const E = dayStartMs(addDays(D, 1), IST);
-const pedometer = (steps: number, coverFrom = S, extra: Partial<SourceReading> = {}): SourceReading => ({
-  source: 'phone',
-  counter: 'pedometer',
-  steps,
-  coverFrom,
-  ...extra,
-});
-const health = (steps: number, coverFrom = S): SourceReading => ({ source: 'apple_health', steps, coverFrom });
 
 describe('isFinal — a store is ON: final 72 h after the day ends (T27, M7)', () => {
   const past = dayOf([hc(9_000, S, { complete: true })]);

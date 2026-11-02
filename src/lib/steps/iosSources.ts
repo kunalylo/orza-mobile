@@ -31,6 +31,18 @@ export function iosFeatures(healthAvailable: boolean, counter: boolean): StepFea
   return { platform: 'ios', store: healthAvailable ? 'available' : 'unavailable', counter };
 }
 
+/**
+ * The StepCount sheet's state from HealthKit's status check (`status`: true answered, false not asked yet, null the check
+ * failed or answered `unknown` — a locked phone in a background wake-up) and what was known before (`knownBefore`: seen
+ * answered in this JS session, or Apple Health's background delivery set up — only ever while the store was ON). Once
+ * answered it can't legitimately become unanswered again (short of a privacy reset, which the check reports as `false`),
+ * so a failed check keeps the earlier answer — and says it is `unknown` (R/U review).
+ */
+export function storeAnswer(status: boolean | null, knownBefore: boolean): { answered: boolean; unknown: boolean } {
+  if (status == null) return { answered: knownBefore, unknown: true };
+  return { answered: status, unknown: false };
+}
+
 /** Apple Health's steps access: `granted` = the StepCount sheet was answered (HealthKit never says whether reading was allowed). */
 export function iosStoreAccess(healthAvailable: boolean, answered: boolean): StoreAccess {
   if (!healthAvailable) return 'unavailable';
@@ -176,8 +188,10 @@ export function iosDays(days: readonly DayPlan[], parts: { health?: ReadonlyMap<
  * Apple Health wakes ÖRZA for new steps (hourly at most) while the store is ON for the member (`storeOn`), and not
  * otherwise (no consent, the switch off, sign-out). `configured`: what this install last set up (the prefs'
  * `hkBackground`). Only a change calls HealthKit: configuring again tears its observer down and drops the JS callback.
+ * `keep`: the StepCount status check failed while the member agrees to the store (`storeAnswer`'s `unknown`) — nothing
+ * changes (R/U review: a failed check in a locked-phone wake-up must never clear it until the member next opens ÖRZA).
  */
-export function backgroundChange(storeOn: boolean, configured: boolean): 'configure' | 'clear' | null {
-  if (storeOn === configured) return null;
+export function backgroundChange(storeOn: boolean, configured: boolean, keep = false): 'configure' | 'clear' | null {
+  if (keep || storeOn === configured) return null;
   return storeOn ? 'configure' : 'clear';
 }

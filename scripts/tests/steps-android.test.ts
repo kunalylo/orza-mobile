@@ -374,6 +374,23 @@ describe('assembleDays — the day’s readings (M5f)', () => {
     assert.equal(assembleDays(days, {})[1].storeUnread, undefined);
   });
 
+  test('the phone’s counter ON but blind for part of a read day (its window or a fresh sampler starts later) → phonePartial (R/U review)', () => {
+    // Re-subscribed today at 07:07: D has no Recording API reading at all, today only from 07:07.
+    const fresh = recordingReadings([{ start: ist(T, '08:00'), end: ist(T, '08:15'), steps: 300 }], days, IST, recordingWindowFor(ist(T, '07:07'), NOW, null));
+    assert.equal(fresh.readings.get(D), undefined, 'D is before the window: no reading');
+    const out = assembleDays(days, { hc: new Map([[D, { reading: hc(4_000), unread: false }]]), phone: fresh.readings, phoneOn: true });
+    assert.equal(out[1].phonePartial, true, 'D: Health Connect alone, the phone blind');
+    assert.equal(out[0].phonePartial, true, 'today: covered from 07:07 only');
+    // Whole days seen, or no phone counter ON: nothing to flag.
+    const whole = assembleDays(days, { phone: new Map([[D, rec(7_500)], [T, { ...rec(300), coverFrom: TS }]]), phoneOn: true });
+    assert.equal(whole[1].phonePartial, undefined);
+    assert.equal(whole[0].phonePartial, undefined);
+    assert.equal(assembleDays(days, { hc: new Map([[D, { reading: hc(4_000), unread: false }]]) })[1].phonePartial, undefined, 'phone OFF');
+    // A shared phone's floor: covered from the floor = the whole read range.
+    const floored = dayPlans([D], IST, NOW, ist(D, '12:00'));
+    assert.equal(assembleDays(floored, { phone: new Map([[D, { ...rec(900), coverFrom: ist(D, '12:00') }]]), phoneOn: true })[0].phonePartial, undefined);
+  });
+
   test('a day that may not be read (M9 floor) has no sources and is not unread', () => {
     const floored = dayPlans([D], IST, NOW, ist(T, '07:30'));
     assert.deepEqual(assembleDays(floored, { phoneUnread: new Set([D]) }), [{ date: D, start: S, end: E, sources: [] }]);

@@ -2,8 +2,8 @@
  * Per-phone step-sync memory, in two small JSON files (shapes and rules: `storeData.ts`, tested):
  * - the prefs, in the documents folder (kept with the app): per install the Android permission history ("blocked"),
  *   Health Connect's first grant time, a Health Connect refusal from Today, Apple Health's background setup and whether a
- *   member who had agreed deleted their account; per member the steps consent (M9) and when this phone last saved their
- *   steps automatically (M5c3);
+ *   member who had agreed deleted their account; per member the steps consent (M9), when this phone last saved their
+ *   steps automatically (M5c3) and when they last signed out here (M9);
  * - the day records, in the cache folder (never backed up; the system may purge it — the server is the record of
  *   truth): per member and day, what this phone saved and read on the server, the day's base (`policy.ts`), whether a
  *   past day is final. A member's are deleted at sign-out (`deleteUserDays`).
@@ -31,6 +31,8 @@ import {
   withoutConsentKind,
   withoutHcGrant,
   withoutUserDays,
+  withSignOut,
+  othersLeftAt,
   type ConsentChoices,
   type StepsDays,
   type StepsPrefs,
@@ -187,7 +189,17 @@ export function removeStepsConsent(userId: string) {
 /** M9: `userId`'s next consent reads each source's full history (the disclosure says so); false on a shared phone. */
 export function stepsFullBackfill(userId: string): boolean {
   const p = prefs();
-  return fullBackfill(p.consents, userId, !!p.formerConsent);
+  return fullBackfill(p.consents, userId, !!p.formerConsent, othersLeftAt(p, userId));
+}
+
+/** `userId` signed out of ÖRZA on this phone (M9: a floor for every other member's reads, `otherMemberLeftAt`). */
+export function noteSignOut(userId: string, at = Date.now()) {
+  setPrefs(withSignOut(prefs(), userId, at));
+}
+
+/** M9: when another member than `userId` last left this phone (signed out, or deleted since); null: never. */
+export function otherMemberLeftAt(userId: string): number | null {
+  return othersLeftAt(prefs(), userId);
 }
 
 /** When this phone last had an automatic save of `userId`'s steps applied (null: never) — survives sign-out (M5c3). */

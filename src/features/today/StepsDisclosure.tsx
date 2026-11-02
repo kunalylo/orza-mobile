@@ -35,6 +35,7 @@ const POINT_ICON: Record<PointIcon, IconName> = {
   share: 'share-2',
   history: 'calendar',
   saved: 'lock',
+  ai: 'mci:creation',
   off: 'toggle-right',
 };
 

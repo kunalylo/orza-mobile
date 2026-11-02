@@ -31,6 +31,7 @@ import {
   AUTO_RETRY_AFTER_FAILURE_MS,
   AUTO_SYNC_INTERVAL_MS,
   HealthNotAuthorizedError,
+  importMetrics,
   SYNC_DAYS,
   type HealthAvailability,
   type HealthDayInput,
@@ -130,7 +131,8 @@ export async function syncHealth(userId: string, opts: SyncOptions): Promise<Hea
       return { status: 'skipped', reason: 'unsupported' };
     }
     // Never steps (§0.5): they go through the steps sync alone.
-    const days = importRows(await healthBridge.readDays(SYNC_DAYS));
+    // Never steps; on an iPhone no weight either until the app-wide AI consent ships (`importMetrics`).
+    const days = importRows(await healthBridge.readDays(SYNC_DAYS), importMetrics(healthBridge.platform));
     if (!days.length) {
       updateHealthRecord(userId, {
         lastAttemptAt: startedAt,

@@ -10,7 +10,9 @@ Date: 2026-10-27. Status: **in progress** — see the ticks in §10 and the PROG
 - B5 is NOT done as a temporary removal: the coach keeps steps on the web (Apple's rule is about HealthKit data and the iOS app is
   not released). Instead the app-wide AI data consent (explicit permission before personal/health data goes to the AI provider,
   App Store 5.1.2(i) / 5.1.3) is built before any iOS submission (V6/D3) — and until it ships, the iOS build must not send
-  HealthKit-derived steps to the coach.
+  HealthKit-derived steps to the coach. (R/U review: nor Motion & Fitness counts — 5.1.3(i) names both — nor HealthKit
+  weight, which the coach's replies quote: `health/types.SEND_IPHONE_HEALTH_DATA = false`. Android names the AI provider
+  in its steps disclosure instead, §6.)
 - S0 (c)/(d) The real Android phone (V2) and Health Connect Toolbox download (E-3) are asked of the user when those steps come.
 
 **Inputs**
@@ -288,6 +290,12 @@ off):
       automatic save on this phone, kept in the prefs (it outlives the day records deleted at sign-out or a purged
       cache, so this phone's own earlier save is never counted twice). This covers a new source's first day, and a
       re-subscribe after sign-out.
+    - (c4) **Restart on a day with a base** (R/U review, `merge.restartBase`). The winning count after the base
+      (`counted(base)`) covers only from `coverFrom > base.at` (the switch off and on, S-A3, Play services gone and back,
+      a second restart the same day), so the steps between the two would drop out. When this phone auto-saved the day
+      in `[base.at, coverFrom)`: the base moves to `{kind: base.kind, steps: max(base.steps, min(server, autoSent)), at:
+      coverFrom, editRef: base.editRef}`. With no `autoSent` on record (lost) but `lastAutoSave ≥ base.at` and the server
+      above `base.steps`: `{…, steps: server, at: max(coverFrom, lastAutoSave)}`. The server is read once for it.
   - (d) An `edit` with `at ≥ e` (a past day edited after it ended) keeps `value = base.steps` forever. Late watch data
     stamped before `at` never adds on (C4b).
   - (e) No base → `value = auto`.
@@ -341,7 +349,12 @@ Target: `T = clamp(value − (isToday ? estimated : 0))`. Known floor: `K = max(
    - Mode `auto` with `edit_ref = rec.editRef ?? null`.
 3. **Past day, `T < server`, and all of these hold:** `server == autoSent`, `rec.serverModes` is true, no unseen
    marker, and the value isn't a lower bound (`sinceUnknown`, M5f). Mode `reconcile`, `expect = autoSent`. ÖRZA corrects
-   only its own earlier save (the provisional live tail).
+   only its own earlier save (the provisional live tail). **R/U review:** and the value's winner stands for what made
+   that save (`rec.autoBy`, the winning source and its `coverFrom`, kept with every applied save; unknown → never): it
+   covers the day from as early, and is either a store holding the phone's steps (M4) or the same source re-read — the
+   latter not while the phone's own counter is ON but blind for part of the day (`DayReading.phonePartial`, set by the
+   Android reader). So a store without the phone's steps never lowers the phone counter's save, nor the phone's count a
+   withdrawn store's.
 4. **Past day with `storeUnread`** (M5f): nothing at all — the store this day follows wasn't read (§2.9). Today still
    raises.
 5. **The run that may make a past day final** (`settling` = `isFinal` before the save, J review): when rules 2–3 give
@@ -402,12 +415,18 @@ Target: `T = clamp(value − (isToday ? estimated : 0))`. Known floor: `K = max(
   - If `sharedAtConsent`, then `coverFloor = consent.at` and every source's `coverFrom = max(coverFrom, coverFloor)`.
     Days ending before it are never pending, and today becomes a START.
   - Otherwise, `coverFloor = −∞`: a full backfill up to each lookback, which the disclosure mentions.
+  - **R/U review:** the floor is also never before another member last left this phone: the prefs keep each member's
+    sign-out time (`leftAt`, 35 days; an account deleted since leaves `formerLeftAt`), and `coverFloor = max(the above,
+    latest other member's sign-out)`. A member coming back after someone else used the phone (A → B → A) reads nothing
+    of B's walking — their own day records went at sign-out, so every day back to the lookback would be read again. The
+    disclosure's "last 30 days" line is left out while such a sign-out is within 30 days.
 - **Sign-out:**
   - the epoch bump (existing);
   - sampler `stop` + `clear` (existing);
   - **Recording API `unsubscribe`**: data becomes inaccessible [G-rec], and the next member can't read it;
   - iOS `clearBackgroundTypes()`;
-  - **delete this member's day records** (P16).
+  - **delete this member's day records** (P16);
+  - note the sign-out time in the prefs (`leftAt`, R/U review).
 
   Consent records stay, so the same member signing in again isn't asked again. The next run re-subscribes, and the new
   `subscribedAt` makes the first day partial (M5c3).
@@ -428,7 +447,11 @@ Target: `T = clamp(value − (isToday ? estimated : 0))`. Known floor: `K = max(
   where two sources are ON and the store holds the phone's steps (iOS with the Motion fallback). On Android 9–13 with HC
   the past day stays the higher of the two (M4 as amended), so it can sit above what HC shows.
 - **HealthKit reads fail while the phone is locked** [A-hk-priv]. A background run then saves nothing for past days
-  (`storeUnread`, M5f) and the next run catches up.
+  (`storeUnread`, M5f) and the next run catches up. A failed StepCount status check is no answer (R/U review): the store
+  stays ON for a member who agreed (`StepsAccess.storeUnknown`) and background delivery is kept.
+- **Reconcile is conservative (R/U review).** A past day saved from one source and now led by another that doesn't stand
+  for it stays at its higher number: e.g. Health Connect (a watch) made the live tail, its data was deleted since and
+  the phone's own count now leads — the day isn't lowered to the phone's count.
 
 ---
 
@@ -645,6 +668,12 @@ These are exactly the filters [G-start] shows.
 | iOS motion (fallback) | 1. "Apple Health has no steps for ÖRZA, so your iPhone's motion sensor can count them instead (the last 7 days, without a watch)." 2–3. as above |
 
 When the full backfill applies (M9), add: "Your steps from the last 30 days come in too." (7 days for motion.)
+
+**R/U review (Android paths only):** after the "saved" point, "When you use an AI feature, like the coach, your step
+totals go with your request to our AI provider." (icon `mci:creation`). B5 was skipped, so the coach reads
+`tracking.steps`; Health Connect's policy wants explicit, informed consent before health data goes to a third party.
+The iPhone sends no automatic count while `SEND_IPHONE_HEALTH_DATA` is off (the app-wide AI consent covers it later).
+The Health screen's Android connect caption says the same for its totals. **The user reviews this copy.**
 
 **Footer caption**
 
@@ -901,17 +930,21 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
 
 | Permission | Justification |
 |---|---|
-| `READ_STEPS` | "Today shows the member's daily steps toward their step goal without typing. ÖRZA reads the day's aggregated, de-duplicated step total (phone, watches, fitness apps) and saves only the daily total to the member's account, shown on Today, the Health trends screen, weekly reports and the website." |
+| `READ_STEPS` | "Today shows the member's daily steps toward their step goal without typing. ÖRZA reads the day's aggregated, de-duplicated step total (phone, watches, fitness apps) and saves only the daily total to the member's account, shown on Today, the Health trends screen, weekly reports and the website, and used by the AI coach when the member chats with it (disclosed before consent)." |
 | `READ_HEALTH_DATA_IN_BACKGROUND` | "Keeps today's step total on the member's account current while ÖRZA is closed, so the step goal, website dashboard and weekly report are up to date. Runs about hourly and reads only daily step totals for today and the previous few days." |
 | `READ_SLEEP` | "Sleep chart on the Health screen and website." |
 | `READ_RESTING_HEART_RATE` | "Resting heart-rate chart on the Health screen." |
-| `READ_WEIGHT` | "Weight trend and weight tracker (fills days with no weigh-in)." |
+| `READ_WEIGHT` | "Weight trend and weight tracker (fills days with no weigh-in; the AI coach may mention it when the member chats with it)." |
 
 **Privacy policy URL:** the same page as `HealthPrivacyActivity` (`/privacy`, with the B6 section).
 
 **Data safety** [G-ds]:
 - Health and fitness › **Fitness info** (steps; sleep) and **Health info** (resting heart rate, weight).
-- Collected: yes. Shared: no. There is no HC write, and B5 removes steps from AI prompts. Re-check meals and AI in D3.
+- Collected: yes. Shared: re-check in D3 (R/U review). B5 was skipped: steps (and Health Connect weight, through the
+  coach's replies kept as chat history) go to the AI provider when the member uses an AI feature — disclosed in the
+  steps sheet and the connect caption (§6) and the privacy policy. Play counts a service provider processing for ÖRZA as
+  not "sharing", but Health Connect's policy wants explicit, informed consent: the app-wide AI consent decides the
+  final answer. No HC write. Re-check meals and AI in D3.
 - Optional for the user. Purposes: App functionality, Personalization. Encrypted in transit; deletion available.
 - Processing only on the phone (Recording API buckets, sampler samples) is not collection.
 
@@ -1345,6 +1378,43 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
   "Missed" subText is gone (the title says it). The "showing" record keeps `missed`, so a refresh (a dose of the group
   handled in the app) re-posts it still missed. Kotlin only, NOT compiled yet → V1 rebuild: check with the stale-alarm
   run (phone clock back 75 min, PROGRESS 2 Nov) on `orza_alarms_quiet`. No app.json change.
+- [x] **RU** (R/U review fixes, 9 findings; all real; a failing test first for each pure part). Commit "steps v2: R/U
+  review fixes". Rules amended in §2 / §6 / §9 (marked "R/U review"). test:steps 417, test:alarms 69. No app.json change.
+  - (1) Reconcile vs a blind phone counter: `DayRecord.autoBy` (`types.SourceTag`: the winning source + `coverFrom` of
+    every applied save; cleared with an edit); `savePlan` reconciles only when the winner stands for it (a store holding
+    the phone's steps, or the same source re-read covering as early); `DayReading.phonePartial` (Android
+    `assembleDays`: the phone counter ON but its reading missing / starting after the read range) blocks a same-source
+    reconcile. Deviation: both of the finding's fixes, not one (the flag alone misses Disconnect: a withdrawn store's
+    save lowered to the phone's count). Records without `autoBy` (tester builds) are never reconciled.
+  - (2) `merge.restartBase` (M5c4) + `save.startsLate` for days with a base (the server read once); the lost-record
+    branch only when `lastAutoSave ≥ base.at` (else the server's raise is another phone's: compared, never added).
+  - (3) `plan.nextSaveJob`: a waiting save job combines only with the same member / epoch / consent / zone / today.
+  - (4) M9 after a sign-out: prefs `leftAt` per member (35 days) + `formerLeftAt` (account deleted);
+    `stepsGate(…, othersLeftAt)` floors at the latest other member's sign-out; `fullBackfill` drops the 30-day line
+    while one is within 30 days. Deviation: floors at the other member's sign-out (not "the returning member's
+    re-sign-in": no sign-in hook needed, and the gap in between belongs to nobody known), and counts every member who
+    signed out, consent or not (their walking is in the phone's history too).
+  - (5)+(7) iPhone hold widened: `policy.countsIphoneHealthData` = Apple Health or CMPedometer winner (5.1.3(i) names
+    Motion & Fitness); `health/types.SEND_IPHONE_HEALTH_DATA` replaces `SEND_APPLE_HEALTH_STEPS` (R5a deviation (2)'s
+    "CMPedometer counts are still sent" no longer holds). The iPhone now sends no automatic step count at all until the
+    app-wide AI consent ships — only typed numbers. Coordinator: confirm (the finding's "if the pedometer is meant to be
+    exempt" case).
+  - (6) Android: the steps disclosure gains the AI point (§6) on every Android path; the Health screen's Android connect
+    caption names the AI provider; §9 Data safety / justifications corrected (B5 was skipped). Deviation: disclosure,
+    not a hold (a hold would switch Android's automatic steps off; the coordinator kept steps in the coach). **The user
+    reviews the new copy** (with B6).
+  - (8) Correction to R4's note (the import without steps "closes the v1 path"): HealthKit weight still reached the AI —
+    `mirrorIntoTracking` → `tracking.weight_kg` → the coach's `goalReply` quotes it → chat history to the AI provider.
+    Phone-only fix: `health/types.importMetrics('ios')` leaves weight out while `SEND_IPHONE_HEALTH_DATA` is off (the
+    iPhone's Health weight chart gets no Apple Health weight meanwhile). Sleep / resting HR never reach the coach. Web
+    follow-up (not done, web is read-only here): `goalReply` could use `profile.weight_kg` only.
+  - (9) `HealthBridge.stepsGranted()` → `boolean | null` (null: the check failed / HealthKit `unknown`);
+    `iosSources.storeAnswer` keeps the earlier answer (this session's, or `hkBackground`); `StepsAccess.storeUnknown`
+    keeps the store ON in `stepsGate` for a consenting member (reads fail → unread, no early settle, no ask);
+    `backgroundChange(…, keep)` never clears background delivery on a failed check. Not done (optional):
+    `isProtectedDataAvailable()`.
+  - For phase V: E-5 / A-4 / I-5 should also check A → B → A (A's past days from B's sign-out on); I-2 / I-3: nothing
+    automatic reaches the server from an iPhone now (Today shows it); E-1 / E-9: the Android sheet's AI point.
 
 **Phase V: verify and ship**
 

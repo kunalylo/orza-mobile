@@ -68,6 +68,25 @@ export interface DayReading {
    * Never proof that Apple Health is empty (`plan.healthEmpty`).
    */
   storeUnread?: boolean;
+  /**
+   * Android (R/U review): the phone's own counter is ON for the member but can't see all of the day's read range — the
+   * Recording API's window (a new subscription after the switch went off and on, Play services back, the 10-day limit)
+   * or a sampler started afresh begins after it. Its count of the day is missing or partial, never "no steps": the
+   * day's number may lack this phone's steps, so it never lowers this phone's own earlier save unless a store holding
+   * the phone's steps decides it (M4, `policy.savePlan`). Raises and M7 are unaffected.
+   */
+  phonePartial?: boolean;
+}
+
+/**
+ * Which source a count came from, and from when it covered the day (R/U review): kept with this phone's automatic save
+ * (`policy.DayRecord.autoBy`), so a later reconcile replaces it only with a count that stands for it (M6).
+ */
+export interface SourceTag {
+  source: StepSource;
+  /** `phone` only: which counter. */
+  counter?: PhoneCounter;
+  coverFrom: number;
 }
 
 /**
@@ -120,6 +139,12 @@ export interface StepsAccess {
    * never says whether reading was allowed); never `needs_install`.
    */
   store?: StoreAccess;
+  /**
+   * iPhone (R/U review): the StepCount status check failed or HealthKit answered `unknown` (a locked phone in a
+   * background wake-up) — `store` then says what was known before. The gate keeps the store ON for a member who agreed
+   * to it (its reads fail: the days are unread, M5f) instead of reading it as "not granted".
+   */
+  storeUnknown?: boolean;
   /** Steps v2, Android (R2): the Recording API's status. */
   recording?: RecordingStatus;
   /** Steps v2, Android (R2): the Recording API is subscribed (with `available`: `plan.SourceInputs.recordingReady`). */

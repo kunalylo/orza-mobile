@@ -31,6 +31,22 @@ export const PHONE_METRICS = ['steps', 'sleep_minutes', 'resting_hr', 'weight_kg
  * marker), so the import can't raise a day the member edited or switched off.
  */
 export const IMPORT_METRICS = ['sleep_minutes', 'resting_hr', 'weight_kg'] as const satisfies readonly HealthMetric[];
+
+/**
+ * iPhone: send health and fitness data where the server's AI coach can read it. Off until the app-wide AI data consent
+ * ships (coordinator decision; App Store 5.1.2(i): explicit permission before personal data goes to a third-party AI;
+ * 5.1.3(i) names HealthKit and Motion & Fitness alike). Meanwhile the iPhone sends no automatic step count from Apple
+ * Health or its motion sensor (`lib/steps/sync.ts` holds them: the coach's prompt and replies read `tracking.steps`),
+ * and its Health import leaves weight out (`importMetrics`: the server copies an imported weight into the day's
+ * tracking, and the coach's own replies quote it — chat history the next AI request sends). Sleep and resting heart
+ * rate never reach the coach. Then: true. Android is unaffected (its steps disclosure names the AI provider).
+ */
+export const SEND_IPHONE_HEALTH_DATA = false;
+
+/** What the Health import sends from `platform`: `IMPORT_METRICS`, without weight on an iPhone while its data is held. */
+export function importMetrics(platform: HealthPlatform, sendIphoneHealthData: boolean = SEND_IPHONE_HEALTH_DATA): readonly HealthMetric[] {
+  return platform === 'ios' && !sendIphoneHealthData ? IMPORT_METRICS.filter((m) => m !== 'weight_kg') : IMPORT_METRICS;
+}
 export type HealthDayValues = Partial<Record<HealthMetric, number>>;
 /** One local calendar day (`YYYY-MM-DD`) of daily totals / averages. */
 export type HealthDayInput = { date: string } & HealthDayValues;
@@ -153,9 +169,10 @@ export interface HealthBridge {
   /**
    * Steps may be read now, without asking (no UI): Android `READ_STEPS` is granted; iPhone the StepCount sheet was
    * answered (HealthKit hides a refusal: its reads then simply find nothing). False when the store is missing / not
-   * ready. Never throws.
+   * ready; null when the check itself failed (iPhone: an error, or HealthKit's `unknown` status — a locked phone) — no
+   * answer either way. Never throws.
    */
-  stepsGranted(): Promise<boolean>;
+  stepsGranted(): Promise<boolean | null>;
   /**
    * iPhone (§4.3): Apple Health wakes ÖRZA when new steps arrive, at most hourly, also after the app was closed
    * (`on`: StepCount background delivery, kept natively across launches; off: cleared). True when HealthKit took the

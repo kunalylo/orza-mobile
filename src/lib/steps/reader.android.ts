@@ -333,7 +333,7 @@ export const stepsReader: StepsReader = {
         readHealthConnect(days, state, opts, now).catch((): HcDays => new Map()),
         readPhone(days, state, opts, now).catch((): PhoneDays => ({ readings: new Map(), unread: new Set() })),
       ]);
-      return assembleDays(days, { hc, phone: phone.readings, phoneUnread: phone.unread });
+      return assembleDays(days, { hc, phone: phone.readings, phoneUnread: phone.unread, phoneOn: state.phone !== 'off' });
     } catch {
       return [];
     }

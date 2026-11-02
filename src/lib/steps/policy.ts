@@ -12,8 +12,10 @@
  *   at once;
  * - a past day whose number is now LOWER than the server's, while the server still holds exactly this phone's own last
  *   automatic save (today's live tail, above the store until the store caught up): `reconcile` to it — past days follow
- *   the store (M4). Never a number somebody else saved, never on a server without the modes, and never with a number
- *   that may be missing steps (`DayValue.sinceUnknown`: a lower bound only raises);
+ *   the store (M4). Never a number somebody else saved, never on a server without the modes, never with a number
+ *   that may be missing steps (`DayValue.sinceUnknown`: a lower bound only raises), and only with a count that stands
+ *   for what made that save (`DayRecord.autoBy`: the same source read again, or a store holding the phone's steps —
+ *   never a store without them, nor the phone's count where a withdrawn store made it);
  * - a past day read while a health store that is ON wasn't (`storeUnread`): nothing (§2.9) — the next run decides;
  * - the run that may make a past day final (`settling`, M7): `auto` T once more even when the server's count last seen
  *   was higher — another phone's reconcile may have lowered the day since (the atomic raise refuses it otherwise);
@@ -25,8 +27,8 @@
  * is saved the old raise-only way (`save.ts`): the server read right before each save, a lower read taken as an edit
  * (`editedOnServer`), no reconcile. That branch goes once B1 is deployed (V4).
  */
-import { clampSteps, type DayValue, type MarkerRow } from './merge';
-import type { DayBase, StepSource } from './types';
+import { clampSteps, holdsPhone, isStore, sourceTag, type DayValue, type MarkerRow } from './merge';
+import type { DayBase, SourceTag, StepSource } from './types';
 
 /** The server's day limit and the clamp to it live with the merge rules (M5 clamps the day's number). */
 export { clampSteps, MAX_DAY_STEPS } from './merge';
@@ -42,6 +44,11 @@ export interface DayRecord {
    * since: only this number is ever reconciled (M6).
    */
   autoSent?: number;
+  /**
+   * What made `autoSent` (R/U review): the winning source and from when it covered the day. A reconcile replaces that
+   * save only with a count that stands for it (`savePlan`); unknown (a record from before) → never reconciled.
+   */
+  autoBy?: SourceTag;
   /** When the day was last saved from this phone, or an edit of it taken: today's save throttle runs from it. */
   autoAt?: number;
   /** The day's count as last read from the server (or answered by a save). */
@@ -105,6 +112,8 @@ export interface SavePlan {
   expect?: number;
   /** The edit marker this phone knows (`edit_ref`): the server refuses the save while its own differs. */
   editRef: string | null;
+  /** What the number comes from (the value's winner; null: the base alone) — kept as `autoBy` when applied. */
+  by: SourceTag | null;
 }
 
 /**
@@ -136,32 +145,54 @@ export function savePlan(
   if (!isToday && value.storeUnread) return null;
   const editRef = rec?.editRef ?? null;
   if (marker && marker !== editRef) return null;
+  const by = value.winner ? sourceTag(value.winner) : null;
   const floor = knownFloor(rec);
   if (target > floor) {
     const throttled = isToday && rec?.autoAt != null && target - floor < POST_MIN_CHANGE && now - rec.autoAt < POST_MIN_INTERVAL_MS;
-    return throttled ? null : { mode: 'auto', steps: target, editRef };
+    return throttled ? null : { mode: 'auto', steps: target, editRef, by };
   }
   if (isToday || rec?.serverModes !== true) return null;
-  // A past day below the server: only this phone's own automatic save is corrected — and never with a number that may
-  // be missing steps.
+  // A past day below the server: only this phone's own automatic save is corrected — never with a number that may be
+  // missing steps, and only by a count that stands for what made that save.
   const server = rec.server;
-  if (server != null && target < server && rec.autoSent === server && !value.sinceUnknown) {
-    return { mode: 'reconcile', steps: target, expect: server, editRef };
+  if (server != null && target < server && rec.autoSent === server && !value.sinceUnknown && standsFor(value, rec.autoBy)) {
+    return { mode: 'reconcile', steps: target, expect: server, editRef, by };
   }
   // The day goes final after this run: the server's count last seen may be stale (another phone's reconcile lowers a
   // day, and only answers to this phone's own saves tell it) — one atomic raise, refused when it isn't higher.
-  return opts.settling && target > 0 ? { mode: 'auto', steps: target, editRef } : null;
+  return opts.settling && target > 0 ? { mode: 'auto', steps: target, editRef, by } : null;
 }
 
 /**
- * The day's number comes from Apple Health's count (its winner is Apple Health's reading: the whole day's, or what it
- * counted after the day's base) — HealthKit data. Until the app-wide AI data consent ships (coordinator decision,
- * App Store 5.1.2(i) / 5.1.3), the server's coach would read it from `tracking.steps`, so the iPhone holds such a
- * number back (`save.SaveOptions.hold`); the iPhone's own motion count (CMPedometer) and the member's typed number are
- * not HealthKit data.
+ * M6 (R/U review): may the day's number `value` replace this phone's own automatic save, made by `by`? Its winner must
+ * see the day from as early as that save did, and be either
+ * - a store holding this phone's steps (M4: past days follow it — Apple Health, Health Connect where it counts the
+ *   phone), whatever made the save; or
+ * - the very source that made it, read again — and then not while the phone's own counter is ON but blind for part of
+ *   the day (`phonePartial`): it may have counted more than the number says.
+ * Never a source that doesn't hold what made the save: Health Connect with only a watch's or an app's part of the day
+ * where the phone's counter saved it (that counter switched off and on after midnight, Play services gone, a day past
+ * its 10-day window), the phone's count where a withdrawn store saved it. An unknown `by` (a record from before): no.
  */
-export function countsAppleHealth(value: DayValue): boolean {
-  return value.winner?.source === 'apple_health';
+function standsFor(value: DayValue, by: SourceTag | undefined): boolean {
+  const w = value.winner;
+  if (!by || !w || w.coverFrom > by.coverFrom) return false;
+  if (isStore(w.source) && holdsPhone(w)) return true;
+  if (value.phonePartial) return false;
+  return w.source === by.source && (w.counter ?? null) === (by.counter ?? null);
+}
+
+/**
+ * The day's number comes from the iPhone's health and fitness data: its winner is Apple Health's reading (HealthKit) or
+ * CMPedometer's (Motion & Fitness) — the whole day's, or what it counted after the day's base. App Store 5.1.3(i) names
+ * both; until the app-wide AI data consent ships (coordinator decision, 5.1.2(i)) the server's coach would read it from
+ * `tracking.steps`, so the iPhone holds such a number back (`save.SaveOptions.hold`,
+ * `health/types.SEND_IPHONE_HEALTH_DATA`; R/U review: the motion count too). The member's typed number (a base alone)
+ * is theirs.
+ */
+export function countsIphoneHealthData(value: DayValue): boolean {
+  const w = value.winner;
+  return w?.source === 'apple_health' || (w?.source === 'phone' && w.counter === 'pedometer');
 }
 
 /* ───────────────────────────── Today's number (§2.4) ───────────────────────────── */

@@ -23,10 +23,11 @@ import {
   pedometerAsks,
   pedometerReading,
   readingsByDate,
+  storeAnswer,
   type DayAsk,
 } from '../../src/lib/steps/iosSources';
 import { dayValue } from '../../src/lib/steps/merge';
-import { firstAsk, healthEmpty, isFinal, lookbackDays, SETTLE_PHONE_MS, SETTLE_STORE_MS, sourcesOn } from '../../src/lib/steps/plan';
+import { firstAsk, healthEmpty, isFinal, lookbackDays, SETTLE_PHONE_MS, SETTLE_STORE_MS, sourcesOn, stepsAsk, stepsGate } from '../../src/lib/steps/plan';
 import { dayPlans, type DayPlan } from '../../src/lib/steps/shared';
 import type { DayReading, SourceReading } from '../../src/lib/steps/types';
 
@@ -324,5 +325,34 @@ describe('Apple Health background delivery follows the store being ON (§4.3)', 
     assert.equal(backgroundChange(true, true), null, 'configuring again would drop the JS observer');
     assert.equal(backgroundChange(false, true), 'clear');
     assert.equal(backgroundChange(false, false), null);
+  });
+});
+
+describe('a StepCount status check that fails is no answer (R/U review: background delivery kept)', () => {
+  test('answered = HealthKit said so, or — when the check failed / answered `unknown` — it was answered before', () => {
+    assert.deepEqual(storeAnswer(true, false), { answered: true, unknown: false });
+    assert.deepEqual(storeAnswer(false, true), { answered: false, unknown: false }, 'a real “not asked yet” (privacy reset) beats memory');
+    assert.deepEqual(storeAnswer(null, true), { answered: true, unknown: true }, 'answered earlier (this run, or background delivery set up)');
+    assert.deepEqual(storeAnswer(null, false), { answered: false, unknown: true });
+  });
+
+  test('while unknown with the member’s store consent, background delivery stays as it is; withdrawn → cleared as before', () => {
+    assert.equal(backgroundChange(false, true, true), null, 'kept: a locked-phone wake-up never clears it');
+    assert.equal(backgroundChange(true, false, true), null);
+    assert.equal(backgroundChange(false, true, false), 'clear');
+  });
+
+  test('the gate: a store consent with the check unknown keeps the store ON (its days unread, never settled early) — no ask', () => {
+    const f = iosFeatures(true, true);
+    const access = { phoneAvailable: true, phonePermission: 'granted' as const, firstAsk: 'healthkit' as const, store: 'not_granted' as const, storeUnknown: true, features: f };
+    const consents = { amy: { sharedAtConsent: false, store: { at: 1 } } };
+    const gate = stepsGate(consents, 'amy', access);
+    assert.deepEqual(gate?.on, ['store']);
+    assert.equal(gate?.storeOn, true);
+    assert.equal(stepsAsk(access, gate), null);
+    // Known not answered: as before.
+    assert.deepEqual(stepsGate(consents, 'amy', { ...access, storeUnknown: undefined })?.on, []);
+    // No consent: the ask, as the access says.
+    assert.deepEqual(stepsAsk(access, stepsGate({}, 'amy', access)), { kind: 'healthkit', granted: false });
   });
 });

@@ -209,8 +209,11 @@ function watchButton(i: CardInputs, a: StepsAccess): CardAction | null {
 
 /* ───────────────────────────── The disclosure (§6) ───────────────────────────── */
 
-/** A point's picture: what is read (the store / a watch / the phone), shared, the history, the account, the switch. */
-export type PointIcon = 'store' | 'watch' | 'phone' | 'share' | 'history' | 'saved' | 'off';
+/**
+ * A point's picture: what is read (the store / a watch / the phone), shared, the history, the account, the AI provider,
+ * the switch.
+ */
+export type PointIcon = 'store' | 'watch' | 'phone' | 'share' | 'history' | 'saved' | 'ai' | 'off';
 
 export interface DisclosureCopy {
   title: string;
@@ -223,12 +226,22 @@ export interface DisclosureCopy {
 
 const SAVED = 'Only each day’s total is saved to your ÖRZA account — on Today, your reports and the website. Never where you go.';
 const OFF = 'Turn it off any time in Settings › Privacy & data.';
+/**
+ * R/U review: the server's AI coach reads the day's steps (the website's privacy policy, `#phone-app`, says so too), and
+ * Health Connect's policy wants explicit, informed consent before health data goes to a third party — so Android's
+ * disclosure names it. Not the iPhone's: nothing it reads is sent while `health/types.SEND_IPHONE_HEALTH_DATA` is off
+ * (the app-wide AI consent covers it when that ships).
+ */
+const AI = 'When you use an AI feature, like the coach, your step totals go with your request to our AI provider.';
 const HC_CAPTION = 'Next, Health Connect shows what ÖRZA would like to read.';
 const ACTIVITY_CAPTION = 'Next, your phone asks to allow “Physical activity”.';
 const MOTION_CAPTION = 'Next, your iPhone asks to allow “Motion & Fitness”.';
 
-/** What each path reads (its first points), the history it brings at a full backfill (days; 0: none), its caption. */
-const PATHS: Record<DisclosurePath, { read: { icon: PointIcon; text: string }[]; history: number; caption: string }> = {
+/**
+ * What each path reads (its first points), the history it brings at a full backfill (days; 0: none), its caption, and
+ * whether its step totals reach the AI provider (`ai`: Android).
+ */
+const PATHS: Record<DisclosurePath, { read: { icon: PointIcon; text: string }[]; history: number; caption: string; ai?: boolean }> = {
   hc: {
     read: [
       { icon: 'store', text: 'ÖRZA reads your daily step total from Health Connect — this phone’s steps plus any watch or fitness app you use with it.' },
@@ -236,6 +249,7 @@ const PATHS: Record<DisclosurePath, { read: { icon: PointIcon; text: string }[];
     ],
     history: 30,
     caption: HC_CAPTION,
+    ai: true,
   },
   hc_add: {
     read: [
@@ -246,6 +260,7 @@ const PATHS: Record<DisclosurePath, { read: { icon: PointIcon; text: string }[];
     ],
     history: 30,
     caption: HC_CAPTION,
+    ai: true,
   },
   hc_watch: {
     read: [
@@ -256,17 +271,20 @@ const PATHS: Record<DisclosurePath, { read: { icon: PointIcon; text: string }[];
     ],
     history: 30,
     caption: HC_CAPTION,
+    ai: true,
   },
   // The Recording API and the sampler count from the moment they start: no history to bring in.
   phone: {
     read: [{ icon: 'phone', text: 'Your phone counts steps with a low-power motion sensor, and Google Play services keeps them for ÖRZA — even when ÖRZA is closed.' }],
     history: 0,
     caption: ACTIVITY_CAPTION,
+    ai: true,
   },
   phone_sampler: {
     read: [{ icon: 'phone', text: 'Your phone counts steps with a low-power motion sensor, and ÖRZA checks it through the day — even when ÖRZA is closed.' }],
     history: 0,
     caption: ACTIVITY_CAPTION,
+    ai: true,
   },
   healthkit: {
     read: [{ icon: 'store', text: 'ÖRZA reads your daily step total from Apple Health — your iPhone and Apple Watch counted once, just like the Health app.' }],
@@ -293,14 +311,15 @@ const PATHS: Record<DisclosurePath, { read: { icon: PointIcon; text: string }[];
 /**
  * §6: the disclosure for `path`. `fullBackfill` (M9: the member's consent reads each source's history — not on a shared
  * phone) adds "Your steps from the last 30 days come in too." (7 for the iPhone's motion; none for Android's phone
- * counter, which counts from the moment it starts). "Turn on": the same points, no "Next…" caption.
+ * counter, which counts from the moment it starts). Android names the AI provider (R/U review). "Turn on": the same
+ * points, no "Next…" caption.
  */
 export function disclosureCopy(path: DisclosurePath, variant: DisclosureSheet['variant'], fullBackfill: boolean): DisclosureCopy {
   const p = PATHS[path];
   const history = fullBackfill && p.history > 0 ? [{ icon: 'history' as const, text: `Your steps from the last ${p.history} days come in too.` }] : [];
   return {
     title: 'Count your steps automatically',
-    points: [...p.read, ...history, { icon: 'saved', text: SAVED }, { icon: 'off', text: OFF }],
+    points: [...p.read, ...history, { icon: 'saved', text: SAVED }, ...(p.ai ? [{ icon: 'ai' as const, text: AI }] : []), { icon: 'off', text: OFF }],
     caption: variant === 'continue' ? p.caption : null,
     button: variant === 'continue' ? 'Continue' : 'Turn on',
   };

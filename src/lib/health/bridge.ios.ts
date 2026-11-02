@@ -96,7 +96,14 @@ async function sleepIntervals(hk: HealthKit, start: Date, end: Date): Promise<Sl
 
 /** The StepCount sheet was answered (HealthKit throws / crashes on queries for a type that was never asked). */
 async function stepsAnswered(hk: HealthKit): Promise<boolean> {
-  return (await hk.getRequestStatusForAuthorization({ toRead: [STEPS] })) === hk.AuthorizationRequestStatus.unnecessary;
+  return (await stepsStatus(hk)) === true;
+}
+
+/** The StepCount sheet: answered (true), not asked yet (false), or no answer (null: HealthKit's `unknown` — an error). */
+async function stepsStatus(hk: HealthKit): Promise<boolean | null> {
+  const status = await hk.getRequestStatusForAuthorization({ toRead: [STEPS] });
+  if (status === hk.AuthorizationRequestStatus.unnecessary) return true;
+  return status === hk.AuthorizationRequestStatus.shouldRequest ? false : null;
 }
 
 export const healthBridge: HealthBridge = {
@@ -203,10 +210,16 @@ export const healthBridge: HealthBridge = {
   },
 
   async stepsGranted() {
+    let hk: HealthKit;
     try {
-      return await stepsAnswered(await healthKit());
+      hk = await healthKit();
     } catch {
-      return false;
+      return false; // no HealthKit module in this build
+    }
+    try {
+      return await stepsStatus(hk);
+    } catch {
+      return null; // the check failed (e.g. a background wake-up with the phone locked): no answer, never "not granted"
     }
   },
 

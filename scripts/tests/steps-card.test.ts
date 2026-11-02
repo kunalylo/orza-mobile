@@ -278,34 +278,39 @@ describe('iPhone: Apple Health first, the motion sensor once when it has no step
 describe('the disclosure (§6: one button, the exact points)', () => {
   const SAVED = 'Only each day’s total is saved to your ÖRZA account — on Today, your reports and the website. Never where you go.';
   const OFF = 'Turn it off any time in Settings › Privacy & data.';
+  /** Android (R/U review: Health Connect's policy wants explicit, informed consent before health data goes to a third party). */
+  const AI = 'When you use an AI feature, like the coach, your step totals go with your request to our AI provider.';
   const texts = (c: ReturnType<typeof disclosureCopy>) => c.points.map((p) => p.text);
 
-  test('Android Health Connect (14+): four points, Health Connect\'s caption, "Continue"', () => {
+  test('Android Health Connect (14+): its points, the AI provider named, Health Connect\'s caption, "Continue"', () => {
     const c = disclosureCopy('hc', 'continue', false);
     assert.equal(c.title, 'Count your steps automatically');
     assert.deepEqual(texts(c), [
       'ÖRZA reads your daily step total from Health Connect — this phone’s steps plus any watch or fitness app you use with it.',
       'Health Connect then keeps this phone’s steps, so other health apps you allow can use them too.',
       SAVED,
+      AI,
       OFF,
     ]);
+    assert.equal(c.points.find((p) => p.text === AI)?.icon, 'ai');
     assert.equal(c.caption, 'Next, Health Connect shows what ÖRZA would like to read.');
     assert.equal(c.button, 'Continue');
   });
 
-  test('Android phone: three points, the Physical activity caption; no history line (counting starts at the subscription)', () => {
+  test('Android phone: its point, the AI provider named, the Physical activity caption; no history line (counting starts at the subscription)', () => {
     const c = disclosureCopy('phone', 'continue', true);
     assert.deepEqual(texts(c), [
       'Your phone counts steps with a low-power motion sensor, and Google Play services keeps them for ÖRZA — even when ÖRZA is closed.',
       SAVED,
+      AI,
       OFF,
     ]);
     assert.equal(c.caption, 'Next, your phone asks to allow “Physical activity”.');
-    assert.equal(disclosureCopy('phone_sampler', 'continue', true).points.length, 3);
+    assert.equal(disclosureCopy('phone_sampler', 'continue', true).points.length, 4);
     assert.equal(disclosureCopy('phone_sampler', 'continue', true).caption, c.caption);
   });
 
-  test('iPhone Apple Health and the motion fallback: their points and captions', () => {
+  test('iPhone Apple Health and the motion fallback: their points and captions (no AI line: nothing it reads is sent while held)', () => {
     const hk = disclosureCopy('healthkit', 'continue', false);
     assert.deepEqual(texts(hk), [
       'ÖRZA reads your daily step total from Apple Health — your iPhone and Apple Watch counted once, just like the Health app.',
@@ -335,7 +340,7 @@ describe('the disclosure (§6: one button, the exact points)', () => {
       const c = disclosureCopy(path, 'continue', false);
       assert.ok(!texts(c).some((t) => t.includes('keeps this phone’s steps')), path);
       assert.equal(c.caption, 'Next, Health Connect shows what ÖRZA would like to read.');
-      assert.deepEqual(texts(c).slice(-2), [SAVED, OFF]);
+      assert.deepEqual(texts(c).slice(-3), [SAVED, AI, OFF]);
     }
   });
 

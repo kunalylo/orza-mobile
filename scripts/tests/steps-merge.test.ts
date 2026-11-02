@@ -22,6 +22,7 @@ import {
   hcCoverFrom,
   implicitStart,
   phoneWinner,
+  restartBase,
   type DayValue,
 } from '../../src/lib/steps/merge';
 import type { DayBase, DayReading, SourceReading } from '../../src/lib/steps/types';
@@ -600,5 +601,55 @@ describe('implicitStart — counting began partway through a day that already ha
     const base = implicitStart(day, true, { server: 3_000 });
     assert.deepEqual(base, { kind: 'start', steps: 3_000, at: consent });
     assert.equal(val(dayValue(day, base, true)), 'start 4200 ← phone/recording');
+  });
+});
+
+describe('restartBase — counting restarted on a day that already has a base (R/U review, M5c3)', () => {
+  const edit: DayBase = { kind: 'edit', steps: 2_000, at: ist(D, '09:00'), editRef: 'm1' };
+  const restart = ist(D, '12:00');
+  // 09:00 an edit of 2 000; 3 000 more counted by 11:55 and saved (5 000); the switch off and on at 12:00 re-subscribed
+  // the Recording API: 4 000 since then.
+  const day = dayOf([recording(4_000, restart)]);
+  const saved = { base: edit, autoSent: 5_000, autoAt: ist(D, '11:55'), server: 5_000 };
+
+  test('the day’s number before the fix drops what was counted between the edit and the restart', () => {
+    assert.equal(val(dayValue(day, edit, true)), 'edit 6000 ← phone/recording');
+  });
+
+  test('saved after the base and before the restart → the base moves to the restart with that save', () => {
+    const base = restartBase(day, true, saved);
+    assert.deepEqual(base, { kind: 'edit', steps: 5_000, at: restart, editRef: 'm1' });
+    assert.equal(val(dayValue(day, base, true)), 'edit 9000 ← phone/recording');
+    // A start (an earlier restart's) moves the same way and stays a start.
+    const start: DayBase = { kind: 'start', steps: 5_000, at: ist(D, '08:00') };
+    assert.deepEqual(restartBase(day, true, { ...saved, base: start }), { kind: 'start', steps: 5_000, at: restart });
+  });
+
+  test('this phone’s own save, never above the server’s count (another phone’s higher count is compared, not added)', () => {
+    assert.equal(restartBase(day, true, { ...saved, server: 9_000 })?.steps, 5_000);
+    assert.equal(restartBase(day, true, { ...saved, server: 4_000 })?.steps, 4_000);
+    assert.equal(restartBase(day, true, { ...saved, server: 1_000 })?.steps, 2_000, 'never below the base');
+  });
+
+  test('nothing to move: no save since the base, a save after the restart, a winner that sees the base’s instant, an edit after the day', () => {
+    assert.equal(restartBase(day, true, { ...saved, autoAt: ist(D, '08:30') }), null, 'saved before the base only');
+    assert.equal(restartBase(day, true, { ...saved, autoAt: ist(D, '12:10') }), null, 'saved since the restart');
+    assert.equal(restartBase(dayOf([recording(9_000, S, after(edit.at, 7_000))]), true, saved), null, 'a count since 09:00');
+    assert.equal(restartBase(dayOf([hc(9_000, S, after(edit.at, 7_000)), recording(4_000, restart)]), true, saved), null, 'the store saw it all');
+    assert.equal(restartBase(day, true, { ...saved, base: null }), null, 'no base: implicitStart');
+    const late: DayBase = { kind: 'edit', steps: 8_000, at: E + H, editRef: 'm2' };
+    assert.equal(restartBase(day, false, { ...saved, base: late }), null);
+    assert.equal(restartBase(dayOf([]), true, saved), null);
+  });
+
+  test('the day’s record lost since (no own save on it): the server’s count, from this phone’s last automatic save on', () => {
+    // Signed out at 12:00 (the records go, the subscription too) and back: the marker gives the edit's own 2 000.
+    const lost = { base: edit, server: 5_000, lastAutoSave: ist(D, '11:55') };
+    assert.deepEqual(restartBase(day, true, lost), { kind: 'edit', steps: 5_000, at: restart, editRef: 'm1' });
+    assert.deepEqual(restartBase(day, true, { ...lost, lastAutoSave: ist(D, '12:30') })?.at, ist(D, '12:30'), 'never before the last save');
+    // No save by this phone since the edit: the server's raise is another phone's — compared, never added.
+    assert.equal(restartBase(day, true, { ...lost, lastAutoSave: ist(D, '08:00') }), null);
+    assert.equal(restartBase(day, true, { ...lost, server: 2_000 }), null, 'nothing above the base');
+    assert.equal(restartBase(day, true, { ...lost, server: null }), null, 'the server unknown');
   });
 });

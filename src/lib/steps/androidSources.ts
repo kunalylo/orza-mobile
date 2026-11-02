@@ -256,8 +256,10 @@ export function recordingReadings(
 
 /**
  * The day readings, in `days`' order: each source's reading (Health Connect first), `storeUnread` when Health
- * Connect or the phone's Recording API is ON but wasn't read for the day (M5f). A day that may not be read (M9) has
- * no sources and is never unread.
+ * Connect or the phone's Recording API is ON but wasn't read for the day (M5f), `phonePartial` when the phone's own
+ * counter is ON (`phoneOn`) but its reading is missing or starts after the day's read range does (R/U review: its
+ * window or a fresh sampler begins later — the day may lack this phone's steps). A day that may not be read (M9) has
+ * no sources and no flag.
  */
 export function assembleDays(
   days: readonly DayPlan[],
@@ -265,6 +267,7 @@ export function assembleDays(
     hc?: ReadonlyMap<string, { reading: SourceReading | null; unread: boolean }>;
     phone?: ReadonlyMap<string, SourceReading>;
     phoneUnread?: ReadonlySet<string>;
+    phoneOn?: boolean;
   }
 ): DayReading[] {
   return days.map((day) => {
@@ -274,6 +277,7 @@ export function assembleDays(
     const phone = parts.phone?.get(date);
     const sources = [...(hc?.reading ? [hc.reading] : []), ...(phone ? [phone] : [])];
     const unread = !!hc?.unread || !!parts.phoneUnread?.has(date);
-    return { date, start, end, sources, ...(unread ? { storeUnread: true } : {}) };
+    const partial = !!parts.phoneOn && (!phone || phone.coverFrom > day.read.from);
+    return { date, start, end, sources, ...(unread ? { storeUnread: true } : {}), ...(partial ? { phonePartial: true } : {}) };
   });
 }

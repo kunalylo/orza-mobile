@@ -23,7 +23,7 @@
  *   `at` never adds on. An `edit` is that sum; a `start` (the day had a number before anything counted it) is the
  *   higher of that sum and the whole-day count; an edit made after the day ended is the member's number for good.
  */
-import type { DayBase, DayReading, PhoneCounter, SourceReading, StepSource } from './types';
+import type { DayBase, DayReading, PhoneCounter, SourceReading, SourceTag, StepSource } from './types';
 
 /** Server limit (`boundedNumber(0, 100000)`). */
 export const MAX_DAY_STEPS = 100_000;
@@ -78,7 +78,12 @@ export function phoneWinner(sources: readonly SourceReading[]): SourceReading | 
  * when it counts the phone itself (`includesPhone`, Android 14+ with extension 20). Elsewhere HC has only what other
  * apps wrote, which may be a part of the day or a workout.
  */
-const holdsPhone = (store: SourceReading) => store.source === 'apple_health' || store.includesPhone === true;
+export const holdsPhone = (store: Pick<SourceReading, 'source' | 'includesPhone'>) => store.source === 'apple_health' || store.includesPhone === true;
+
+/** Which source `x` is and from when it covers the day (`SourceTag`: what made an automatic save, M6). */
+export function sourceTag(x: SourceReading): SourceTag {
+  return { source: x.source, ...(x.counter ? { counter: x.counter } : {}), coverFrom: x.coverFrom };
+}
 
 /** M2: the health store's reading (null when it has none). */
 export function storeReading(sources: readonly SourceReading[]): SourceReading | null {
@@ -186,11 +191,25 @@ export interface DayValue {
    * past day saves nothing and isn't final.
    */
   storeUnread: boolean;
+  /**
+   * The reading's `phonePartial`: the phone's own counter is ON but blind for part of the day — a past day's number
+   * then never lowers this phone's own save unless a store holding the phone's steps decides it (M6).
+   */
+  phonePartial: boolean;
 }
 
 function valueOf(steps: number, estimated: number | undefined, basis: DayValue['basis'], winner: SourceReading | null): DayValue {
   const n = clampSteps(steps);
-  return { steps: n, estimated: Math.min(n, clampSteps(estimated ?? 0)), basis, winner, fixed: false, sinceUnknown: false, storeUnread: false };
+  return {
+    steps: n,
+    estimated: Math.min(n, clampSteps(estimated ?? 0)),
+    basis,
+    winner,
+    fixed: false,
+    sinceUnknown: false,
+    storeUnread: false,
+    phonePartial: false,
+  };
 }
 
 const realValue = (v: DayValue) => v.steps - v.estimated;
@@ -202,14 +221,15 @@ const realValue = (v: DayValue) => v.steps - v.estimated;
  * - (b) `start`: the higher of the whole-day count and that sum — by real steps (C7: a mostly estimated whole day
  *   doesn't replace a typed number), a tie to the whole-day count;
  * - (d) an `edit` made at or after the day's end: its number, fixed — late data from before it never adds on.
- * Flags: `sinceUnknown` (a source couldn't say what it counted after the base) and `storeUnread` (from the reading).
+ * Flags: `sinceUnknown` (a source couldn't say what it counted after the base), `storeUnread` and `phonePartial` (from
+ * the reading).
  */
 export function dayValue(reading: DayReading, base: DayBase | null | undefined, isToday: boolean): DayValue | null {
   const storeUnread = reading.storeUnread === true;
   const value = baseValue(reading, base, isToday);
   if (!value) return null;
   const sinceUnknown = !!base && !value.fixed && base.at < reading.end && !!reading.sources.some((x) => blindSince(x, base.at));
-  return { ...value, sinceUnknown, storeUnread };
+  return { ...value, sinceUnknown, storeUnread, phonePartial: reading.phonePartial === true };
 }
 
 function baseValue(reading: DayReading, base: DayBase | null | undefined, isToday: boolean): DayValue | null {
@@ -334,4 +354,39 @@ export function implicitStart(
   }
   const saved = known.lastAutoSave != null && Number.isFinite(known.lastAutoSave) ? known.lastAutoSave : -Infinity;
   return { kind: 'start', steps: server, at: Math.max(winner.coverFrom, saved) };
+}
+
+/**
+ * M5c3 on a day that already has a base (R/U review): counting restarted after the base's instant — the switch off and
+ * on (P9), S-A3, Play services gone and back (a fresh sampler), a second restart the same day — so the winning count
+ * after the base (`counted`) covers only from its new start, and the steps between the base and that start would drop
+ * out of the day. When this phone saved the day automatically between the two (`autoAt` in [base.at, coverFrom)), the
+ * base moves to the restart with that save (`autoSent`, never above the server's count — another phone's higher count
+ * is compared, never added — nor below the base): the same kind and edit marker, so an edit stays the member's. With no
+ * such save on record (the record was lost: sign-out, a purged cache) but this phone's last automatic save
+ * (`lastAutoSave`, any day) after the base's instant and a server count above the base, the server's count from the
+ * later of the restart and that save. Null: nothing to move (a winner that sees the base's instant, no save between,
+ * an edit made after the day, no base — `implicitStart`).
+ */
+export function restartBase(
+  reading: DayReading,
+  isToday: boolean,
+  known: { base?: DayBase | null; autoSent?: number | null; autoAt?: number | null; server?: number | null; lastAutoSave?: number | null }
+): DayBase | null {
+  const base = known.base;
+  if (!base || !(base.at < reading.end)) return null;
+  const winner = counted(reading, base.at, isToday);
+  if (!winner || winner.coverFrom <= base.at) return null;
+  const at = winner.coverFrom;
+  const server = known.server != null && Number.isFinite(known.server) ? clampSteps(known.server) : null;
+  const keep = { kind: base.kind, ...(base.editRef !== undefined ? { editRef: base.editRef } : {}) };
+  if (known.autoSent != null) {
+    const autoAt = known.autoAt ?? -Infinity;
+    if (!(autoAt >= base.at && autoAt < at)) return null;
+    const own = clampSteps(known.autoSent);
+    return { ...keep, steps: Math.max(clampSteps(base.steps), server != null ? Math.min(server, own) : own), at };
+  }
+  const saved = known.lastAutoSave != null && Number.isFinite(known.lastAutoSave) ? known.lastAutoSave : null;
+  if (server == null || saved == null || saved < base.at || server <= clampSteps(base.steps)) return null;
+  return { ...keep, steps: server, at: Math.max(at, saved) };
 }

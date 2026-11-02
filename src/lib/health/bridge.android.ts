@@ -291,10 +291,16 @@ export const healthBridge: HealthBridge = {
 
   /** `READ_STEPS` is granted (the steps reader uses `healthFeatures().stepsGranted`, one native call for all). */
   async stepsGranted() {
+    let hc: HealthConnect;
     try {
-      return (await readableTypes(await client())).has('Steps');
+      hc = await client();
     } catch {
-      return false;
+      return false; // Health Connect missing / not ready
+    }
+    try {
+      return (await readableTypes(hc)).has('Steps');
+    } catch {
+      return null; // the check failed: no answer
     }
   },
 

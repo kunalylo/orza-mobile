@@ -17,7 +17,9 @@ import { backfill, fullBackfill, grantConsent, readConsent } from '../../src/lib
 import type { DayRecord } from '../../src/lib/steps/policy';
 import {
   KEEP_DAYS,
+  KEEP_LEFT_MS,
   loadDays,
+  othersLeftAt,
   loadPrefs,
   STEPS_FILES,
   withConsentPatch,
@@ -30,6 +32,7 @@ import {
   withoutConsentKind,
   withoutHcGrant,
   withoutUserDays,
+  withSignOut,
   type StepsDays,
   type StepsPrefs,
 } from '../../src/lib/steps/storeData';
@@ -249,5 +252,44 @@ describe('the Health screen’s Disconnect (R6: P9, M9, S-H2)', () => {
     assert.equal(revoked.hcGrantAt, undefined);
     assert.equal(withHcGrant(revoked, 5_000).hcGrantAt, 5_000);
     assert.equal(withoutHcGrant(revoked), revoked, 'none → unchanged');
+  });
+});
+
+describe('sign-outs kept in the prefs (R/U review: M9 after a sign-out)', () => {
+  const DAY = 24 * 3_600_000;
+  const t = Date.UTC(2026, 10, 2, 6, 0);
+
+  test('each member’s last sign-out; another member’s is the floor for this one (never their own)', () => {
+    let prefs = loadPrefs(null, null).prefs;
+    assert.equal(othersLeftAt(prefs, 'amy'), null);
+    prefs = withSignOut(prefs, 'amy', t - 9 * DAY);
+    assert.equal(othersLeftAt(prefs, 'amy'), null, 'her own sign-out is no floor for her');
+    prefs = withSignOut(prefs, 'ben', t - 2 * DAY);
+    assert.equal(othersLeftAt(prefs, 'amy'), t - 2 * DAY);
+    assert.equal(othersLeftAt(prefs, 'ben'), t - 9 * DAY);
+    prefs = withSignOut(prefs, 'cat', t - 5 * DAY);
+    assert.equal(othersLeftAt(prefs, 'amy'), t - 2 * DAY, 'the latest of the others');
+    // Survives a reload (the prefs file); malformed entries are dropped.
+    const reloaded = loadPrefs(JSON.parse(JSON.stringify({ ...prefs, leftAt: { ...prefs.leftAt, bad: 'x' } })), null).prefs;
+    assert.deepEqual(reloaded.leftAt, prefs.leftAt);
+  });
+
+  test('sign-outs older than the longest lookback are forgotten', () => {
+    let prefs = withSignOut(loadPrefs(null, null).prefs, 'ben', t - KEEP_LEFT_MS - DAY);
+    prefs = withSignOut(prefs, 'amy', t);
+    assert.deepEqual(prefs.leftAt, { amy: t });
+    assert.ok(KEEP_LEFT_MS >= 30 * DAY);
+  });
+
+  test('account deletion: the member’s id goes, their sign-out stays as the install’s `formerLeftAt`', () => {
+    let prefs = withConsents(loadPrefs(null, null).prefs, grantConsent({}, 'ben', 'store', t - 9 * DAY));
+    prefs = withSignOut(prefs, 'ben', t - DAY);
+    const gone = withoutConsent(prefs, 'ben');
+    assert.equal(gone.leftAt?.ben, undefined);
+    assert.equal(gone.formerLeftAt, t - DAY);
+    assert.equal(othersLeftAt(gone, 'amy'), t - DAY);
+    assert.equal(loadPrefs(JSON.parse(JSON.stringify(gone)), null).prefs.formerLeftAt, t - DAY);
+    // Only a sign-out on record moves; nothing to remove → unchanged.
+    assert.equal(withoutConsent(gone, 'ben'), gone);
   });
 });

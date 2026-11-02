@@ -34,6 +34,7 @@ import {
   pedometerAsks,
   pedometerReading,
   readingsByDate,
+  storeAnswer,
   type DayRead,
 } from './iosSources';
 import { firstAsk, sourcesOn } from './plan';
@@ -68,11 +69,25 @@ async function healthAvailable(): Promise<boolean> {
   }
 }
 
+/** The StepCount sheet was seen answered in this JS session (a failed status check keeps that answer, `storeAnswer`). */
+let seenAnswered = false;
+
 /** Everything the iPhone says about its step sources right now (never throws: each call has its default). */
 async function probe() {
-  const [store, answered, counter] = await Promise.all([healthAvailable(), healthBridge.stepsGranted(), phoneAvailable()]);
+  const [store, status, counter] = await Promise.all([healthAvailable(), healthBridge.stepsGranted(), phoneAvailable()]);
   const phonePermission: StepPermission = counter ? await permission() : 'unavailable';
-  return { store, answered: store && answered, counter, phonePermission, features: iosFeatures(store, counter) };
+  if (status != null) seenAnswered = status;
+  // A failed check (a locked phone in a background wake-up): the earlier answer — this session's, or background
+  // delivery set up (only ever while the store was ON) — never "not answered" (R/U review).
+  const answer = storeAnswer(status, seenAnswered || hkBackground());
+  return {
+    store,
+    answered: store && answer.answered,
+    unknown: store && answer.unknown,
+    counter,
+    phonePermission,
+    features: iosFeatures(store, counter),
+  };
 }
 
 /* ───────────────────────────── Which sources run ───────────────────────────── */
@@ -102,15 +117,21 @@ async function decide(consent: ReadConsent): Promise<SourceState> {
   const gen = generation;
   const p = await probe();
   if (gen !== generation) return NOTHING_ON;
-  const on = sourcesOn(p.features, { consent, storeGranted: p.answered, phoneGranted: p.phonePermission === 'granted' });
+  // A failed status check with the member's store consent: the store stays ON (its reads fail too: the days are
+  // unread, M5f) and background delivery stays as it is — never cleared by a locked-phone wake-up (R/U review).
+  const keep = p.unknown && consent.store;
+  const on = sourcesOn(p.features, { consent, storeGranted: p.answered || keep, phoneGranted: p.phonePermission === 'granted' });
   const state = { store: on.includes('store'), pedometer: on.includes('pedometer') };
-  await applyBackground(state.store, gen);
+  await applyBackground(state.store, gen, keep);
   return gen === generation ? state : NOTHING_ON;
 }
 
-/** §4.3: Apple Health's background delivery on while the store is ON — HealthKit is called only when that changes. */
-async function applyBackground(storeOn: boolean, gen: number) {
-  const change = backgroundChange(storeOn, hkBackground());
+/**
+ * §4.3: Apple Health's background delivery on while the store is ON — HealthKit is called only when that changes, and
+ * never while the StepCount check failed for a member who agrees to the store (`keep`).
+ */
+async function applyBackground(storeOn: boolean, gen: number, keep = false) {
+  const change = backgroundChange(storeOn, hkBackground(), keep);
   if (!change || gen !== generation) return;
   // Kept only when HealthKit took it: a failed clear is tried again on the next decision.
   if (await healthBridge.configureStepsBackground(change === 'configure')) setHkBackground(change === 'configure');
@@ -159,6 +180,7 @@ export const stepsReader: StepsReader = {
         phonePermission: p.phonePermission,
         firstAsk: firstAsk(p.features),
         store: iosStoreAccess(p.store, p.answered),
+        ...(p.unknown ? { storeUnknown: true } : {}),
         features: p.features,
       };
     } catch {

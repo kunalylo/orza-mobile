@@ -11,9 +11,12 @@
  *    day (Today's dashboard, the read before a save, a refused save's answer): it becomes the day's base at the
  *    marker's instant (M5c2, `merge.baseFromMarker`), and the next save is that number plus what was counted after it;
  * 2. counting began partway through a day that already had a count on the server: a START base at the coverage's start
- *    (M5c3, `merge.implicitStart`) — the server is read for it, once (only before the day's first automatic save);
+ *    (M5c3, `merge.implicitStart`) — the server is read for it, once (only before the day's first automatic save); and
+ *    on a day with a base, counting restarted after it (the switch off and on, a fresh subscription): the base moves to
+ *    the restart with this phone's save in between (`merge.restartBase`), so those steps stay in the day;
  * 3. the plan: nothing, `auto` or `reconcile`;
- * 4. the answer: `applied` → it is this phone's last automatic save (`autoSent`, the only number ever reconciled);
+ * 4. the answer: `applied` → it is this phone's last automatic save (`autoSent`, the only number ever reconciled —
+ *    and only by a count that stands for what made it, `autoBy`);
  *    `edited` → step 1 with the answer's marker; `not_higher` / `changed` → the server's count is known, and this
  *    phone's own save is left as it was (a foreign value is never reconciled).
  *
@@ -34,7 +37,7 @@
  */
 import type { TrackingDay } from '../../features/today/types';
 
-import { autoCount, baseForEdit, baseFromMarker, baseWithoutReading, dayValue, implicitStart, type DayValue, type MarkerRow } from './merge';
+import { autoCount, baseForEdit, baseFromMarker, baseWithoutReading, counted, dayValue, implicitStart, restartBase, type DayValue, type MarkerRow } from './merge';
 import { finalPatch, isFinal } from './plan';
 import { clampSteps, editedOnServer, savePlan, serverAllows, type DayRecord, type SavePlan, type ServerObservation } from './policy';
 import { markerOf, markerRowOf, observeServerSteps, serverObservation } from './serverSeen';
@@ -94,9 +97,9 @@ export interface SaveOptions {
   /** The member signed out meanwhile: stop without writing anything more. */
   stale?: () => boolean;
   /**
-   * A day's number this phone must not send yet (`policy.countsAppleHealth` on an iPhone until the app-wide AI consent
-   * ships): no automatic save of it — no raise, no reconcile, no settling raise. The day is otherwise handled as usual
-   * (edits taken, final when settled).
+   * A day's number this phone must not send yet (`policy.countsIphoneHealthData` on an iPhone — Apple Health or the
+   * motion sensor — until the app-wide AI consent ships): no automatic save of it — no raise, no reconcile, no settling
+   * raise. The day is otherwise handled as usual (edits taken, final when settled).
    */
   hold?: (value: DayValue) => boolean;
 }
@@ -148,7 +151,7 @@ function serverEdit(rec: DayRecord | undefined, seen: ServerObservation | null, 
  */
 function takeEdit(deps: SaveDeps, userId: string, date: string, base: DayBase, server = base.steps) {
   const now = deps.now();
-  deps.updateRecord(userId, date, { base, editRef: base.editRef ?? null, server, serverAt: now, autoSent: undefined, autoAt: now });
+  deps.updateRecord(userId, date, { base, editRef: base.editRef ?? null, server, serverAt: now, autoSent: undefined, autoBy: undefined, autoAt: now });
 }
 
 /** Step 1: an edit the latest real read of the day shows is taken first. The base taken (null: none). */
@@ -160,11 +163,22 @@ function takeServerEdit(deps: SaveDeps, userId: string, reading: DayReading): Da
 }
 
 /**
- * M5c3 may apply (`merge.implicitStart`): no base, the winning reading starts after midnight, and this phone hasn't
- * saved the day automatically since that coverage began.
+ * M5c3 may apply — the server is then read once for it:
+ * - no base (`merge.implicitStart`): the winning reading starts after midnight, and this phone hasn't saved the day
+ *   automatically since that coverage began;
+ * - a base (`merge.restartBase`, R/U review): the winning count after the base starts after its instant (counting
+ *   restarted), and this phone saved the day between the two — or, with no save on record, its last automatic save
+ *   (`lastAutoSave`) came after the base and the server's count last seen isn't the base's own.
  */
-function startsLate(reading: DayReading, isToday: boolean, rec: DayRecord | undefined): boolean {
-  if (rec?.base) return false;
+function startsLate(reading: DayReading, isToday: boolean, rec: DayRecord | undefined, lastAutoSave: number | null): boolean {
+  const base = rec?.base;
+  if (base) {
+    if (!(base.at < reading.end)) return false;
+    const winner = counted(reading, base.at, isToday);
+    if (!winner || winner.coverFrom <= base.at) return false;
+    if (rec.autoSent != null) return (rec.autoAt ?? -Infinity) >= base.at && (rec.autoAt ?? -Infinity) < winner.coverFrom;
+    return lastAutoSave != null && lastAutoSave >= base.at && (rec.server == null || rec.server > base.steps);
+  }
   const winner = autoCount(reading, isToday);
   if (!winner || winner.coverFrom <= reading.start) return false;
   return rec?.autoSent == null || (rec.autoAt ?? Infinity) < winner.coverFrom;
@@ -210,7 +224,15 @@ function takeAnswer(
   const now = deps.now();
   if (answer.applied !== false) {
     const serverModes = answer.applied === true;
-    deps.updateRecord(userId, date, { autoSent: steps, autoAt: now, server: steps, serverAt: now, serverModes, ...(opts.tz ? { tz: opts.tz } : {}) });
+    deps.updateRecord(userId, date, {
+      autoSent: steps,
+      autoBy: plan.by ?? undefined,
+      autoAt: now,
+      server: steps,
+      serverAt: now,
+      serverModes,
+      ...(opts.tz ? { tz: opts.tz } : {}),
+    });
     deps.noteAutoSave(userId, now);
     if (t) opts.onSaved?.(date, t);
     return true;
@@ -255,20 +277,15 @@ async function saveOnce(
   // 1. The member set the day elsewhere: their number first.
   took(takeServerEdit(deps, userId, reading));
 
-  // 2. Counting began partway through the day: carry on from what the server already had (M5c3).
-  if (startsLate(reading, isToday, deps.getRecord(userId, date))) {
+  // 2. Counting began (or began again) partway through the day: carry on from what the server already had (M5c3).
+  if (startsLate(reading, isToday, deps.getRecord(userId, date), deps.lastAutoSave(userId))) {
     const server = await readServer(deps, userId, date, opts);
     if (stale()) return done();
     if (!server.ok) return server.retry ? 'retry' : done();
     took(takeServerEdit(deps, userId, reading));
     const rec = deps.getRecord(userId, date);
-    const base = implicitStart(reading, isToday, {
-      base: rec?.base,
-      autoSent: rec?.autoSent,
-      autoAt: rec?.autoAt,
-      server: server.steps,
-      lastAutoSave: deps.lastAutoSave(userId),
-    });
+    const known = { base: rec?.base, autoSent: rec?.autoSent, autoAt: rec?.autoAt, server: server.steps, lastAutoSave: deps.lastAutoSave(userId) };
+    const base = rec?.base ? restartBase(reading, isToday, known) : implicitStart(reading, isToday, known);
     if (base) deps.updateRecord(userId, date, { base });
   }
 

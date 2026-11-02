@@ -680,3 +680,24 @@ batch 1" log entry); 3 is still open.
   missed now reads "Missed: <name>" / "Missed: N medicines" + "Was due at 2:36 am on Mon, 2 Nov" (phone's zone, the doses'
   scheduled time), dose lines in the expanded text, no "Missed" subText; the showing record keeps `missed` so a partial
   refresh stays missed. Check on the V1 rebuild (stale-alarm run). Plan note: steps-v2.md §10 AT.
+- 2026-11-02: Steps v2 R1–R6 + U1–U5 + missed-dose title BUILT (`c8b3d11` … `840b503`, test:steps 315+). Reviews (wiring /
+  consent-UX / iOS) + fix resumed (`wf_9fbaa2fe-3fe`). INTERIM (R5): `SEND_APPLE_HEALTH_STEPS = false` — an iPhone does not send
+  Apple-Health-derived step counts to the server, because the server puts tracked steps into the AI coach prompt (App Store 5.1.2(i)
+  / 5.1.3 need explicit permission before health data goes to a third-party AI). BLOCKER for the iOS release (D3): build the
+  app-wide AI data consent (web + phone: explain the AI provider, explicit opt-in, AI features off without it), then flip the flag.
+  Ask the user (product decision) before building it. iOS background modes come out as fetch + processing (check in D3).
+  (Widened by the R/U review fixes below: the flag is now `health/types.SEND_IPHONE_HEALTH_DATA` and also holds iPhone
+  motion (Motion & Fitness) counts and HealthKit weight.)
+- 2026-11-02: steps v2 **R/U review fixes** (9 findings, all real; plan §10 "RU"; test:steps 417, test:alarms 69; no app.json
+  change). (1) A past day's reconcile only by a count that stands for this phone's own save (`DayRecord.autoBy`; Android
+  `DayReading.phonePartial` when the phone counter is ON but blind for the day) — Health Connect without the phone's steps
+  never lowers the phone counter's save (switch off/on after midnight, Play services gone, > 10 days), nor the phone's count a
+  withdrawn store's. (2) A coverage restart on a day with a base re-bases at the restart (`merge.restartBase`): an edit's
+  counted-since steps no longer drop out. (3) A waiting save job never combines across a profile-zone / day change (M8).
+  (4) M9 after a sign-out: no member reads from before another member last signed out on this phone (A → B → A). (5)+(7) The
+  iPhone holds Apple Health AND motion counts (5.1.3(i)) — it sends no automatic steps until the AI consent ships.
+  (6) Android's steps disclosure + Health screen connect caption name the AI provider ("When you use an AI feature, like the
+  coach, your step totals go with your request to our AI provider."); §9 Data safety corrected (B5 was skipped) — USER REVIEWS
+  THE COPY. (8) HealthKit weight reached the AI through the coach's `goalReply` (chat history): the iPhone import leaves weight
+  out while held (web follow-up: `goalReply` from `profile.weight_kg`). (9) A failed / `unknown` HealthKit StepCount status
+  check no longer clears Apple Health background delivery (store stays ON, its days unread).

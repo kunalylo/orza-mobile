@@ -23,13 +23,15 @@
  *   save of a past day), the server's answer (an edit marker this phone hasn't taken becomes the day's base, M5c2), and
  *   — a past day — final once settled (`plan.isFinal`, M7: 72 h after the day while a health store is ON, else an hour
  *   after it once a phone count read it whole). The member's own number is `saveManualSteps` (`manual` mode).
- * - iPhone: a number that comes from Apple Health isn't sent until the app-wide AI data consent ships (coordinator
- *   decision: the server's coach reads `tracking.steps`) — `SEND_APPLE_HEALTH_STEPS`. Today still shows it.
+ * - iPhone: a number that comes from Apple Health or the motion sensor isn't sent until the app-wide AI data consent
+ *   ships (coordinator decision: the server's coach reads `tracking.steps`) — `health/types.SEND_IPHONE_HEALTH_DATA`.
+ *   Today still shows it.
  * - `syncStepsInBackground()`: the same without UI — the session and member come from the Keychain, the member's
  *   profile (its time zone, M8) refreshed from the server first; Android reads stored counts only (no live sensor read),
  *   and at most `BACKGROUND_PAST_DAYS` past days per run.
  * - `clearStepsOnSignOut(userId)`: every source stops counting for the member and their day records go (P16); after an
- *   account deletion their consent record too (M9).
+ *   account deletion their consent record too (M9). The sign-out's time is kept: no other member's reads on this phone
+ *   go back before it (M9, `plan.stepsGate`).
  */
 import { AppState } from 'react-native';
 
@@ -39,14 +41,15 @@ import { KEYS, readSecure, readSecureJson, userSnapshot, writeSecureJson } from 
 import type { PublicUser } from '@/lib/types';
 
 import { addDays, safeTimeZone, utcToZoned } from '../alarms/schedule';
+import { SEND_IPHONE_HEALTH_DATA } from '../health/types';
 
 import { autoCount } from './merge';
 import {
   BACKGROUND_PAST_DAYS,
   HEALTH_EMPTY_DAYS,
   healthEmpty,
-  mergeDays,
   mergeReason,
+  nextSaveJob,
   NOT_NOW_MS,
   notNowActive,
   pendingPastDays,
@@ -60,7 +63,7 @@ import {
   type StepsAskState,
   type StepsGate,
 } from './plan';
-import { countsAppleHealth } from './policy';
+import { countsIphoneHealthData } from './policy';
 import { stepsReader } from './reader';
 import { saveManualDay, syncDay, type SaveDeps, type StepsAnswer } from './save';
 import { forgetServerObservations, markerOf, markerRowOf } from './serverSeen';
@@ -72,6 +75,8 @@ import {
   grantStepsConsent,
   lastAutoSave,
   noteAutoSave,
+  noteSignOut,
+  otherMemberLeftAt,
   removeStepsConsent,
   stepsConsents,
   updateDayRecord,
@@ -83,12 +88,12 @@ import type { DayReading, ReadConsent, RefreshReason, StepsAccess } from './type
 export type { RefreshReason } from './types';
 
 /**
- * iPhone: send numbers that come from Apple Health (HealthKit data) to the server. Off until the app-wide AI data
- * consent ships (coordinator decision, App Store 5.1.2(i) / 5.1.3: the server's coach builds its prompt from
- * `tracking.steps`) — or until the web leaves Apple Health days out of the coach. Then: true. Android is unaffected.
+ * iPhone: automatic step counts from Apple Health (HealthKit) or the motion sensor (Motion & Fitness) are not sent until
+ * the app-wide AI data consent ships (`health/types.SEND_IPHONE_HEALTH_DATA`; coordinator decision, App Store 5.1.2(i) /
+ * 5.1.3(i): the server's coach builds its prompt from `tracking.steps`). Today still shows them; the member's typed
+ * number is sent. Android is unaffected.
  */
-const SEND_APPLE_HEALTH_STEPS = false;
-const holdAppleHealth = stepsReader.platform === 'ios' && !SEND_APPLE_HEALTH_STEPS;
+const holdIphoneHealthData = stepsReader.platform === 'ios' && !SEND_IPHONE_HEALTH_DATA;
 
 /** No consent: what the readers get to switch every source off. */
 const NO_CONSENT: ReadConsent = { store: false, phone: false };
@@ -259,7 +264,7 @@ async function readAndPublish(member: StepsMember, opts: RefreshOptions) {
     if (fresh) setState({ access: fresh });
     // The access check timed out: the last one known (the gate then reads today only).
     const access = fresh ?? (sameMember ? state.access : null);
-    const gate = stepsGate(stepsConsents(), member.id, access);
+    const gate = stepsGate(stepsConsents(), member.id, access, otherMemberLeftAt(member.id));
     if (!gate) {
       // P8 / P9: nothing is read or saved for this member — and nothing keeps counting for them on this phone.
       setState({ consent: null, on: [], ask: stepsAsk(access, null), healthEmpty: false, date: today, today: null });
@@ -438,15 +443,11 @@ interface SaveJob {
 let saving: Promise<void> | null = null;
 let nextSave: SaveJob | null = null;
 
-const sameConsent = (a: ReadConsent, b: ReadConsent) => a.store === b.store && a.phone === b.phone;
-
 function queueSave(job: SaveJob) {
   if (saving) {
-    const n = nextSave;
-    // Days read under another consent never ride along (a kind withdrawn meanwhile); a store seen ON by either keeps
-    // past days from settling early.
-    const same = !!n && n.userId === job.userId && n.epoch === job.epoch && sameConsent(n.consent, job.consent);
-    nextSave = same && n ? { ...job, days: mergeDays(n.days, job.days), storeOn: job.storeOn || n.storeOn } : job;
+    // Days read under another consent, profile zone or today never ride along (a kind withdrawn meanwhile; M8's frozen
+    // days after a zone change); a store seen ON by either keeps past days from settling early (`plan.nextSaveJob`).
+    nextSave = nextSaveJob(nextSave, job);
     return;
   }
   saving = (async () => {
@@ -505,7 +506,7 @@ const MANUAL_WAIT_MS = 25_000;
 async function runSave(job: SaveJob) {
   const signedOut = () => job.epoch !== epoch;
   const deps = depsUntil(signedOut);
-  const hold = holdAppleHealth ? countsAppleHealth : undefined;
+  const hold = holdIphoneHealthData ? countsIphoneHealthData : undefined;
   // Today first (what the member is looking at), then past days newest first.
   const days = [...job.days].sort((a, b) => (a.date === job.today ? -1 : b.date === job.today ? 1 : b.date.localeCompare(a.date)));
   for (const day of days) {
@@ -722,6 +723,8 @@ export async function clearStepsOnSignOut(userId?: string | null, opts: { accoun
   setState(EMPTY);
   if (id) {
     try {
+      // M9: another member's reads on this phone never go back before now (they may hold this member's walking).
+      noteSignOut(id);
       deleteUserDays(id);
       if (opts.accountDeleted) removeStepsConsent(id);
     } catch {

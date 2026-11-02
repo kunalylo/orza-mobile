@@ -17,6 +17,7 @@ import {
   consentKindOf,
   fullBackfill,
   grantConsent,
+  nextSaveJob,
   NOT_NOW_MS,
   notNowActive,
   readConsent,
@@ -132,6 +133,29 @@ describe('the gate: what the sync reads for a member (T40, §2.1, §2.6, M9)', (
   });
 });
 
+describe('M9 after a sign-out: another member used the phone in between (R/U review)', () => {
+  const DAY = 24 * 3_600_000;
+  test('A agreed first, B used the phone, A comes back → A reads nothing from before B signed out', () => {
+    // Amy agrees (t1), signs out; Ben signs in, agrees and walks a week, signs out at bOut; Amy signs back in.
+    const consents = grantConsent(grantConsent({}, 'amy', 'store', t1), 'ben', 'store', t2);
+    const bOut = t2 + 7 * DAY;
+    assert.equal(stepsGate(consents, 'amy', access(android()))?.coverFloor, null, 'before: a full backfill over Ben’s week');
+    assert.equal(stepsGate(consents, 'amy', access(android()), bOut)?.coverFloor, bOut);
+    // Ben, already floored at his consent, keeps the later of the two.
+    assert.equal(stepsGate(consents, 'ben', access(android()), t1 + DAY)?.coverFloor, t2);
+    assert.equal(stepsGate(consents, 'ben', access(android()), t2 + 9 * DAY)?.coverFloor, t2 + 9 * DAY);
+    // No one else signed out on this install: unchanged.
+    assert.equal(stepsGate(consents, 'amy', access(android()), null)?.coverFloor, null);
+  });
+
+  test('the disclosure’s “last 30 days” line only when no other member left the phone within those 30 days', () => {
+    const now = t2;
+    assert.equal(fullBackfill({}, 'amy', false, null, now), true);
+    assert.equal(fullBackfill({}, 'amy', false, now - 2 * DAY, now), false, 'Ben signed out two days ago');
+    assert.equal(fullBackfill({}, 'amy', false, now - 31 * DAY, now), true, 'longer ago than the lookback');
+  });
+});
+
 describe('what Today asks (§2.2, §6)', () => {
   test('no consent, the OS permission not given yet → firstAsk, “Continue” (a system prompt follows)', () => {
     assert.deepEqual(stepsAsk(access(android({ stepTracking: true }), { store: 'not_granted' }), null), { kind: 'hc', granted: false });
@@ -205,5 +229,48 @@ describe('Today’s answers to the ask (R6: `useSteps`, §2.2, §6, P19, M9)', (
     ] as const) {
       assert.equal(fullBackfill(consents, id, former), !grantConsent(consents, id, 'phone', t2, former)[id].sharedAtConsent);
     }
+  });
+});
+
+describe('the save queue: a waiting job and a newer one (R/U review, M8)', () => {
+  type Job = Parameters<typeof nextSaveJob>[1];
+  const day = (date: string, steps: number) => ({ date, steps });
+  const job = (j: Partial<Job> & { days: { date: string; steps: number }[] }): Job & { days: { date: string; steps: number }[] } => ({
+    userId: 'u1',
+    epoch: 1,
+    consent: { store: true, phone: true },
+    tz: 'Asia/Kolkata',
+    today: '2026-11-02',
+    storeOn: true,
+    ...j,
+  });
+
+  test('the same member, session, consent, zone and today → the newer readings, plus the past days only the waiting one read', () => {
+    const waiting = job({ days: [day('2026-11-02', 100), day('2026-11-01', 9_000)] });
+    const next = job({ days: [day('2026-11-02', 300)], storeOn: false });
+    const merged = nextSaveJob(waiting, next);
+    assert.deepEqual(merged.days, [day('2026-11-02', 300), day('2026-11-01', 9_000)]);
+    assert.equal(merged.storeOn, true, 'a store seen ON by either keeps past days from settling early');
+  });
+
+  test('another profile time zone (or another today) → the newer job alone: the zone change’s frozen days never ride along', () => {
+    const waiting = job({ days: [day('2026-11-02', 100), day('2026-11-01', 9_000)] });
+    const london = job({ tz: 'Europe/London', days: [day('2026-11-02', 300)] });
+    assert.deepEqual(nextSaveJob(waiting, london), london);
+    const tomorrow = job({ today: '2026-11-03', days: [day('2026-11-03', 20)] });
+    assert.deepEqual(nextSaveJob(waiting, tomorrow), tomorrow);
+  });
+
+  test('another member, session or consent → the newer job alone; nothing waiting → it', () => {
+    const waiting = job({ days: [day('2026-11-01', 9_000)] });
+    for (const next of [
+      job({ userId: 'u2', days: [] }),
+      job({ epoch: 2, days: [] }),
+      job({ consent: { store: false, phone: true }, days: [] }),
+    ]) {
+      assert.deepEqual(nextSaveJob(waiting, next), next);
+    }
+    const only = job({ days: [day('2026-11-02', 1)] });
+    assert.equal(nextSaveJob(null, only), only);
   });
 });

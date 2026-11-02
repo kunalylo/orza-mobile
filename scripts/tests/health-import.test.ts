@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { importRows } from '../../src/lib/health/aggregate';
-import { HEALTH_METRICS, IMPORT_METRICS, METRIC_INFO, PHONE_METRICS, type HealthDayInput } from '../../src/lib/health/types';
+import { HEALTH_METRICS, IMPORT_METRICS, importMetrics, METRIC_INFO, PHONE_METRICS, SEND_IPHONE_HEALTH_DATA, type HealthDayInput } from '../../src/lib/health/types';
 
 describe('what the phone reads and imports (P5, §0.5)', () => {
   test('the phone reads four kinds; the import sends three — never steps', () => {
@@ -40,5 +40,24 @@ describe('what the phone reads and imports (P5, §0.5)', () => {
       { date: '2026-10-29', sleep_minutes: 400 },
     ]);
     assert.deepEqual(importRows([]), []);
+  });
+});
+
+describe('the iPhone’s weight stays on it until the app-wide AI consent (R/U review)', () => {
+  // The server copies an imported weight into the day's tracking, and the coach's own replies quote it ("Your goal: …
+  // (72.5 kg → 65 kg)") — chat history the next AI request sends to the AI provider.
+  const days: HealthDayInput[] = [{ date: '2026-10-30', weight_kg: 72.5, sleep_minutes: 430 }];
+
+  test('iPhone, while held: sleep and resting heart rate only', () => {
+    assert.equal(SEND_IPHONE_HEALTH_DATA, false);
+    assert.deepEqual([...importMetrics('ios')], ['sleep_minutes', 'resting_hr']);
+    assert.deepEqual(importRows(days, importMetrics('ios')), [{ date: '2026-10-30', sleep_minutes: 430 }]);
+    assert.deepEqual(importRows([{ date: '2026-10-31', weight_kg: 72.4 }], importMetrics('ios')), [], 'a weigh-in alone: nothing sent');
+  });
+
+  test('Android, and the iPhone once the consent ships: all three', () => {
+    assert.deepEqual([...importMetrics('android')], [...IMPORT_METRICS]);
+    assert.deepEqual([...importMetrics('ios', true)], [...IMPORT_METRICS]);
+    assert.deepEqual(importRows(days, importMetrics('android')), [{ date: '2026-10-30', sleep_minutes: 430, weight_kg: 72.5 }]);
   });
 });

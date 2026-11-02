@@ -213,8 +213,10 @@ function ConnectState({ health }: { health: Health }) {
         </AllowInHealthConnect>
       ) : (
         <Text variant="caption" tone="subtle" align="center">
-          You choose exactly what to share on the next screen. Only daily totals are saved to your ÖRZA account, and you can
-          disconnect any time.
+          {platform === 'android'
+            ? // R/U review: the AI coach reads steps and weight (Health Connect's policy: explicit, informed consent).
+              'You choose exactly what to share on the next screen. Only daily totals are saved to your ÖRZA account — when you use an AI feature, like the coach, the ones it needs go with your request to our AI provider — and you can disconnect any time.'
+            : 'You choose exactly what to share on the next screen. Only daily totals are saved to your ÖRZA account, and you can disconnect any time.'}
         </Text>
       )}
     </View>

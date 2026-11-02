@@ -5,8 +5,9 @@
  * - **Prefs** (`orza-steps-prefs.json`, the documents folder — kept, backed up): not health data. Per install: the
  *   Android "Physical activity" history (asked / refused for good), when ÖRZA first saw Health Connect's steps read
  *   granted (S-H2), whether Apple Health's background delivery is set up (§4.3), whether a member who had agreed has
- *   deleted their account or withdrawn every consent (M9). Per member: the steps consent (M9), and when this phone last saved their steps
- *   automatically (a time, no steps: M5c3).
+ *   deleted their account or withdrawn every consent (M9). Per member: the steps consent (M9), when this phone last saved
+ *   their steps automatically (a time, no steps: M5c3) and when they last signed out here (another member's sign-out is
+ *   a coverage floor, M9).
  * - **Day records** (`orza-steps-days.json`, the cache folder — out of iCloud / Android backups, and the system may
  *   purge it): per member and day, what this phone saved and saw on the server (`policy.DayRecord`). Safe to lose: the
  *   server is the record of truth (its edit marker and modes). Deleted per member at sign-out.
@@ -27,6 +28,8 @@ export const STEPS_FILES = {
 
 /** A member's day records older than this (days before their newest one) are dropped: the longest lookback is 30. */
 export const KEEP_DAYS = 35;
+/** Sign-outs older than this are forgotten (`leftAt`): no source reads further back (the longest lookback is 30 days). */
+export const KEEP_LEFT_MS = KEEP_DAYS * 24 * 3_600_000;
 
 export interface StepsPrefs {
   version: 2;
@@ -57,6 +60,15 @@ export interface StepsPrefs {
    * day never counts again what such a save may hold (M5c3).
    */
   autoSavedAt?: Record<string, number>;
+  /**
+   * Per member: when they last signed out of ÖRZA on this phone (epoch ms; a time, no steps; R/U review). Another
+   * member's is a coverage floor (M9): the phone's history up to then may hold that member's walking — so a member
+   * coming back after someone else used the phone never reads it (their day records went at their sign-out, P16, and
+   * would otherwise be read again). Forgotten after `KEEP_LEFT_MS`.
+   */
+  leftAt?: Record<string, number>;
+  /** The latest `leftAt` of a member whose account was deleted since (no id kept): a floor for everyone. */
+  formerLeftAt?: number;
 }
 
 export interface StepsDays {
@@ -98,6 +110,7 @@ function flags(x: Record<string, unknown>): Omit<StepsPrefs, 'version' | 'consen
   if (typeof x.hkBackground === 'boolean') out.hkBackground = x.hkBackground;
   if (x.hcRefused === true) out.hcRefused = true;
   if (x.formerConsent === true) out.formerConsent = true;
+  if (isTime(x.formerLeftAt)) out.formerLeftAt = x.formerLeftAt;
   return out;
 }
 
@@ -126,7 +139,11 @@ export function loadPrefs(prefs: unknown, legacy: unknown): { prefs: StepsPrefs;
       }
     }
     const autoSavedAt = savedTimes(prefs.autoSavedAt);
-    return { prefs: { version: 2, ...flags(prefs), consents, ...(autoSavedAt ? { autoSavedAt } : {}) }, migrated: false };
+    const leftAt = savedTimes(prefs.leftAt);
+    return {
+      prefs: { version: 2, ...flags(prefs), consents, ...(autoSavedAt ? { autoSavedAt } : {}), ...(leftAt ? { leftAt } : {}) },
+      migrated: false,
+    };
   }
   if (isObject(legacy) && legacy.version === 1) {
     const out = emptyPrefs();
@@ -196,22 +213,50 @@ export function withConsentPatch(prefs: StepsPrefs, userId: string, patch: Conse
 }
 
 /**
- * Account deletion: `userId`'s consent record and last-save time removed (unchanged when there is neither). A member
- * who had agreed leaves `formerConsent` behind (no id, no data): the next member's first consent is a shared phone's.
+ * Account deletion: `userId`'s consent record, last-save time and sign-out time removed (unchanged when there is none
+ * of them). A member who had agreed leaves `formerConsent` behind (no id, no data): the next member's first consent is
+ * a shared phone's; their sign-out stays as the install's `formerLeftAt` (a floor for everyone, M9).
  */
 export function withoutConsent(prefs: StepsPrefs, userId: string): StepsPrefs {
   const mine = prefs.consents[userId];
   const saved = !!prefs.autoSavedAt && userId in prefs.autoSavedAt;
-  if (!mine && !saved) return prefs;
+  const left = prefs.leftAt?.[userId];
+  if (!mine && !saved && left == null) return prefs;
   const { [userId]: _gone, ...consents } = prefs.consents;
   const { [userId]: _savedAt, ...autoSavedAt } = prefs.autoSavedAt ?? {};
-  const { autoSavedAt: _all, ...rest } = prefs;
+  const { [userId]: _leftAt, ...leftAt } = prefs.leftAt ?? {};
+  const { autoSavedAt: _all, leftAt: _allLeft, ...rest } = prefs;
+  const formerLeftAt = left != null ? Math.max(left, prefs.formerLeftAt ?? -Infinity) : prefs.formerLeftAt;
   return {
     ...rest,
     ...(mine && (mine.store || mine.phone) ? { formerConsent: true } : {}),
     consents,
     ...(Object.keys(autoSavedAt).length ? { autoSavedAt } : {}),
+    ...(Object.keys(leftAt).length ? { leftAt } : {}),
+    ...(formerLeftAt != null ? { formerLeftAt } : {}),
   };
+}
+
+/**
+ * `userId` signed out of ÖRZA on this phone at `at` (R/U review, M9): kept per member; sign-outs older than
+ * `KEEP_LEFT_MS` before it are forgotten.
+ */
+export function withSignOut(prefs: StepsPrefs, userId: string, at: number): StepsPrefs {
+  if (!userId || !isTime(at)) return prefs;
+  const leftAt: Record<string, number> = {};
+  for (const [id, t] of Object.entries({ ...prefs.leftAt, [userId]: at })) if (t >= at - KEEP_LEFT_MS) leftAt[id] = t;
+  return { ...prefs, leftAt };
+}
+
+/**
+ * M9 (R/U review): the latest instant another member than `userId` left this phone — signed out, or since deleted
+ * (`formerLeftAt`); null: none. `userId`'s steps never come from before it: the phone's history up to then may hold the
+ * other member's walking.
+ */
+export function othersLeftAt(prefs: StepsPrefs, userId: string): number | null {
+  let latest = prefs.formerLeftAt ?? null;
+  for (const [id, t] of Object.entries(prefs.leftAt ?? {})) if (id !== userId && (latest == null || t > latest)) latest = t;
+  return latest;
 }
 
 /**

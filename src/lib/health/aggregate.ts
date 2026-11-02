@@ -79,15 +79,16 @@ export class DayCollector {
 }
 
 /**
- * Steps v2 (§0.5, P5): the rows `POST /api/health/import` gets — only `IMPORT_METRICS` (never steps: they reach the
- * account through `POST /api/track/steps` alone); a day left with nothing is not sent. The input is left as it was.
+ * Steps v2 (§0.5, P5): the rows `POST /api/health/import` gets — only `metrics` (`IMPORT_METRICS`, or the platform's
+ * `importMetrics`; never steps: they reach the account through `POST /api/track/steps` alone); a day left with nothing
+ * is not sent. The input is left as it was.
  */
-export function importRows(days: readonly HealthDayInput[]): HealthDayInput[] {
+export function importRows(days: readonly HealthDayInput[], metrics: readonly HealthMetric[] = IMPORT_METRICS): HealthDayInput[] {
   const out: HealthDayInput[] = [];
   for (const day of days) {
     const row: HealthDayInput = { date: day.date };
     let any = false;
-    for (const m of IMPORT_METRICS) {
+    for (const m of metrics) {
       const v = day[m];
       if (v !== undefined) {
         row[m] = v;
