@@ -3,8 +3,8 @@ import { addDays, safeTimeZone } from '../alarms/schedule';
 import type { StepRange } from '../health/types';
 
 import { dayStartMs } from './counter';
-import { applyCoverFloor, autoCount } from './merge';
-import type { DayReading, DaySteps, SinceCount, SourceReading } from './types';
+import { applyCoverFloor } from './merge';
+import type { SinceCount, SourceReading } from './types';
 
 /** `[start, end)` of each local date in `timeZone`, the end capped at `now` (today is still running). */
 export function dayRanges(dates: readonly string[], timeZone: string, now = Date.now()): { start: number; end: number }[] {
@@ -57,23 +57,4 @@ export function sinceRange(day: DayPlan, coverFrom: number, at: number | null | 
 /** `reading` with its count since a base (`ReadOptions.sinceAt`). */
 export function withSince(reading: SourceReading, since: SinceCount): SourceReading {
   return { ...reading, since };
-}
-
-/**
- * Thin adapter until R5a / U1 move Today's published state to `merge.dayValue`: the one-row-per-day shape Today's
- * card still takes, picked by the v2 rules (`merge.autoCount`: today the higher by real steps, a past day the
- * store's). The winner brings its flags; a coverage that starts after midnight becomes `partialFrom`. Null when no
- * source has the day.
- */
-export function legacyDaySteps(reading: DayReading, isToday: boolean): DaySteps | null {
-  const w = autoCount(reading, isToday);
-  if (!w) return null;
-  return {
-    date: reading.date,
-    steps: w.steps,
-    source: w.source,
-    ...(w.coverFrom > reading.start ? { partialFrom: w.coverFrom } : {}),
-    ...(w.estimated ? { estimated: w.estimated } : {}),
-    ...(w.complete ? { complete: true } : {}),
-  };
 }

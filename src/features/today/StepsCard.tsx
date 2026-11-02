@@ -99,7 +99,12 @@ export function StepsCard({
   // Edit: correct a counted day (low-key for today — counting is the point; plain for past days).
   const editable = !!onLog && !!access && !manual && (counting || !isToday);
 
-  const shown = shownSteps(live ? steps.value : null, record, serverSteps, isToday) ?? { steps: serverSteps ?? 0, source: 'saved' as const };
+  const liveValue = live ? steps.value : null;
+  // The counting source's coverage starting after midnight ("Counting since …") and its long-gap estimate.
+  const winner = liveValue?.winner;
+  const partialFrom = live && winner && winner.coverFrom > live.day.start ? winner.coverFrom : null;
+  const estimated = liveValue?.estimated ?? 0;
+  const shown = shownSteps(liveValue, record, serverSteps, isToday) ?? { steps: serverSteps ?? 0, source: 'saved' as const };
   const value = shown.steps;
   const progress = target > 0 ? value / target : 0;
   const reached = target > 0 && value >= target;
@@ -130,14 +135,14 @@ export function StepsCard({
   let status: string;
   if (reached) status = isToday ? 'Step goal reached — lovely work.' : 'Step goal reached.';
   else if (isToday && shown.source === 'edited') status = counting ? `${toGo} · your number, plus steps counted since` : `${toGo} · your number`;
-  else if (isToday && live?.partialFrom) {
-    const since = formatTime(new Date(live.partialFrom).toISOString(), tz);
+  else if (isToday && partialFrom) {
+    const since = formatTime(new Date(partialFrom).toISOString(), tz);
     status =
       base?.kind === 'start' && base.steps > 0
         ? `Counting since ${since}, on top of the ${formatNumber(base.steps)} saved earlier today.`
         : `Counting since ${since} — earlier steps today weren’t seen by this phone.`;
-  } else if (isToday && live?.estimated && shown.source === 'phone')
-    status = `${toGo} · about ${formatNumber(live.estimated)} of these are estimated from hours the phone couldn’t check.`;
+  } else if (isToday && estimated > 0 && shown.source === 'phone')
+    status = `${toGo} · about ${formatNumber(estimated)} of these are estimated from hours the phone couldn’t check.`;
   else if (isToday && counting) status = `${toGo} · updates on its own`;
   else if (isToday && noCounter && value === 0)
     status =

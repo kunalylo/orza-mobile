@@ -19,7 +19,7 @@ import { describe, test } from 'node:test';
 import type { TrackingDay } from '../../src/features/today/types';
 import { addDays, zonedToUtc } from '../../src/lib/alarms/schedule';
 import { dayStartMs } from '../../src/lib/steps/counter';
-import type { DayRecord } from '../../src/lib/steps/policy';
+import { countsAppleHealth, type DayRecord } from '../../src/lib/steps/policy';
 import { applyManualSteps, saveDay, saveManualDay, syncDay, type SaveDeps, type StepsAnswer, type StepsMode } from '../../src/lib/steps/save';
 import { forgetServerObservations, markerOf, markerRowOf, observeServerRow, observeServerSteps } from '../../src/lib/steps/serverSeen';
 import { dayBounds } from '../../src/lib/steps/shared';
@@ -46,7 +46,7 @@ const recording = (steps: number, coverFrom = S, extra: Partial<SourceReading> =
   coverFrom,
   ...extra,
 });
-const health = (steps: number, coverFrom = S): SourceReading => ({ source: 'apple_health', steps, coverFrom });
+const health = (steps: number, coverFrom = S, extra: Partial<SourceReading> = {}): SourceReading => ({ source: 'apple_health', steps, coverFrom, ...extra });
 const pedometer = (steps: number, coverFrom = S, extra: Partial<SourceReading> = {}): SourceReading => ({
   source: 'phone',
   counter: 'pedometer',
@@ -790,6 +790,63 @@ describe('the run that settles a past day checks the server once more (M7)', () 
     assert.equal(srv.posts.length, 1);
     assert.equal(srv.steps(), 11_000);
     assert.equal(a.record(D)?.final, undefined);
+  });
+});
+
+/* ───────────────────────────── Held back: Apple Health counts stay on the iPhone (coordinator decision) ───────────────────────────── */
+
+describe('a count the phone mustn’t send yet (`SaveOptions.hold`: Apple Health until the app-wide AI consent)', () => {
+  const hold = { hold: countsAppleHealth };
+
+  test('an Apple Health count is never sent; the motion sensor’s is (today: the higher of the two decides)', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '18:00'));
+    const a = srv.phone('A');
+    assert.equal(await syncDay(a.deps, a.userId, dayOf([health(6_000)]), true, true, hold), 'done');
+    assert.equal(srv.posts.length, 0, 'Apple Health’s count stays on the phone');
+    assert.equal(a.record(D)?.autoSent, undefined);
+    srv.advance(20 * MIN);
+    await syncDay(a.deps, a.userId, dayOf([health(6_000), pedometer(6_400)]), true, true, hold);
+    assert.deepEqual(srv.sent(), ['A auto 6400 ref null'], 'the iPhone’s motion count is not HealthKit data');
+    srv.advance(20 * MIN);
+    await syncDay(a.deps, a.userId, dayOf([health(7_000), pedometer(6_500)]), true, true, hold);
+    assert.equal(srv.posts.length, 1, 'Apple Health leads again: nothing');
+  });
+
+  test('a past day that follows Apple Health saves nothing — no reconcile either — and still goes final with its store count noted', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '22:00'));
+    const a = srv.phone('A');
+    await syncDay(a.deps, a.userId, dayOf([health(9_000), pedometer(9_500)]), true, true, hold);
+    assert.equal(srv.steps(), 9_500);
+    srv.advance(75 * H); // past e + 72 h: settled
+    assert.equal(await syncDay(a.deps, a.userId, dayOf([health(9_100), pedometer(9_500, S, { complete: true })]), false, true, hold), 'done');
+    assert.equal(srv.posts.length, 1, 'M4 picks Apple Health: held back, not reconciled to it');
+    assert.equal(srv.steps(), 9_500);
+    assert.equal(a.record(D)?.final, true);
+    assert.equal(a.record(D)?.noStore, undefined, 'Apple Health had steps that day (“no steps” never looks at it)');
+  });
+
+  test('the member’s own number is theirs: an edit plus motion counted since is sent, an edit plus Apple Health since is not', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '12:00'));
+    const a = srv.phone('A');
+    await saveManualDay(a.deps, a.userId, D, 3_000, dayOf([health(2_500)]));
+    const at = a.record(D)?.base?.at ?? assert.fail('the edit is the day’s base');
+    srv.advance(H);
+    await syncDay(a.deps, a.userId, dayOf([health(3_400, S, after(at, 900))]), true, true, hold);
+    assert.deepEqual(srv.sent(), ['A manual 3000 ref null']);
+    srv.advance(H);
+    await syncDay(a.deps, a.userId, dayOf([health(3_400, S, after(at, 900)), pedometer(4_500, S, after(at, 1_200))]), true, true, hold);
+    assert.equal(srv.sent().at(-1), `A auto 4200 ref ${srv.marker()}`);
+  });
+
+  test('without `hold` Apple Health counts are saved as before (Android, or once the AI consent ships)', async () => {
+    forgetServerObservations();
+    const srv = fakeServer(true, ist(D, '18:00'));
+    const a = srv.phone('A');
+    await syncDay(a.deps, a.userId, dayOf([health(6_000)]), true, true);
+    assert.deepEqual(srv.sent(), ['A auto 6000 ref null']);
   });
 });
 

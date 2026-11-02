@@ -41,7 +41,7 @@ function DeleteAccountSheet({ visible, onClose }: { visible: boolean; onClose: (
       onSuccess: () => {
         haptics.success();
         toast.success('Your account has been deleted. Thank you for trying ÖRZA. Take care.', 5000);
-        void signOut();
+        void signOut({ accountDeleted: true });
       },
       onError: (e) => {
         haptics.error();

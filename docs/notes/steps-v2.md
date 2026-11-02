@@ -1177,9 +1177,45 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
     history for `apple_health` days — or B5 / a per-platform rule), or, if the web can't change first, R5a holds back
     iOS automatic saves of Apple Health values behind a flag until the app-wide AI consent ships; R6's import without
     `steps` closes the v1 path (`/api/health/import` → `mirrorIntoTracking`).
-- [ ] **R5a.** `sync.ts`: consent gate, `firstAsk`, the new save flow wiring, `setAutoSteps`.
-- [ ] **R5b.** `sync.ts`: background (snapshot refresh, past-day cap), sign-out (unsubscribe, `clearBackgroundTypes`,
+- [x] **R5a.** `sync.ts`: consent gate, `firstAsk`, the new save flow wiring, `setAutoSteps`.
+  - Pure parts in `plan.ts` (new `steps-gate.test.ts`, T40's sync part, in `test:steps`): `readConsent` (per kind, null
+    without one or with the switch `off`), `stepsGate(consents, userId, access)` → `{consent, on, maxBack, storeOn,
+    coverFloor}` or null (= no reads, no saves), `stepsAsk(access, gate)` → `{kind: firstAsk, granted}` ("Turn on" when
+    the OS permission is already there) while nothing is ON, `stillAllowed`, `sinceAtOf` (the bases' `at` → readers'
+    `sinceAt`, now passed). The sync: a closed gate switches every source off once per member and JS session
+    (`prepare(tz, {consent: none})`: unsubscribe, sampler stop, HK background clear) and publishes `ask`; an open one
+    reads only the agreed kinds, from the M9 floor, `maxBack` = lookback of the sources ON (access timed out: today
+    only), M7's `storeOn` = store ON (not `healthConnected`). A read that ends after a switch-off / withdrawn kind is
+    dropped (and the switch-off re-applied: the read's own decision may have come later); a save job stops before its
+    next day. `setAutoSteps(userId, on)` patches `off`; off also drops the member's pending save job, clears the
+    published reading and switches off at once; the caller refreshes (R6). Published state: `consent`, `on`, `ask`,
+    `healthEmpty` (iOS with the store ON, from this run's readings + final `noStore` records), `today = {date, at, day}`
+    (only when some source counts). `legacyDaySteps` / `DaySteps` deleted (StepsCard reads `partialFrom` / estimate
+    from `useTodaySteps().value`).
+  - Deviations: (1) `ReadOptions.consent` is required and `healthConnected` left `ReadOptions` (the readers' v1 default
+    `{store: healthConnected, phone: true}` is gone: a missing consent can't read). (2) R4's AI-coach point: the web
+    can't change in this phase, so `SEND_APPLE_HEALTH_STEPS = false` holds back iPhone automatic saves whose number
+    comes from Apple Health (`policy.countsAppleHealth` = the value's winner; `save.SaveOptions.hold` → no raise, no
+    reconcile, no settling raise); CMPedometer counts and typed numbers are still sent; held days still go final
+    (only days younger than 72 h get saved once the flag flips — V5/V6: flip it when the AI consent ships). (3)
+    Interim until R6: `useSteps.requestAccess` records `consent.phone` when the card's (v1) prompt is granted; v1
+    members (Physical activity granted / Health connected earlier) have no consent record, so nothing counts until
+    they consent (U1's "Turn on"; R6 may grant `consent.store` to existing Health connections if their copy covered it).
+- [x] **R5b.** `sync.ts`: background (snapshot refresh, past-day cap), sign-out (unsubscribe, `clearBackgroundTypes`,
   `deleteUserDays`); `healthkitObserver(.ios).ts` + the `index.ts` import.
+  - Background: a headless run refreshes the member from `GET /api/auth/me` (the app's endpoint; §2.6 says `/api/me`)
+    at most every 15 min, 8 s timeout (HealthKit's wake-up window is ~25 s), writes the Keychain snapshot back
+    (`secure.userSnapshot`, moved from `auth.tsx`) unless the phone signed out meanwhile; 401 → no run; offline → the
+    old snapshot. The past-day cap (`BACKGROUND_PAST_DAYS`) was already wired (J5). Sign-out: `clearStepsOnSignOut(
+    userId, {accountDeleted})` — `auth.clearLocal` passes the member's id (also on a 401 expiry); the readers' `reset()`
+    already unsubscribes the Recording API and clears HK background (R2 / R4); day records are deleted at once, and
+    in-flight saves can't write records or the last-save time back (`depsUntil`). Account deletion: `data.tsx` →
+    `signOut({accountDeleted: true})` → `removeStepsConsent` (+ `formerConsent`). An account deleted elsewhere (401)
+    keeps its consent record, which still marks the phone shared (M9).
+  - Observer: `healthkitObserver.ios.ts` subscribes `subscribeToChanges(StepCount)` at start when `hkBackground()`,
+    re-subscribes on every flip to true (the native configure drops callbacks), unsubscribes on false; callback →
+    `syncStepsInBackground()`; lazy `import()`, try/catch. kingstinct queues a wake-up's event until JS subscribes.
+    No app.json change.
 - [ ] **R6.** `health/sync.ts`: the import without steps, connect sets `consent.store`, disconnect revokes.
   `useSteps.ts` API. Commit "steps v2: readers + sync".
 

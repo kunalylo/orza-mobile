@@ -16,7 +16,7 @@ import { addDays } from '../alarms/schedule';
 import { dayStartMs } from './counter';
 import { autoCount, dayValue, storeReading } from './merge';
 import type { DayRecord } from './policy';
-import type { DayReading, FirstAsk, PhoneCounter, ReadConsent, RefreshReason, StepFeatures, StepsConsent } from './types';
+import type { DayReading, FirstAsk, PhoneCounter, ReadConsent, RefreshReason, StepFeatures, StepsAccess, StepsAsk, StepsConsent } from './types';
 
 const MIN = 60_000;
 const H = 60 * MIN;
@@ -211,6 +211,103 @@ export function sourcesOn(f: StepFeatures, s: SourceInputs): CountingSource[] {
   if (f.platform === 'ios') return phone ? [...out, 'pedometer'] : out;
   if (!phone || (store && f.stepTracking)) return out;
   return [...out, s.recordingReady ? 'recording' : 'sampler'];
+}
+
+/* ───────────────────────────── The consent gate (P8, P9, T40) ───────────────────────────── */
+
+/**
+ * What this member's consent record lets ÖRZA read now: each kind only with its own consent (the steps disclosure, the
+ * Health screen's connect), nothing at all while "Count steps automatically" is off. Null: nothing may be read — no
+ * consent yet ("Not now" and the motion offer are none), or the switch is off. OS permissions belong to the phone; this
+ * is the member's.
+ */
+export function readConsent(c: StepsConsent | null | undefined): ReadConsent | null {
+  if (!c || c.off) return null;
+  const store = !!c.store;
+  const phone = !!c.phone;
+  return store || phone ? { store, phone } : null;
+}
+
+/**
+ * A read made under `before` may still be published and saved: every kind it read is still allowed (`after`: the
+ * member's consent now — a switch turned off, Health disconnected while the read ran → false).
+ */
+export function stillAllowed(before: ReadConsent, after: ReadConsent | null): boolean {
+  return !!after && (!before.store || after.store) && (!before.phone || after.phone);
+}
+
+/** The step sync's gate for one member: what it may read now, and how. */
+export interface StepsGate {
+  /** The kinds the member agreed to (the readers read nothing else). */
+  consent: ReadConsent;
+  /** The sources ON now (§2.1; empty while the phone's state is unknown — the access check timed out). */
+  on: CountingSource[];
+  /** Past days read back: the largest lookback of the sources ON (0: today only). */
+  maxBack: number;
+  /** A health store is ON (M7: its past days settle 72 h after they end) — while unknown, the store's consent. */
+  storeOn: boolean;
+  /** M9: no source reads before this instant (a shared phone); null: a full backfill. */
+  coverFloor: number | null;
+}
+
+/**
+ * The gate (T40): null — nothing is read or saved for `userId` (no consent of theirs on this install, or the switch is
+ * off), whatever the phone's permissions. Else the sources ON (`sourcesOn` with the phone's `access`), how far back to
+ * read and the shared phone's floor (`backfill`). `access` null / without features: the phone's state isn't known
+ * (the check timed out) — today only, and a store consent counts as a store ON (a past day never settles early).
+ */
+export function stepsGate(
+  consents: Readonly<Record<string, StepsConsent>>,
+  userId: string,
+  access: StepsAccess | null | undefined
+): StepsGate | null {
+  const consent = readConsent(consents[userId]);
+  if (!consent) return null;
+  const coverFloor = backfill(consents, userId);
+  const f = access?.features;
+  if (!access || !f) return { consent, on: [], maxBack: 0, storeOn: consent.store, coverFloor };
+  const on = sourcesOn(f, {
+    consent,
+    storeGranted: access.store === 'granted',
+    phoneGranted: access.phonePermission === 'granted',
+    recordingReady: access.recordingReady,
+  });
+  return { consent, on, maxBack: lookbackDays(on), storeOn: on.includes('store'), coverFloor };
+}
+
+/** What Today asks the member for (§2.2): the kind, and whether the OS permission for it is already there. */
+export interface StepsAskState {
+  kind: StepsAsk;
+  /**
+   * The OS permission is already granted (a second member on the phone, or the switch was off): the sheet is a plain
+   * consent screen, "Turn on", and may be closed — no system prompt follows. False: "Continue", then the prompt (or
+   * Settings, when it can't show any more).
+   */
+  granted: boolean;
+}
+
+/**
+ * §2.2: what Today asks — the phone's `firstAsk` — while nothing counts for the member (`gate` null: no consent / the
+ * switch off; or consent with nothing ON, a permission revoked since). Null: something counts, nothing can count on
+ * this phone (`none`), or the phone's state isn't known yet. iPhone: `granted` = the StepCount sheet was answered.
+ */
+export function stepsAsk(access: StepsAccess | null | undefined, gate: StepsGate | null): StepsAskState | null {
+  const kind = access?.firstAsk;
+  if (!access || !kind || kind === 'none' || (gate && gate.on.length > 0)) return null;
+  return { kind, granted: kind === 'phone' ? access.phonePermission === 'granted' : access.store === 'granted' };
+}
+
+/**
+ * M5 / S-R4 (`ReadOptions.sinceAt`): per date, its base's instant (`recordOf(date).base.at`) — each source then also
+ * reports what it counted after it. Dates without a base are left out.
+ */
+export function sinceAtOf(dates: readonly string[], recordOf: (date: string) => DayRecord | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const date of dates) {
+    const at = recordOf(date)?.base?.at;
+    if (typeof at === 'number' && Number.isFinite(at)) out[date] = at;
+  }
+  return out;
 }
 
 /**

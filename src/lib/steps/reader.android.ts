@@ -14,7 +14,7 @@
  * - S-A4 the sampler (raw counter samples, `counter.ts`): only when the Recording API can't be used. Taking over from
  *   it starts from fresh samples (the old ones end where the sampler stopped).
  * - M9: nothing from before a shared phone's coverage floor (`ReadOptions.coverFloor`).
- * The member's consent comes in `ReadOptions.consent` (R5a); until then `{store: healthConnected, phone: true}`.
+ * The member's consent comes in `ReadOptions.consent` (the sync's gate, `plan.stepsGate`): a kind without it is OFF.
  */
 import { AppState, Linking, PermissionsAndroid, Platform } from 'react-native';
 
@@ -94,9 +94,6 @@ async function probe() {
   if (health.stepsGranted) noteHcGrant();
   return { counter, phonePermission, status, subscribedAt, store, health, features: featuresOf(store, health.stepTracking, counter) };
 }
-
-const consentOf = (opts: Pick<ReadOptions, 'consent' | 'healthConnected'>): ReadConsent =>
-  opts.consent ?? { store: !!opts.healthConnected, phone: true };
 
 /* ───────────────────────────── Which sources run ───────────────────────────── */
 
@@ -315,7 +312,7 @@ export const stepsReader: StepsReader = {
 
   async prepare(timeZone, opts) {
     resubscribe = true;
-    if (opts) await decideSources(safeTimeZone(timeZone), consentOf(opts));
+    if (opts) await decideSources(safeTimeZone(timeZone), opts.consent);
   },
 
   async reset() {
@@ -331,7 +328,7 @@ export const stepsReader: StepsReader = {
       const now = Date.now();
       const tz = safeTimeZone(opts.timeZone);
       const days = dayPlans(dates, tz, now, opts.coverFloor);
-      const state = await decideSources(tz, consentOf(opts));
+      const state = await decideSources(tz, opts.consent);
       const [hc, phone] = await Promise.all([
         readHealthConnect(days, state, opts, now).catch((): HcDays => new Map()),
         readPhone(days, state, opts, now).catch((): PhoneDays => ({ readings: new Map(), unread: new Set() })),

@@ -23,7 +23,7 @@ import { AppState, Platform, type AppStateStatus } from 'react-native';
 import { ApiError, api, deviceHeaderValue, getSessionToken, setSessionToken, setUnauthorizedHandler } from './api';
 import { registerDevice, resetDeviceRegistration } from './device';
 import { haptics } from './haptics';
-import { KEYS, readSecure, readSecureJson, writeSecure, writeSecureJson } from './secure';
+import { KEYS, readSecure, readSecureJson, userSnapshot, writeSecure, writeSecureJson } from './secure';
 import type { AuthResponse, PublicUser } from './types';
 
 export type AuthStatus = 'loading' | 'signedOut' | 'signedIn' | 'unreachable';
@@ -39,9 +39,10 @@ export interface AuthContextValue {
   /**
    * Signs this phone out (always, even offline — the server session is then ended on the next launch or sign-in).
    * `everywhere: true` signs out every browser and phone; it needs the server, so it throws (and stays signed in)
-   * when ÖRZA can't be reached.
+   * when ÖRZA can't be reached. `accountDeleted: true` (after `DELETE /api/account`): the phone also forgets the
+   * member's steps consent (M9).
    */
-  signOut: (opts?: { everywhere?: boolean }) => Promise<void>;
+  signOut: (opts?: { everywhere?: boolean; accountDeleted?: boolean }) => Promise<void>;
   /** Re-read `/api/auth/me` (credits, targets, onboarding state…). */
   refresh: () => Promise<PublicUser | null>;
   /**
@@ -56,11 +57,6 @@ export interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-/** Snapshot kept in the Keychain: everything routing + first paint needs, minus bulky / private parts. */
-function snapshotOf(user: PublicUser): PublicUser {
-  return { ...user, memory: [], integrations: undefined };
-}
 
 /** The offline screen's "Try again" shows its spinner at least this long (offline, the request fails at once). */
 const RETRY_MIN_MS = 700;
@@ -132,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applyUser = useCallback((next: PublicUser) => {
     userId.current = next.id;
     setUserState(next);
-    void writeSecureJson(KEYS.user, snapshotOf(next));
+    void writeSecureJson(KEYS.user, userSnapshot(next));
   }, []);
 
   /** `setUser` for screens and mutations: only a copy of the signed-in account, while a session exists. */
@@ -144,8 +140,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applyUser]
   );
 
-  /** Forget the session on this phone (token, snapshot, cached data). */
-  const clearLocal = useCallback(async () => {
+  /** Forget the session on this phone (token, snapshot, cached data; `accountDeleted`: the account is gone too). */
+  const clearLocal = useCallback(async (opts: { accountDeleted?: boolean } = {}) => {
+    const signedOutId = userId.current;
     setSessionToken(null);
     resetDeviceRegistration();
     userId.current = null;
@@ -157,8 +154,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       writeSecure(KEYS.user, null),
       // This account's alarms: cancel them and forget their cached data and photos (loaded on demand; never throws).
       import('./alarms/cleanup').then((m) => m.clearAlarmsOnSignOut()).catch(() => undefined),
-      // Automatic steps: stop the Android sampler and forget its raw samples.
-      import('./steps/sync').then((m) => m.clearStepsOnSignOut()).catch(() => undefined),
+      // Automatic steps: every source stops counting for this member (the Recording API unsubscribed, the sampler's raw
+      // samples forgotten, Apple Health's background delivery cleared) and their day records go (P16); after an
+      // account deletion, their steps consent too.
+      import('./steps/sync').then((m) => m.clearStepsOnSignOut(signedOutId, opts)).catch(() => undefined),
     ]);
   }, [queryClient]);
 
@@ -184,6 +183,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (endingToken.current && endingToken.current === getSessionToken()) return;
       setSessionExpired(true);
       void clearLocal();
+      // An account deleted elsewhere ends here too: its steps consent record stays on the phone, which still makes a
+      // later member's first consent a shared phone's (M9).
     });
     return () => setUnauthorizedHandler(null);
   }, [clearLocal]);
@@ -288,7 +289,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(
-    async (opts: { everywhere?: boolean } = {}) => {
+    async (opts: { everywhere?: boolean; accountDeleted?: boolean } = {}) => {
       haptics.firm();
       const token = getSessionToken();
       endingToken.current = token;
@@ -307,7 +308,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // feature import. Deliberate sign-out only: on a 401 expiry the per-user link just stays with its account.
         await import('@/features/calendar/deviceCalendar').then((m) => m.clearPhoneCalendar()).catch(() => undefined);
         setSessionExpired(false);
-        await clearLocal();
+        await clearLocal({ accountDeleted: opts.accountDeleted });
       } finally {
         endingToken.current = null;
       }

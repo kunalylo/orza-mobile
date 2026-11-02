@@ -12,7 +12,7 @@
  *   closed): set up when the store comes ON, cleared when it goes off and at sign-out (`reset`). The prefs keep what is
  *   set up (`hkBackground`; R5b's observer subscribes by it).
  * - M9: nothing from before a shared iPhone's coverage floor (`ReadOptions.coverFloor`).
- * The member's consent comes in `ReadOptions.consent` (R5a); until then `{store: healthConnected, phone: true}`.
+ * The member's consent comes in `ReadOptions.consent` (the sync's gate, `plan.stepsGate`): a kind without it is OFF.
  */
 import { PermissionStatus } from 'expo';
 import { Pedometer } from 'expo-sensors';
@@ -74,9 +74,6 @@ async function probe() {
   const phonePermission: StepPermission = counter ? await permission() : 'unavailable';
   return { store, answered: store && answered, counter, phonePermission, features: iosFeatures(store, counter) };
 }
-
-const consentOf = (opts: Pick<ReadOptions, 'consent' | 'healthConnected'>): ReadConsent =>
-  opts.consent ?? { store: !!opts.healthConnected, phone: true };
 
 /* ───────────────────────────── Which sources run ───────────────────────────── */
 
@@ -191,7 +188,7 @@ export const stepsReader: StepsReader = {
   async prepare(_timeZone, opts) {
     // The motion coprocessor and Apple Health count on their own; with the member's consent, Apple Health's background
     // delivery is set up (or cleared) to match.
-    if (opts) await decideSources(consentOf(opts));
+    if (opts) await decideSources(opts.consent);
   },
 
   async reset() {
@@ -209,7 +206,7 @@ export const stepsReader: StepsReader = {
     try {
       const now = Date.now();
       const days = dayPlans(dates, safeTimeZone(opts.timeZone), now, opts.coverFloor);
-      const state = await decideSources(consentOf(opts));
+      const state = await decideSources(opts.consent);
       // A read that throws all the same (each call has its own fallback) leaves every day it would read unread.
       const [health, phone] = await Promise.all([
         state.store ? readHealth(days, opts, now).catch(() => readingsByDate(days, healthAsks(days), [], healthReading, now)) : null,

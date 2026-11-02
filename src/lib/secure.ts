@@ -7,6 +7,8 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
+import type { PublicUser } from './types';
+
 export const KEYS = {
   token: 'orza.session',
   user: 'orza.user',
@@ -60,4 +62,12 @@ export async function readSecureJson<T>(key: Key): Promise<T | null> {
 
 export function writeSecureJson(key: Key, value: unknown): Promise<void> {
   return writeSecure(key, value == null ? null : JSON.stringify(value));
+}
+
+/**
+ * The user snapshot kept under `KEYS.user` (the app's start-up, background runs): everything routing, first paint and
+ * the background work need, minus the bulky / private parts.
+ */
+export function userSnapshot(user: PublicUser): PublicUser {
+  return { ...user, memory: [], integrations: undefined };
 }

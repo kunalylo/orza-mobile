@@ -153,6 +153,17 @@ export function savePlan(
   return opts.settling && target > 0 ? { mode: 'auto', steps: target, editRef } : null;
 }
 
+/**
+ * The day's number comes from Apple Health's count (its winner is Apple Health's reading: the whole day's, or what it
+ * counted after the day's base) — HealthKit data. Until the app-wide AI data consent ships (coordinator decision,
+ * App Store 5.1.2(i) / 5.1.3), the server's coach would read it from `tracking.steps`, so the iPhone holds such a
+ * number back (`save.SaveOptions.hold`); the iPhone's own motion count (CMPedometer) and the member's typed number are
+ * not HealthKit data.
+ */
+export function countsAppleHealth(value: DayValue): boolean {
+  return value.winner?.source === 'apple_health';
+}
+
 /* ───────────────────────────── Today's number (§2.4) ───────────────────────────── */
 
 export interface ShownSteps {

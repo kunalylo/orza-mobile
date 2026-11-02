@@ -18,13 +18,14 @@ import { safeTimeZone } from '../alarms/schedule';
 
 import { dayValue } from './merge';
 import { openStepsSettings, stepsReader } from './reader';
-import { useDayRecord } from './store';
+import { grantStepsConsent, useDayRecord } from './store';
 import {
   ACCESS_TIMEOUT_MS,
   bindStepsMember,
   getStepsState,
   publishStepsAccess,
   refreshSteps,
+  setAutoSteps,
   subscribeStepsState,
   within,
   type RefreshOptions,
@@ -110,10 +111,16 @@ export function useTodaySteps() {
 
   /**
    * One tap: the system prompt (when it can still show), the new permission shown at once, then a read in the
-   * background — never waiting on a run already in flight (its saves can take a while on a slow network).
+   * background — never waiting on a run already in flight (its saves can take a while on a slow network). The card's
+   * sheet before it is the phone counter's disclosure: a grant is this member's consent to it (P8; interim until R6's
+   * `requestAccess(kind)` / `turnOn()`).
    */
   const requestAccess = useCallback(async (): Promise<StepPermission> => {
     const result = await stepsReader.requestPermission();
+    if (result === 'granted') {
+      grantStepsConsent(userId, 'phone');
+      await setAutoSteps(userId, true);
+    }
     const access = await within(stepsReader.access(), ACCESS_TIMEOUT_MS);
     if (access) publishStepsAccess(userId, access);
     void refreshSteps({ id: userId, timeZone: tz }, foregroundOptions(qc, 'permission'));
@@ -134,7 +141,7 @@ export function useTodaySteps() {
     healthConnected: mine ? s.healthConnected : false,
     /** The member's today at the last read. */
     date: mine ? s.date : null,
-    /** Live automatic reading for `date` (null: no automatic source could read it). */
+    /** Live automatic reading for `date`: every source's (null: no automatic source could read it, or none may). */
     reading: mine ? s.today : null,
     /** The day's number for `date` (M5: the live reading with the day's base, `merge.dayValue`); null without a reading. */
     value: mine && s.today ? dayValue(s.today.day, record?.base, true) : null,

@@ -94,26 +94,6 @@ export interface DayBase {
  */
 export type StepPermission = 'granted' | 'undetermined' | 'denied' | 'blocked' | 'unavailable';
 
-/**
- * One day's automatic count as Today's card still takes it (`sync.ts` publishes today's in this shape): the winning
- * source's reading. Made from a `DayReading` by `shared.legacyDaySteps` until R5a / U1; saving uses `merge.dayValue`.
- */
-export interface DaySteps {
-  /** Local day in the member's time zone, YYYY-MM-DD. */
-  date: string;
-  steps: number;
-  source: StepSource;
-  /** Phone counter only: this phone started counting this day at this instant (epoch ms); earlier steps weren't seen. */
-  partialFrom?: number;
-  /**
-   * Phone counter only: how many of `steps` are an estimate — steps from a long stretch the phone couldn't check (off,
-   * or background sampling blocked) spread over the days it crossed by time. Today doesn't save it; past days do.
-   */
-  estimated?: number;
-  /** The source read the whole day (a past day's count is final: saved once, then no longer read). */
-  complete?: boolean;
-}
-
 /** Why a read runs (a queued run keeps the most important one: `permission` > `launch` > `foreground` > …). */
 export type RefreshReason = 'launch' | 'foreground' | 'today' | 'permission' | 'background';
 
@@ -133,7 +113,7 @@ export interface StepsAccess {
   /** The phone's own step counter exists (step sensor / motion coprocessor + the native code to read it). */
   phoneAvailable: boolean;
   phonePermission: StepPermission;
-  /** Steps v2, filled by the readers from R2 / R4 on: what Today asks first. */
+  /** Steps v2 (R2 / R4): what Today asks first (`plan.firstAsk`; the sync's `plan.stepsAsk`). */
   firstAsk?: FirstAsk;
   /**
    * Steps v2 (R2 / R4): the health store's steps access. iPhone: `granted` = the StepCount sheet was answered (HealthKit
@@ -144,7 +124,7 @@ export interface StepsAccess {
   recording?: RecordingStatus;
   /** Steps v2, Android (R2): the Recording API is subscribed (with `available`: `plan.SourceInputs.recordingReady`). */
   recordingReady?: boolean;
-  /** Steps v2 (R2 / R4): what this phone can count with — for `plan.sourcesOn` / `plan.lookbackDays` (R5a). */
+  /** Steps v2 (R2 / R4): what this phone can count with — the sync's gate (`plan.stepsGate`: the sources ON, lookback). */
   features?: StepFeatures;
 }
 
@@ -192,18 +172,17 @@ export interface ReadConsent {
 export interface ReadOptions {
   /** The member's IANA time zone — days are counted in it. */
   timeZone: string;
-  /** The member connected Apple Health / Health Connect in ÖRZA (Health screen): also read steps from it. */
-  healthConnected: boolean;
+  /**
+   * The member's consents (P8, `plan.readConsent`): nothing is read for a kind without one — and the sources of a kind
+   * without one are switched off (Android: the Recording API unsubscribed, the sampler stopped; iPhone: Apple Health's
+   * background delivery cleared).
+   */
+  consent: ReadConsent;
   /** A background run: no UI, no live sensor read (Android only delivers sensor events to the app in front). */
   background?: boolean;
-  /** Steps v2 (R2 / R4): per date, a base's `at` — each source also reports its count after it (`SourceReading.since`). */
+  /** Per date, a base's `at` (`plan.sinceAtOf`) — each source also reports its count after it (`SourceReading.since`). */
   sinceAt?: Record<string, number>;
-  /**
-   * Steps v2 (R2 / R4 / R5a): the member's consents; nothing is read for a kind without one. Until R5a passes it, the
-   * readers take `{store: healthConnected, phone: true}` (the v1 behaviour).
-   */
-  consent?: ReadConsent;
-  /** Steps v2 (M9): no source reads before this instant (a shared phone: this member's consent). */
+  /** M9: no source reads before this instant (a shared phone: this member's consent). */
   coverFloor?: number | null;
 }
 
@@ -223,11 +202,12 @@ export interface StepsReader {
   requestPermission(kind?: StepsAsk): Promise<StepPermission>;
   /**
    * Starts background counting where the platform needs it. Android: the next read subscribes to the Recording API
-   * again (once per prepare); with `opts` the phone's counter is set up now (Recording API or sampler, S-A2…S-A4),
-   * else by that read. iPhone: with `opts`, Apple Health's background delivery is set up while the store is ON for the
-   * member and cleared otherwise (§4.3) — every read does the same. Cheap, never throws.
+   * again (once per prepare); with `opts` the phone's counter is set up now for that consent (Recording API or sampler,
+   * S-A2…S-A4; everything off without a phone consent), else by that read. iPhone: with `opts`, Apple Health's
+   * background delivery is set up while the store is ON for the member and cleared otherwise (§4.3) — every read does
+   * the same. Cheap, never throws.
    */
-  prepare(timeZone: string, opts?: Pick<ReadOptions, 'consent' | 'healthConnected'>): Promise<void>;
+  prepare(timeZone: string, opts?: Pick<ReadOptions, 'consent'>): Promise<void>;
   /**
    * Sign-out: stops background counting and forgets raw samples — Android: also the Recording API subscription;
    * iPhone: Apple Health's background delivery (`clearBackgroundTypes`). Never throws.

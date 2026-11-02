@@ -666,3 +666,8 @@ batch 1" log entry); 3 is still open.
   press keeps the press time). Recording API on this AVD: "no_sensor" (expected); HealthFeatures extension 17; HC privacy link opens
   the new screen (loads the live /privacy#phone-app — section appears once B6 is pushed). Mobile repo pushed to origin (21 commits).
   Running: steps v2 Phase R + U (`wf_9fbaa2fe-3fe`) incl. the native missed-dose title (compiled in phase V's rebuild).
+- 2026-11-02: User answers: Health Connect Toolbox download OK → downloaded `health_connect_toolbox.zip` (11.8 MB, www.gstatic.com,
+  sha256 cb105834…a8d93f) to scratchpad `downloads\hc-toolbox\x\HealthConnectToolbox-2_3_5.apk` (package
+  androidx.health.connect.client.devtool 2.3.5, Google's dev tool, debug-signed as shipped) — install on the EMULATOR only, in phase V1
+  (E-3). Real Android phone: NOT available now → V2 (A-1…A-11) stays open; ask again before release. R1–R2 `c8b3d11`, R3–R4 `5b2f01e`
+  done (test:steps 299/299); R5 onwards resumed (`wf_9fbaa2fe-3fe`).

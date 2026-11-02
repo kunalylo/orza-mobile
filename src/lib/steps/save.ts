@@ -34,7 +34,7 @@
  */
 import type { TrackingDay } from '../../features/today/types';
 
-import { autoCount, baseForEdit, baseFromMarker, baseWithoutReading, dayValue, implicitStart, type MarkerRow } from './merge';
+import { autoCount, baseForEdit, baseFromMarker, baseWithoutReading, dayValue, implicitStart, type DayValue, type MarkerRow } from './merge';
 import { finalPatch, isFinal } from './plan';
 import { clampSteps, editedOnServer, savePlan, serverAllows, type DayRecord, type SavePlan, type ServerObservation } from './policy';
 import { markerOf, markerRowOf, observeServerSteps, serverObservation } from './serverSeen';
@@ -93,6 +93,12 @@ export interface SaveOptions {
   onServerSteps?: (date: string, steps: number) => void;
   /** The member signed out meanwhile: stop without writing anything more. */
   stale?: () => boolean;
+  /**
+   * A day's number this phone must not send yet (`policy.countsAppleHealth` on an iPhone until the app-wide AI consent
+   * ships): no automatic save of it — no raise, no reconcile, no settling raise. The day is otherwise handled as usual
+   * (edits taken, final when settled).
+   */
+  hold?: (value: DayValue) => boolean;
 }
 
 /**
@@ -164,11 +170,16 @@ function startsLate(reading: DayReading, isToday: boolean, rec: DayRecord | unde
   return rec?.autoSent == null || (rec.autoAt ?? Infinity) < winner.coverFrom;
 }
 
-/** The plan for the day as it stands now (with the marker the day was last read with: an untaken one blocks it). */
-function planNow(deps: SaveDeps, userId: string, reading: DayReading, isToday: boolean, settling: boolean): SavePlan | null {
+/**
+ * The plan for the day as it stands now (with the marker the day was last read with: an untaken one blocks it) —
+ * nothing for a number held back (`SaveOptions.hold`).
+ */
+function planNow(deps: SaveDeps, userId: string, reading: DayReading, isToday: boolean, settling: boolean, opts: SaveOptions): SavePlan | null {
   const rec = deps.getRecord(userId, reading.date);
   const seen = serverObservation(userId, reading.date);
-  return savePlan(dayValue(reading, rec?.base, isToday), rec, isToday, deps.now(), seen?.marker, { settling });
+  const value = dayValue(reading, rec?.base, isToday);
+  if (value && opts.hold?.(value)) return null;
+  return savePlan(value, rec, isToday, deps.now(), seen?.marker, { settling });
 }
 
 const samePlan = (a: SavePlan | null, b: SavePlan) => !!a && a.mode === b.mode && a.steps === b.steps && a.expect === b.expect && a.editRef === b.editRef;
@@ -263,7 +274,7 @@ async function saveOnce(
 
   // 3. What to save, and whether it's worth a save now (a run that took an edit doesn't make the day final).
   const lastCall = settling && !edited;
-  const plan = planNow(deps, userId, reading, isToday, lastCall);
+  const plan = planNow(deps, userId, reading, isToday, lastCall, opts);
   if (!plan) return done();
 
   // The old server (or the day's modes not known yet): never lower its count — read it right before saving (one GET
@@ -274,7 +285,7 @@ async function saveOnce(
     if (!server.ok) return server.retry ? 'retry' : done();
     if (took(takeServerEdit(deps, userId, reading))) return done(); // the member's number: the next run saves from it
     // The day changed meanwhile (the member's number saved on this phone, a higher count read): the next run decides.
-    if (!samePlan(planNow(deps, userId, reading, isToday, lastCall), plan) || !serverAllows(plan.steps, server.steps)) return done();
+    if (!samePlan(planNow(deps, userId, reading, isToday, lastCall, opts), plan) || !serverAllows(plan.steps, server.steps)) return done();
   }
 
   // 4. Save, and take the answer.

@@ -23,8 +23,7 @@ import {
 import { mergeDays, mergeReason, PAST_READ_EVERY_MS, pendingPastDays, shouldReadPast } from '../../src/lib/steps/plan';
 import { clampSteps, editedOnServer, MAX_DAY_STEPS, serverAllows, type DayRecord } from '../../src/lib/steps/policy';
 import { RECORDING_FRESH_MS, recordingDays, recordingRange, recordingSince, recordingWindow, type RecordingBucket } from '../../src/lib/steps/recording';
-import { dayBounds, dayRanges, legacyDaySteps } from '../../src/lib/steps/shared';
-import type { DayReading, DaySteps, SourceReading } from '../../src/lib/steps/types';
+import { dayBounds, dayRanges } from '../../src/lib/steps/shared';
 
 const IST = 'Asia/Kolkata';
 const NY = 'America/New_York';
@@ -317,48 +316,11 @@ describe('policy — the old server’s guards (until the modes, J6)', () => {
   });
 });
 
-/* ───────────────────────────── Sources ───────────────────────────── */
+/* ───────────────────────────── Day ranges ───────────────────────────── */
 
-describe('source pick (the save path’s adapter until R5a)', () => {
-  const D = '2026-10-20';
-  const reading = (sources: SourceReading[]): DayReading => ({ date: D, ...dayBounds(D, IST), sources });
-  const s = ist(D, '00:00');
-
-  test('today: the higher count wins; a tie goes to the health store; a store 0 is no reading', () => {
-    assert.deepEqual(legacyDaySteps(reading([{ source: 'health_connect', steps: 0, coverFrom: s }, { source: 'phone', steps: 10, coverFrom: s }]), true), {
-      date: D,
-      steps: 10,
-      source: 'phone',
-    });
-    assert.deepEqual(legacyDaySteps(reading([{ source: 'health_connect', steps: 10, coverFrom: s }, { source: 'phone', steps: 10, coverFrom: s }]), true), {
-      date: D,
-      steps: 10,
-      source: 'health_connect',
-    });
-    assert.equal(legacyDaySteps(reading([]), true), null);
-  });
-
-  test('the winner’s coverage after midnight is its partialFrom; its estimate and completeness come with it', () => {
-    const from = ist(D, '07:00');
-    assert.deepEqual(legacyDaySteps(reading([{ source: 'phone', counter: 'sampler', steps: 300, coverFrom: from, estimated: 40, complete: true }]), false), {
-      date: D,
-      steps: 300,
-      source: 'phone',
-      partialFrom: from,
-      estimated: 40,
-      complete: true,
-    });
-  });
-
-  test('a past day follows the store, even below a higher phone count (C3)', () => {
-    const day = reading([
-      { source: 'apple_health', steps: 9_001, coverFrom: s, complete: true },
-      { source: 'phone', counter: 'pedometer', steps: 9_500, coverFrom: s, complete: true },
-    ]);
-    assert.deepEqual(legacyDaySteps(day, false), { date: D, steps: 9_001, source: 'apple_health', complete: true });
-    assert.equal(legacyDaySteps(day, true)?.steps, 9_500, 'today: the live tail');
-  });
-
+// The day's winner (today the higher, a past day the store's, C3) is `merge.autoCount` — `steps-merge.test.ts`. The
+// one-row adapter that used to be tested here (`shared.legacyDaySteps`) went with R5a.
+describe('day ranges', () => {
   test('day ranges: local midnight to midnight, today capped at now; day bounds are never capped', () => {
     const now = ist('2026-10-20', '15:00');
     const [today, yesterday] = dayRanges(['2026-10-20', '2026-10-19'], IST, now);
@@ -746,11 +708,12 @@ describe('plan — queued runs and past days', () => {
   });
 
   test('two waiting save jobs: newer readings win, past days only the older one read are kept', () => {
-    const older: DaySteps[] = [
-      { date: '2026-10-20', steps: 100, source: 'phone' },
-      { date: '2026-10-19', steps: 5_000, source: 'phone', complete: true },
+    type Read = { date: string; steps: number };
+    const older: Read[] = [
+      { date: '2026-10-20', steps: 100 },
+      { date: '2026-10-19', steps: 5_000 },
     ];
-    const newer: DaySteps[] = [{ date: '2026-10-20', steps: 140, source: 'phone' }];
+    const newer: Read[] = [{ date: '2026-10-20', steps: 140 }];
     assert.deepEqual(mergeDays(older, newer), [newer[0], older[1]]);
   });
 });
