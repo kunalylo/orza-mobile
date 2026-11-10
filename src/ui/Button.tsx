@@ -24,8 +24,6 @@ export interface ButtonProps {
   disabled?: boolean;
   /** Stretch to the container width. */
   block?: boolean;
-  /** Shrink the label (down to 75 %) rather than cut it when it doesn't fit — a long label at large text sizes. */
-  shrinkLabel?: boolean;
   haptic?: HapticKind;
   accessibilityLabel?: string;
   accessibilityHint?: string;
@@ -61,7 +59,6 @@ export function Button({
   loading,
   disabled,
   block,
-  shrinkLabel,
   haptic,
   accessibilityLabel,
   accessibilityHint,
@@ -100,14 +97,7 @@ export function Button({
       )}
       <View style={[styles.row, loading && styles.hidden]}>
         {icon ? <Icon name={icon} size={iconSize} color={color} /> : null}
-        <Text
-          variant={size === 'sm' ? 'label' : 'title'}
-          color={color}
-          numberOfLines={1}
-          adjustsFontSizeToFit={shrinkLabel}
-          minimumFontScale={shrinkLabel ? 0.75 : undefined}
-          style={size === 'lg' ? styles.lgLabel : undefined}
-        >
+        <Text variant={size === 'sm' ? 'label' : 'title'} color={color} numberOfLines={1} style={size === 'lg' ? styles.lgLabel : undefined}>
           {label}
         </Text>
         {iconRight ? <Icon name={iconRight} size={iconSize} color={color} /> : null}

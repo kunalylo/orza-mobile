@@ -134,6 +134,10 @@ function ConnectState({ health }: { health: Health }) {
   const [denied, setDenied] = useState(false);
   const busy = useRef(false);
   const { platform } = health;
+  // "Connect Health Connect" is cut on one line with large text on a narrow phone ("Connect Health Conn…"): there the
+  // button says "Connect" (the card's title names the store; TalkBack still hears the full name).
+  const { width, fontScale } = useWindowDimensions();
+  const roomy = width - CARD_INSET >= CONNECT_LABEL_WIDTH * fontScale + LG_BUTTON_CHROME;
 
   // Back from Health Connect with something allowed: connect without asking again (the sheet would only reappear for
   // the types still off, or not at all).
@@ -197,12 +201,12 @@ function ConnectState({ health }: { health: Health }) {
         ))}
       </View>
       <Button
-        label={health.connecting ? 'Connecting…' : `Connect ${health.name}`}
+        label={health.connecting ? 'Connecting…' : roomy ? `Connect ${health.name}` : 'Connect'}
+        accessibilityLabel={`Connect ${health.name}`}
         variant="energy"
         size="lg"
         icon={health.platform === 'ios' ? 'mci:apple' : 'mci:heart-pulse'}
         block
-        shrinkLabel
         loading={health.connecting}
         onPress={() => void connect()}
         accessibilityHint={`Opens ${health.name} to choose what ÖRZA can read`}
@@ -442,6 +446,11 @@ function IconDisc({ icon, tone, small }: { icon: IconName; tone: 'energy' | 'suc
 
 /** "Manage access" at font scale 1 (icon + label + padding), dp. */
 const ACTION_MIN_WIDTH = 160;
+/** The connect button: the screen's and the card's side padding; "Connect Health Connect" at font scale 1 (+ a little
+ * room); the lg button's icon, gap and padding — dp. */
+const CARD_INSET = 82;
+const CONNECT_LABEL_WIDTH = 205;
+const LG_BUTTON_CHROME = 77;
 
 const styles = StyleSheet.create({
   gap: { gap: spacing.md },
