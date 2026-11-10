@@ -1433,6 +1433,10 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
   - push the backend batch (B1–B6) and deploy;
   - confirm `applied` in production responses, then delete the legacy save branch (J6) in a follow-up commit;
   - push mobile; update PROGRESS (tick "auto steps v2").
+  2026-11-10 (user approved the B6 privacy copy and the push): web main = `a3e3c0e` LIVE (Vercel "Deployment has completed");
+  the live /privacy has `#phone-app` "Phone app: steps and health data" and the new lead line; mobile pushed (`4109f10`). Left:
+  `applied` in a production answer (needs a real member's save — our test data may not go to production) → then J6 cleanup;
+  the live privacy page inside the app's privacy screen (V2, real phone: the test build blocks production on purpose).
 - [ ] **V5.** D2 (TestFlight): §8.3 I-1…I-6. If ITMS-90683 appears, restore the update string.
 - [ ] **V6.** D3: the §9 items (Play declaration, Data safety, App privacy, listing, review notes, app-wide AI consent).
 

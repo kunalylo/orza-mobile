@@ -745,3 +745,6 @@ batch 1" log entry); 3 is still open.
   Still open: J6 legacy-save cleanup (keep until a production answer shows `applied` — our own test data may not go to
   production, so check with the user's real use or skip; the branch is harmless), app-wide 48 dp switches / 44 dp icon buttons,
   "Not on yet" copy after a Health Disconnect, change the local qa4 test password (it reached an agent log once; local only).
+- 2026-11-10: web steps v2 LIVE — main `a3e3c0e`, Vercel "Deployment has completed"; live /privacy shows the `#phone-app`
+  section and the new lead; unauthenticated `/api/track/steps` → 401 as before. V4 left: `applied` seen in a real production
+  answer → J6 legacy-save cleanup; the live privacy page in the app's privacy screen on the real phone (V2).
