@@ -737,3 +737,11 @@ batch 1" log entry); 3 is still open.
   "Connect" when tight (`22ac1c5`); LIVE pill one TalkBack stop. Rebuilt twice (release-type test build, SAFE each time),
   all re-checked on the device. Shots in `docs/notes/steps-v2-V1-shots/`; details `docs/notes/steps-v2-V1.md` run 6.
   Follow-up (app-wide, not done): other native switches are 46 x 27 dp; sheet close / header icon buttons are 44 dp.
+- 2026-11-10: **V1 DONE** (`41d8dca`, runs 5–6): E-7 cold background runs now save (the patch needed
+  `expo.autolinking.android.buildFromSource` — SDK 57 links prebuilt AARs, `patches/README.md`), E-6b Disconnect, E-8 connect
+  sheet + charts, E-9 Not now / Log steps PASS; UI + accessibility pass (default + 720×1280 @320 + font 1.3) fixed the 48 dp
+  steps switch, large-text wraps and the LIVE TalkBack stop; screenshots in `docs/notes/steps-v2-V1-shots/`. Mobile pushed
+  (`4109f10`). **V4 started:** web `steps-v2-backend` fast-forwarded onto main and pushed (`a3e3c0e`, user OK'd).
+  Still open: J6 legacy-save cleanup (keep until a production answer shows `applied` — our own test data may not go to
+  production, so check with the user's real use or skip; the branch is harmless), app-wide 48 dp switches / 44 dp icon buttons,
+  "Not on yet" copy after a Health Disconnect, change the local qa4 test password (it reached an agent log once; local only).
