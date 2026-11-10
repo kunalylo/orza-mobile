@@ -1,7 +1,8 @@
 # App-wide AI consent: plan
 
-Date: 2026-11-10. Status: **mobile built** (AM1–AM6, `ba22911`, `830283c` + the review commit; not pushed). The
-backend (AB1–AB4) is built in parallel in `web:`. Tick items in §10 as they are built; §10.1 is the entry-point check.
+Date: 2026-11-10. Status: **mobile and backend built and reviewed** (AM1–AM6 `ba22911`, `830283c`, `96a58c1`;
+AB1–AB4 `web: c2604c4`; AR fixes `web: 5e0e097` and the mobile AR commit, §10.3; nothing pushed). Next: AV (§8) and the
+user's answers (§11). Tick items in §10 as they are built; §10.1 is the entry-point check.
 
 **User decision (2026-11-10, D3, App Store 5.1.2(i))**
 - The phone app asks for AI consent **at first AI use**. The first time a member starts any AI feature, a one-time
@@ -174,13 +175,12 @@ The web privacy page lists "report insights" as an AI feature, but no code does 
   - `contextForPrompt(ctx, {steps: consented})`. Without consent, the line reads
     `Water {w}/{t} glasses · step goal {goal}.` and has no tracked count.
   - `aiHistory(earlier, consented)` (pure, `lib/coach.ts`). With consent it is everything. Without consent it keeps
-    user turns, plus assistant turns with `meta.ai === true && !meta.health`.
+    user turns, plus assistant turns with `meta.ai === true && meta.health === false` (AR review, §10.3).
   - It drops the built-in coach's replies, which quote tracked steps and weight.
   - It also drops AI replies made with health data in the prompt, so a withdrawal is respected in later web turns.
-  - An AI reply made while `consented` is stored with `meta.health: true`. Add `health?: boolean` to
-    `ChatMessage.meta`.
-  - Old AI replies have no flag. They are kept: they never saw Apple Health data, because the iPhone held it. They
-    may hold step counts from Android or typed numbers, which the website already disclosed.
+  - Every AI reply is stored with `meta.health = consented`. Add `health?: boolean` to `ChatMessage.meta`.
+  - Old AI replies have no flag, and they are dropped too: their prompt had the day's tracked steps (an Android
+    phone's Health Connect or motion count among them), which they can repeat. (The first build kept them.)
   - The built-in (free) coach still uses `ctx.tracking`, because nothing leaves the server for that.
   - The web coach of a member without consent no longer knows today's step count (§11, Q1).
 
@@ -327,8 +327,9 @@ only what that request needs:"
   3. `mci:chef-hat`: "Recipes and rebalance plans — what you ask for, with your first name, diet, allergies,
      region, goal and targets."
   4. `file-text`: "Prescription scans — the prescription photo and the allergies you listed."
-  5. `lock`: "Never your email, password or phone number, your medicine list or alarms, or your sleep and heart
-     rate."
+  5. `lock`: "Never your account’s email, password or phone number, your saved medicines and alarms, or your sleep
+     and heart rate." (AR review: "account’s" and "saved", because a prescription photo shows its medicines and a
+     photo or message can show anything.)
 - **After the points:**
   - "ÖRZA shares this only to answer you — never for ads, and it's never sold."
   - "Everything else works without AI: the food list, medicines and alarms, steps, water and weight."
@@ -366,8 +367,8 @@ only what that request needs:"
 - **Turn-off confirm:** title "Turn off AI features?", body "Ask ÖRZA, Snap & Know, typed and spoken meals,
   recipes, rebalance plans and prescription scans stop in the app until you allow them again. Your meals, chats and
   plans stay." Buttons "Turn off" (destructive) and "Keep on".
-- **Toasts:** "AI features are off. ÖRZA will ask before using them again." and "AI features are on." (Allow from
-  Settings only).
+- **Toasts:** "AI features are off in the app. ÖRZA will ask before using them again." ("in the app": the website
+  doesn't ask yet, §11 Q1) and "AI features are on." (Allow from Settings only).
 - **The group footer stays.** It is the web's wording, still true: "… for example with our AI provider when you use
   an AI feature …".
 
@@ -400,7 +401,7 @@ only what that request needs:"
   - app: `>= app AI_CONSENT_VERSION`.
   - Both constants are 1. They change together.
 - **R2:** `chat/send` without consent, from any client, sends no tracked step count and the filtered history (§3.2).
-  AI replies made with consent are stored with `meta.health: true`.
+  Every AI reply is stored with `meta.health = consented`; without consent only `false` ones stay in the history.
 - **The phone:**
   - `ApiError.status === 403 && code === 'ai_consent_required'` means show the sheet;
   - `409 && 'ai_consent_outdated'` means update the app;
@@ -579,14 +580,15 @@ only what that request needs:"
 ## 10. Ordered checklist (each step ≤ about 1 hour)
 
 **Backend (`ai-consent-backend`; never pushed without the user's OK)**
-- [ ] **AB1.** `AiConsent` type, `toPublicUser` null default, `lib/ai-consent.ts`, `PUT`/`DELETE
-  /api/settings/ai-consent`.
-- [ ] **AB2.** `requireAiUser()` first in the six AI routes (R1). `meals/scan` and `prescriptions/scan`: before
-  `aiEnabled()` and `parseBody`.
-- [ ] **AB3.** R2 in `coach.ts` and `chat/send`: `contextForPrompt` without tracked steps, `aiHistory`,
-  `meta.health`.
-- [ ] **AB4.** `SPEC.md`, `scripts/check-ai-consent.mjs`, `npm run typecheck`, and the check against `next dev -p 3101`
-  (no `.env.local`). Commit "AI consent backend: …".
+- [x] **AB1.** `AiConsent` type, `toPublicUser` null default, `lib/ai-consent.ts`, `PUT`/`DELETE
+  /api/settings/ai-consent`. (`web: c2604c4`.)
+- [x] **AB2.** `requireAiUser()` first in the six AI routes (R1). `meals/scan` and `prescriptions/scan`: before
+  `aiEnabled()` and `parseBody`. (`c2604c4`.)
+- [x] **AB3.** R2 in `coach.ts` and `chat/send`: `contextForPrompt` without tracked steps, `aiHistory`,
+  `meta.health`. (`c2604c4`; the AR fix `5e0e097` drops unflagged AI replies too, §10.3.)
+- [x] **AB4.** `SPEC.md`, `scripts/check-ai-consent.mjs`, `npm run typecheck`, and the check against `next dev -p 3101`
+  (no `.env.local`). Commit "AI consent backend: …". (`c2604c4`; 56/56, again 56/56 after `5e0e097`. The builder
+  also changed the privacy page with the §11 Q2 lines: it still needs the user's review.)
 
 **Mobile**
 - [x] **AM1.** `lib/aiConsent.ts`, `test:ai` (A1–A6), `PublicUser.ai_consent`, the `api.ts` backstop plus the
@@ -604,7 +606,8 @@ only what that request needs:"
   export. Commits "AI consent AM1 + AM5 core: …", "AI consent AM2-AM5: …" and the review fixes.
 
 **Then**
-- [ ] **AR.** Review (wiring, consent UX, the no-leak paths R1/R2/backstop). Fix.
+- [x] **AR.** Review (wiring, consent UX, the no-leak paths R1/R2/backstop). Fix. (Both sides; findings and what
+  changed in §10.3. `web: 5e0e097`, mobile: the AR commit.)
 - [ ] **AV.** §8 on the emulator (needs a local server with AI off). Record results here.
 - [ ] **AU.** The user answers §11. Privacy lines and copy are approved, then the backend push is OK'd. Backend
   deploys **before** any app build that has the flag flipped reaches testers.
@@ -684,6 +687,47 @@ recorded consent (A3).
   - `AI_NEEDED_LINE`, "This needs ÖRZA’s AI features. You can allow them in Settings › Privacy & data.", for a refusal
     where the feature isn't known;
   - the manage sheet's "Turn off AI features" button.
+
+### 10.3 AR review (2026-11-10): both sides
+
+**Checked and sound**
+- R1: the server's only OpenAI path is `aiJSON`, and its six callers all start with `requireAiUser()`. Every phone
+  request sends `X-ORZA-Client: mobile` (`baseHeaders`), so a cookie can't bypass R1 either.
+- The phone: every request goes through `lib/api.ts` `request()` (there is no other `fetch` or upload). There are no
+  offline queues, persisted mutations or AI calls in the background tasks. A headless JS context starts with the backstop
+  closed. A grep finds six call sites, all gated (§10.1).
+- The contract (§5) matches on both sides: the paths, the `{version}` body, the 403 and 409 codes, a DELETE with no body,
+  and `ai_consent` in every `{user}`. The website's requests and UI are unchanged.
+- The flag flip: sync decides the hold on each run from the member's copy (a headless run uses the snapshot or
+  `/auth/me`). A new server keeps automatic steps and weight out of every AI prompt without consent (R1 and R2), and an
+  old server gets nothing automatic. No prompt includes sleep or heart rate.
+
+**Fixed**
+- **web `5e0e097` (R2):** without consent, the coach's history kept AI replies that had no `meta.health` flag. Replies
+  from before this change had today's tracked steps in their prompt (an Android phone's Health Connect or motion count,
+  as SPEC already notes) and can repeat them. Now every AI reply stores `health = consented`, and without consent only
+  `false` replies stay in the history. A scratch Node test of `aiHistory` failed before the fix and passes after it.
+- **The gate across a sign-out** (`runAiGate` `current`, outcome `gone`; `features/ai/consent.ts` `pending` per
+  member). If member A signed out during the gate's `/auth/me` refresh, the gate could open the sheet with no host. Member
+  B then saw it on sign-in, and B's Allow let A's waiting action, such as A's typed message, go out on B's session. Now
+  the pass ends with nothing sent or shown. Covered by 2 new tests in `test:ai`.
+- **Chat Retry with Not now:** Retry removed the "Not sent" bubble before the gate, so Not now lost the message. Now the
+  bubble goes only when the message is sent (`send(…, {replaces})`), and the refusal's re-send works the same way.
+- **Rx:** an earlier problem panel (for example "offline") hid the Not now line. The consent panel now comes first, as
+  on Snap.
+- **Copy:** the "never" point now reads "your account’s email, password or phone number, your saved medicines and
+  alarms". A prescription photo shows its medicines. The turn-off toast now says "off in the app", because the website
+  doesn't ask (Q1). Both are pinned in `test:ai`.
+
+**Not changed (and why)**
+- The iOS purpose strings (`app.json`) don't mention AI yet. They wait for the user's review (§4), and only an iOS
+  rebuild picks them up. They are needed before the iPhone build with the flag reaches testers.
+- The website doesn't ask (Q1). After Turn off in the app, the website's AI features still run for the account,
+  without tracked steps (R2). The copy says "in the app".
+- If Allow's PUT succeeds but its answer is lost (a timeout), the account is allowed while the sheet shows the network
+  line. The member did tap Allow, and Settings shows "On", so this needs no change.
+- Google Play's in-app reporting of AI output is still a follow-up (§9).
+- An AI-learned memory fact could restate tracked data. The prompt allows only durable facts, and it was not changed.
 
 ## 11. Open questions for the user
 

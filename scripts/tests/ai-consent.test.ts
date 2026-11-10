@@ -105,6 +105,7 @@ describe('A2: the gate', () => {
     const deps: GateDeps = {
       allowed: () => aiConsentState(user) === 'allowed',
       user: () => user,
+      current: () => true,
       refresh: async () => {
         calls.refresh += 1;
         if (opts.server === undefined) return null; // offline
@@ -182,6 +183,35 @@ describe('A2: the gate', () => {
     const a = app({ ai_consent: null }, { server: { ai_consent: null } });
     a.deps.ask = async () => true;
     assert.equal(await runAiGate(a.deps), 'declined');
+  });
+
+  test('signed out (or into another account) during the refresh: gone — no sheet for the next member', async () => {
+    const a = app({ ai_consent: null }, { server: { ai_consent: null }, allow: true });
+    let member = 'A';
+    const refresh = a.deps.refresh;
+    a.deps.refresh = async () => {
+      const me = await refresh();
+      member = 'B';
+      return me;
+    };
+    a.deps.current = () => member === 'A';
+    assert.equal(await runAiGate(a.deps), 'gone');
+    assert.deepEqual(a.calls, { refresh: 1, ask: 0 });
+  });
+
+  test('another member allowed while the sheet was up: gone — the first member’s action never goes on their consent', async () => {
+    const a = app({ ai_consent: null }, { server: { ai_consent: null } });
+    let member = 'A';
+    a.deps.current = () => member === 'A';
+    a.deps.ask = async () => {
+      member = 'B';
+      a.deps.allowed = () => true; // B's copy has a consent: the backstop is open for B
+      return true;
+    };
+    assert.equal(await runAiGate(a.deps), 'gone');
+    member = 'A';
+    a.deps.allowed = () => false;
+    assert.equal(await runAiGate(a.deps, { refused: true }), 'gone', 'a refusal’s retry too');
   });
 });
 
@@ -306,7 +336,8 @@ describe('A5: copy', () => {
     assert.ok(!chatAndroid.includes('Apple'));
     assert.equal(ios.points[2].text, 'Recipes and rebalance plans — what you ask for, with your first name, diet, allergies, region, goal and targets.');
     assert.equal(ios.points[3].text, 'Prescription scans — the prescription photo and the allergies you listed.');
-    assert.equal(ios.points[4].text, 'Never your email, password or phone number, your medicine list or alarms, or your sleep and heart rate.');
+    // "Account’s" and "saved": a photo or a message can show anything (the prescription photo shows its medicines).
+    assert.equal(ios.points[4].text, 'Never your account’s email, password or phone number, your saved medicines and alarms, or your sleep and heart rate.');
   });
 
   test('after the points: no ads or sale, what works without AI, the way to turn it off (not repeated inside Settings)', () => {
@@ -351,7 +382,8 @@ describe('A5: copy', () => {
     );
     assert.equal(AI_TURN_OFF.confirm, 'Turn off');
     assert.equal(AI_TURN_OFF.cancel, 'Keep on');
-    assert.equal(AI_TOASTS.off, 'AI features are off. ÖRZA will ask before using them again.');
+    // "In the app": the website doesn't ask yet (ai-consent.md §11 Q1).
+    assert.equal(AI_TOASTS.off, 'AI features are off in the app. ÖRZA will ask before using them again.');
     assert.equal(AI_TOASTS.on, 'AI features are on.');
   });
 });

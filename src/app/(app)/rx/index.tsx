@@ -131,8 +131,9 @@ export default function PrescriptionScan() {
       .finally(() => setAskingAi(false));
   }
 
-  // Not now (or an old server): the AI consent panel, until the member allows AI features.
-  const shownProblem = problem ?? (aiDeclined.declined || aiDeclined.unavailable ? aiConsentProblem(aiDeclined.unavailable) : null);
+  // Not now (or an old server): the AI consent panel, until the member allows AI features — over an earlier problem
+  // (e.g. "offline" from a Read before a Turn off), which no longer says why Read waits (as on Snap).
+  const shownProblem = (aiDeclined.declined || aiDeclined.unavailable ? aiConsentProblem(aiDeclined.unavailable) : null) ?? problem;
 
   function typeInstead() {
     if (scanning) return;

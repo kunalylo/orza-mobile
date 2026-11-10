@@ -765,3 +765,11 @@ batch 1" log entry); 3 is still open.
   (`iphoneSendsHealthData`). Steps disclosure (all 8 paths) and the Health connect caption (both platforms) name
   OpenAI. test:steps 419, test:alarms 69, typecheck, lint, Android bundle export OK. NOT done: `app.json` iOS purpose
   strings (user review first), emulator §8 (AV, needs the backend branch on a local server), user review of new copy.
+- 2026-11-10: **AI consent AR review** (both sides; `docs/notes/ai-consent.md` §10.3; nothing pushed). Sound: R1 covers
+  every `aiJSON` caller, every phone request goes through the backstop with `X-ORZA-Client: mobile`, no queues or
+  background AI calls, the contract matches, and the flag flip holds. Fixed: web `5e0e097`: R2 without consent also
+  drops AI replies with no `meta.health` flag, which can repeat a tracked step count. Mobile: the gate ends with nothing
+  sent or shown if the member signs out meanwhile (`runAiGate` `gone`, so another member's Allow can't release it);
+  chat Retry plus Not now no longer loses the message; Rx's consent panel comes before an older problem; the "never"
+  point and the turn-off toast are reworded. test:ai 32, test:steps 419, test:alarms 69, typecheck, lint; web typecheck,
+  check-ai-consent 56/56 (local, AI off). Open: the iOS purpose strings (user review), AV §8 on the emulator, §11 Q1/Q2.

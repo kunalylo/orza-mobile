@@ -149,9 +149,10 @@ export function useConversation({ initialSessionId, initialDraft }: { initialSes
 
   /**
    * Send `raw` as the next user message. Only a send of the composer's own text (`fromComposer`) empties the
-   * composer; Retry, quick actions and starter questions leave whatever the user is typing untouched.
+   * composer; Retry, quick actions and starter questions leave whatever the user is typing untouched. `replaces`: the
+   * "Not sent" bubble this send takes over — it goes only once the message does (after Not now it stays, with Retry).
    */
-  async function send(raw: string, { fromComposer = false }: { fromComposer?: boolean } = {}) {
+  async function send(raw: string, { fromComposer = false, replaces }: { fromComposer?: boolean; replaces?: string } = {}) {
     const text = raw.trim();
     if (!text || pendingRef.current || gatingRef.current) return;
     if (text.length > MAX_MESSAGE) {
@@ -177,7 +178,7 @@ export function useConversation({ initialSessionId, initialDraft }: { initialSes
       setComposerError(null);
     }
     setLocal((ls) => [
-      ...ls,
+      ...(replaces ? ls.filter((x) => x.id !== replaces) : ls),
       {
         id: p.tempId,
         session_id: p.sessionId ?? '',
@@ -217,8 +218,7 @@ export function useConversation({ initialSessionId, initialDraft }: { initialSes
       // "Not sent" with Retry, and goes again by itself after Allow.
       const resend = () => {
         if (viewRef.current !== p.view || pendingRef.current) return;
-        setLocal((ls) => ls.filter((x) => x.id !== p.tempId));
-        void send(text);
+        void send(text, { replaces: p.tempId });
       };
       if (onAiRefusal(e, 'chat', resend)) {
         if (viewRef.current === p.view) {
@@ -257,8 +257,8 @@ export function useConversation({ initialSessionId, initialDraft }: { initialSes
 
   function retry(m: UIMessage) {
     if (pendingRef.current) return;
-    setLocal((ls) => ls.filter((x) => x.id !== m.id));
-    void send(m.content);
+    // The bubble goes once the message does: Not now on the AI consent sheet keeps it (and its text) for later.
+    void send(m.content, { replaces: m.id });
   }
 
   /** Drop text into the composer (without overwriting a draft) and focus it. */

@@ -4,7 +4,8 @@
  * - `ensureAiConsent(feature)`: every AI entry point awaits it, after its own checks and before its request. True at
  *   once while the member's copy has a recorded consent (the API client's backstop is open). Otherwise the gate
  *   (`lib/aiConsent.runAiGate`): one `/auth/me` refresh (a consent given on another phone or the web is used without
- *   asking), then the one-time sheet — or nothing at all on an old server. Never throws; concurrent calls share one pass.
+ *   asking), then the one-time sheet — or nothing at all on an old server. Never throws; one member's concurrent calls
+ *   share one pass, and a pass ends with nothing sent or shown once that member signed out (or another signed in).
  * - `onAiRefusal(e, feature, retry)`: first line of each AI request's error handling. A `403 ai_consent_required` from
  *   the server clears the copy's consent (the server is the authority) and opens the sheet; after Allow, `retry` runs
  *   once. The backstop's own refusal (nothing was sent) runs the ordinary gate.
@@ -55,7 +56,8 @@ let declines: Partial<Record<AiFeature, Declined>> = {};
 let answer: ((allowed: boolean) => void) | null = null;
 /** The sheet's answer, held until the sheet has gone (`aiConsentSheetClosed`). */
 let closing: { resolve: (allowed: boolean) => void; allowed: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
-let pending: Promise<boolean> | null = null;
+/** The gate's pass in progress, for one member (another member's tap never waits on it, or gets its answer). */
+let pending: { member: string; run: Promise<boolean> } | null = null;
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -129,20 +131,26 @@ export function ensureAiConsent(feature: AiFeature): Promise<boolean> {
 }
 
 function gate(feature: AiFeature, refused: boolean): Promise<boolean> {
-  if (pending) return pending;
   const h = host;
-  if (!h) return Promise.resolve(false);
-  const run = (async () => {
+  const member = h?.user()?.id;
+  if (!h || !member) return Promise.resolve(false);
+  if (pending?.member === member) return pending.run;
+  // A sign-out (the host unbinds) or another account: this pass is over — never a sheet, a line or a "go" for them.
+  const current = () => host === h && h.user()?.id === member;
+  const mine: { member: string; run: Promise<boolean> } = { member, run: Promise.resolve(false) };
+  mine.run = (async () => {
     try {
       const outcome = await runAiGate(
         {
           allowed: getAiConsentAllowed,
           user: h.user,
+          current,
           refresh: () => bounded(h.refresh(), REFRESH_TIMEOUT_MS),
           ask: () => openSheet(feature),
         },
         { refused }
       );
+      if (outcome === 'gone') return false;
       if (outcome === 'go') {
         if (Object.keys(declines).length) setDeclines({});
         return true;
@@ -153,11 +161,11 @@ function gate(feature: AiFeature, refused: boolean): Promise<boolean> {
     } catch {
       return false;
     } finally {
-      pending = null;
+      if (pending === mine) pending = null;
     }
   })();
-  pending = run;
-  return run;
+  pending = mine;
+  return mine.run;
 }
 
 /**

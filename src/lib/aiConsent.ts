@@ -75,6 +75,8 @@ export interface GateDeps {
   allowed: () => boolean;
   /** The user copy in state. */
   user: () => AiConsentUser | null;
+  /** Still the member the gate started for: false once they signed out or another account signed in. */
+  current: () => boolean;
   /** `/auth/me` (time-bounded by the caller): the fresh copy, now in state — or null when ÖRZA couldn't answer. */
   refresh: () => Promise<AiConsentUser | null>;
   /** The consent sheet: true once Allow saved the consent on the server (and the copy in state has it). */
@@ -85,9 +87,11 @@ export interface GateDeps {
  * - `go`: the request may go (the backstop is open);
  * - `declined`: Not now, closed, Android back — or Allow couldn't save (offline);
  * - `unavailable`: an old server — no sheet, no request;
- * - `offline`: an old snapshot and no answer from ÖRZA — it can't tell, so nothing is sent.
+ * - `offline`: an old snapshot and no answer from ÖRZA — it can't tell, so nothing is sent;
+ * - `gone`: the member signed out (or another account signed in) while the gate waited — nothing is sent or shown: the
+ *   next member's sheet and consent are never theirs.
  */
-export type GateOutcome = 'go' | 'declined' | 'unavailable' | 'offline';
+export type GateOutcome = 'go' | 'declined' | 'unavailable' | 'offline' | 'gone';
 
 /**
  * One pass of the gate (§3.3). A copy that says "allowed" while the backstop is closed is not trusted (it is out of
@@ -108,13 +112,16 @@ export async function runAiGate(deps: GateDeps, { refused = false }: { refused?:
     if (step === 'go') return 'go';
     if (step === 'refresh') {
       const me = await deps.refresh();
+      if (!deps.current()) return 'gone';
       answered = !!me;
       state = stateOf(me ?? deps.user());
       refreshed = true;
       continue;
     }
     if (step === 'unavailable') return answered ? 'unavailable' : 'offline';
-    return (await deps.ask()) && deps.allowed() ? 'go' : 'declined';
+    const allowed = await deps.ask();
+    if (!deps.current()) return 'gone';
+    return allowed && deps.allowed() ? 'go' : 'declined';
   }
 }
 
@@ -226,7 +233,8 @@ export function consentCopy(context: ConsentContext, platform: 'ios' | 'android'
       },
       { icon: 'recipes', text: 'Recipes and rebalance plans — what you ask for, with your first name, diet, allergies, region, goal and targets.' },
       { icon: 'rx', text: 'Prescription scans — the prescription photo and the allergies you listed.' },
-      { icon: 'never', text: 'Never your email, password or phone number, your medicine list or alarms, or your sleep and heart rate.' },
+      // The account's and the saved ones: a photo or a message can show anything (a prescription shows its medicines).
+      { icon: 'never', text: 'Never your account’s email, password or phone number, your saved medicines and alarms, or your sleep and heart rate.' },
     ],
     after: [
       'ÖRZA shares this only to answer you — never for ads, and it’s never sold.',
@@ -295,7 +303,8 @@ export const AI_TURN_OFF = {
 } as const;
 
 export const AI_TOASTS = {
-  off: 'AI features are off. ÖRZA will ask before using them again.',
+  /** "In the app": the website doesn't ask yet (`docs/notes/ai-consent.md` §11 Q1). */
+  off: 'AI features are off in the app. ÖRZA will ask before using them again.',
   /** Allow from Settings only (the sheet's Allow just carries on with the action). */
   on: 'AI features are on.',
 } as const;
