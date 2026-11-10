@@ -100,6 +100,7 @@ export function AiConsentSheet({
   error,
   onAllow,
   onNotNow,
+  onClosed,
 }: {
   visible: boolean;
   context: ConsentContext;
@@ -107,12 +108,15 @@ export function AiConsentSheet({
   error: string | null;
   onAllow: () => void;
   onNotNow: () => void;
+  /** The sheet has slid away (the next modal may open). */
+  onClosed?: () => void;
 }) {
   const copy = consentCopy(context, CONSENT_PLATFORM);
   return (
     <Sheet
       visible={visible}
       onClose={onNotNow}
+      onClosed={onClosed}
       dismissible={!saving}
       eyebrow={copy.eyebrow}
       title={copy.title}

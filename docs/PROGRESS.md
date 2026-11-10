@@ -753,3 +753,15 @@ batch 1" log entry); 3 is still open.
   iPhone may send automatic steps/weight (`SEND_IPHONE_HEALTH_DATA`). Plan + build: `docs/notes/ai-consent.md`.
   Running: `wf_218817e9-f76` (plan → mobile + backend branch `ai-consent-backend` in `E:\aylo\orza-backend` → review; nothing
   pushed). Resume with `resumeFromRunId` after a limit; the web branch needs the user's OK (and any privacy line their review).
+- 2026-11-10: **AI consent, phone side BUILT** (AM1–AM6, `ba22911`, `830283c` + review fixes; not pushed; plan
+  `docs/notes/ai-consent.md` §10, the entry-point check §10.1, build notes §10.2). `lib/aiConsent.ts` (pure: state,
+  gate `runAiGate`, the six AI paths, refusal detection, every string) + `npm run test:ai` (30). `lib/api.ts` refuses
+  the six AI paths while the member has no recorded consent (backstop, kept in step by `auth.tsx`; a screen's copy
+  never changes the consent). `features/ai/*`: the one-time sheet naming OpenAI (Allow / Not now; back, swipe, backdrop
+  = no), mounted in the member layout; declined notes; Snap / Rx consent panels; Settings › Privacy & data › AI
+  features (status, points, Turn off with a confirm). Every AI entry point awaits `ensureAiConsent` (Snap before the
+  camera or gallery; Rx only at Read) and hands a server 403 to `onAiRefusal` (sheet, then one retry after Allow).
+  `SEND_IPHONE_HEALTH_DATA = true`, held per member for a server without the `ai_consent` field
+  (`iphoneSendsHealthData`). Steps disclosure (all 8 paths) and the Health connect caption (both platforms) name
+  OpenAI. test:steps 419, test:alarms 69, typecheck, lint, Android bundle export OK. NOT done: `app.json` iOS purpose
+  strings (user review first), emulator §8 (AV, needs the backend branch on a local server), user review of new copy.

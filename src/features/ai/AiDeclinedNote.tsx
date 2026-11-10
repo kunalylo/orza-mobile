@@ -1,24 +1,22 @@
 /**
  * After Not now (or on an old server): why the feature waits and what still works (`aiConsent.declinedLine`), with
  * "Allow AI features" to be asked again. Renders nothing until the gate said no for `feature`, and nothing once the
- * member's copy has a recorded consent.
+ * member's copy has a recorded consent (`useAiDeclined`).
  */
 import { useState } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { ALLOW_AI_LABEL, AI_UNAVAILABLE, aiConsentState, declinedLine, type AiFeature } from '@/lib/aiConsent';
-import { useUser } from '@/lib/auth';
+import { ALLOW_AI_LABEL, AI_UNAVAILABLE, declinedLine, type AiFeature } from '@/lib/aiConsent';
 import { colors, radii, spacing } from '@/theme';
 import { Button, Icon, Text } from '@/ui';
 
 import { ensureAiConsent, useAiDeclined } from './consent';
 
 export function AiDeclinedNote({ feature, style }: { feature: AiFeature; style?: StyleProp<ViewStyle> }) {
-  const user = useUser();
   const { declined, unavailable } = useAiDeclined(feature);
   const [asking, setAsking] = useState(false);
-  if ((!declined && !unavailable) || aiConsentState(user) === 'allowed') return null;
+  if (!declined && !unavailable) return null;
 
   const ask = () => {
     if (asking) return;

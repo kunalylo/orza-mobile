@@ -12,7 +12,8 @@ Date: 2026-10-27. Status: **in progress** — see the ticks in §10 and the PROG
   App Store 5.1.2(i) / 5.1.3) is built before any iOS submission (V6/D3) — and until it ships, the iOS build must not send
   HealthKit-derived steps to the coach. (R/U review: nor Motion & Fitness counts — 5.1.3(i) names both — nor HealthKit
   weight, which the coach's replies quote: `health/types.SEND_IPHONE_HEALTH_DATA = false`. Android names the AI provider
-  in its steps disclosure instead, §6.)
+  in its steps disclosure instead, §6. 2026-11-10: the AI consent shipped on the phone — the flag is `true`, held only
+  for a server without the consent, `docs/notes/ai-consent.md` §3.7; every disclosure path now names OpenAI.)
 - S0 (c)/(d) The real Android phone (V2) and Health Connect Toolbox download (E-3) are asked of the user when those steps come.
 
 **Inputs**

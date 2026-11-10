@@ -4,11 +4,15 @@
  * forgets what the last one declined.
  */
 import { useEffect, useRef } from 'react';
+import { Platform } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
 
 import { AiConsentSheet } from './AiConsentSheet';
-import { allowFromAiConsentSheet, bindAiConsentHost, declineAiConsentSheet, resetAiConsent, useAiConsentPrompt } from './consent';
+import { aiConsentSheetClosed, allowFromAiConsentSheet, bindAiConsentHost, declineAiConsentSheet, resetAiConsent, useAiConsentPrompt } from './consent';
+
+/** iPhone: what follows the sheet (the camera, the gallery) waits this long after it has gone (one modal at a time). */
+const AFTER_SHEET_MS = Platform.OS === 'ios' ? 300 : 0;
 
 export function AiConsentHost() {
   const { user, refresh, setUser } = useAuth();
@@ -32,6 +36,7 @@ export function AiConsentHost() {
       error={prompt.error}
       onAllow={() => void allowFromAiConsentSheet()}
       onNotNow={declineAiConsentSheet}
+      onClosed={() => setTimeout(aiConsentSheetClosed, AFTER_SHEET_MS)}
     />
   );
 }

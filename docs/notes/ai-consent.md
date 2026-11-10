@@ -1,6 +1,7 @@
 # App-wide AI consent: plan
 
-Date: 2026-11-10. Status: **planned**. Tick items in §10 as they are built.
+Date: 2026-11-10. Status: **mobile built** (AM1–AM6, `ba22911`, `830283c` + the review commit; not pushed). The
+backend (AB1–AB4) is built in parallel in `web:`. Tick items in §10 as they are built; §10.1 is the entry-point check.
 
 **User decision (2026-11-10, D3, App Store 5.1.2(i))**
 - The phone app asks for AI consent **at first AI use**. The first time a member starts any AI feature, a one-time
@@ -588,14 +589,19 @@ only what that request needs:"
   (no `.env.local`). Commit "AI consent backend: …".
 
 **Mobile**
-- [ ] **AM1.** `lib/aiConsent.ts`, `test:ai` (A1–A6), `PublicUser.ai_consent`, the `api.ts` backstop plus the
-  `auth.tsx` hook.
-- [ ] **AM2.** `features/ai/*`: store, host, sheet, PUT/DELETE, `AiDeclinedNote`. Mounted in `(app)/_layout.tsx`.
-- [ ] **AM3.** The six entry points (§3.4) and `aiErrorInfo.needsConsent`. ProblemPanel `ai_consent` on Snap and Rx.
-- [ ] **AM4.** `AiFeaturesRow` plus the manage sheet in Settings › Privacy & data.
-- [ ] **AM5.** `SEND_IPHONE_HEALTH_DATA = true` plus `iphoneSendsHealthData` in steps and health sync; the §4 steps
+- [x] **AM1.** `lib/aiConsent.ts`, `test:ai` (A1–A6), `PublicUser.ai_consent`, the `api.ts` backstop plus the
+  `auth.tsx` hook. (`ba22911`; `test:ai` 30/30.)
+- [x] **AM2.** `features/ai/*`: store, host, sheet, PUT/DELETE, `AiDeclinedNote`. Mounted in `(app)/_layout.tsx`.
+  (`830283c`.)
+- [x] **AM3.** The six entry points (§3.4) and `aiErrorInfo.needsConsent`. ProblemPanel `ai_consent` on Snap and Rx.
+  (`830283c`; every entry point is listed in §10.1.)
+- [x] **AM4.** `AiFeaturesRow` plus the manage sheet in Settings › Privacy & data. (`830283c`.)
+- [x] **AM5.** `SEND_IPHONE_HEALTH_DATA = true` plus `iphoneSendsHealthData` in steps and health sync; the §4 steps
   line and caption; `health-import` and `steps-card` tests. `app.json` purpose strings only after the user's review.
-- [ ] **AM6.** typecheck, lint, `test:steps`, `test:alarms`, `test:ai`. Commit(s) "AI consent: …".
+  (`ba22911`, caption `830283c`. **`app.json` is not changed**: the two §4 iOS purpose strings wait for the user's
+  review.)
+- [x] **AM6.** typecheck, lint, `test:steps` (419), `test:alarms` (69), `test:ai` (30), and an Android JS bundle
+  export. Commits "AI consent AM1 + AM5 core: …", "AI consent AM2-AM5: …" and the review fixes.
 
 **Then**
 - [ ] **AR.** Review (wiring, consent UX, the no-leak paths R1/R2/backstop). Fix.
@@ -604,6 +610,80 @@ only what that request needs:"
   deploys **before** any app build that has the flag flipped reaches testers.
 
 ---
+
+### 10.1 Every AI entry point goes through the gate (AM3 check, 2026-11-10)
+
+A `grep` of `src/` for the six paths finds exactly six call sites (§2), all below. Each one awaits
+`ensureAiConsent(f)` after its own checks and before its request. Its error handling starts with
+`onAiRefusal(e, f, retry)`. Behind them, `lib/api.ts` `request()` refuses all six paths while the member has no
+recorded consent (A3).
+
+- [x] **Backstop**: `lib/api.ts` `request()` refuses `isAiPath(path)` while `setAiConsentAllowed(false)`. This covers
+  any method and any caller. `AuthProvider` keeps it in step (`showUser`, `applyUser`, `setUser`), and `clearLocal`
+  closes it.
+- [x] **`chat`** `POST /chat/send` (`features/chat/api.ts` `sendChat`), called only from `useConversation.send()`:
+  - [x] the composer's send button and keyboard send (`sendInput`). Voice too: the phone's speech recogniser only
+    fills the composer;
+  - [x] starter questions (`pickStarter`, `send: true`) and quick actions (`runQuickAction` with a prompt);
+  - [x] Retry on a "Not sent" bubble (`retry` → `send`);
+  - [x] after a server 403: the message stays "Not sent", the sheet opens, and Allow re-sends it once;
+  - [x] `?q=` only pre-fills the composer (no send). Today's insight and quick action only open Ask ÖRZA.
+- [x] **`meal_text`** `POST /meals/text` (`useLogMealText`), called only from `MealComposer.submit()`: the "Log meal"
+  button and the keyboard's send key, typed or spoken. The food list (`/meals/manual`) is not AI.
+- [x] **`snap`** `POST /meals/scan` (`useScanMeal`), from `snap.tsx`:
+  - [x] before the camera or gallery opens: `pick()` → `preparePhoto(…, consent = true)`. This covers Take photo,
+    Choose from gallery, Retake, Gallery, the permission panel's Allow access and other source, and the error panel's
+    Use another photo;
+  - [x] before the request: `runAnalyse()`. This covers Analyse, the note's Go key, Try again on the error,
+    no-credits and slow-down panels, and a photo recovered after Android restarted the app (it skips `pick`);
+  - [x] scan confirm (`/meals/scan/<id>/confirm`) is not AI.
+- [x] **`recipe`** `POST /recipes/generate` (`useGenerateRecipe`), called only from `recipes.tsx` `runGenerate()`:
+  Generate recipe, and "Another" on the result card. Save (`/recipes/<id>/save`) and logging a recipe are not AI.
+- [x] **`rebalance`** `POST /compensation/plan` (`useCreatePlan`), called only from `RebalanceForm.submit()` (Create
+  my plan, after its own field checks).
+- [x] **`rx`** `POST /prescriptions/scan` (`useScanPrescription` → `rxApi.scan`), called only from `rx/index.tsx`
+  `read()`: Read prescription, and Try again on the problem panel. Take photo, Upload, Type the medicines instead,
+  manual entry and apply are not AI.
+- [x] **Not AI (no gate)**: onboarding, Today's insight, reports, goals, food search, manual meals, scan confirm,
+  medicines (photos too), prescription manual entry and apply, steps, health, reminders, calendar, credits, reading
+  past chats, recipes, plans or scans, and speech recognition.
+
+### 10.2 Build notes (mobile, 2026-11-10): where the build refines §3
+
+- **Only the consent's own answers change the user copy's consent.** `setUser(user, {aiConsent: true})` (the PUT and
+  DELETE answers, a server refusal), sign-in and `/auth/me` set it.
+  - A screen's copy keeps the consent in state. An example is `{...user, credits}` from a mutation that started
+    before an Allow.
+  - A `/auth/me` answer that was in flight across a change on this phone keeps it too (`auth.tsx` `keepAiConsent`,
+    `consentChangedAt`).
+  - Without this, the first AI answer after Allow could close the backstop again and show "Off" in Settings.
+- **The backstop's own refusal is marked local** (`ApiError.data = {local: true}`, `isLocalAiRefusal`).
+  - It runs the ordinary gate (refresh first), not `refused: true`. Nothing reached the server, so its cache isn't
+    known to be wrong, and an old server never gets a sheet whose Allow can't save.
+  - A server 403 still skips the cache.
+- **`runAiGate` (pure, tested) is the whole gate.**
+  - A copy that says "allowed" while the backstop is closed is not trusted.
+  - The sheet's "true" counts only once the backstop opened, so a refusal's retry can't loop.
+  - It has one more outcome than §3.3: **`offline`** (an old snapshot and no answer from ÖRZA). That shows the network
+    toast, not the "not ready" line, because the server may well know the consent.
+- **`useAiDeclined`** hides its line once the member's copy is allowed (for example allowed on the web, then picked up
+  by a refresh). It hides the "not ready" line once the server knows the consent.
+- **Snap and Prescriptions** show their consent panel from `useAiDeclined`.
+  - Snap: `AiConsentPanel`, with "Allow AI features" and "Open the meal log".
+  - Rx: `ProblemPanel` kind `ai_consent`, plus `ai_unavailable` for an old server.
+  - `scanProblem` and `rxProblem` also map a refusal to it, as a fallback.
+- **Settings' Allow sends the PUT itself.** The manage sheet shows the same points, so the consent sheet doesn't open
+  on top of it (no sheet inside a sheet).
+- **Names:** `iphoneSendsHealthData(serverKnowsAiConsent)`, `aiConsent.serverKnowsAiConsent(user)`,
+  `StepsMember.aiConsentKnown`, `SaveJob.hold` and `SyncOptions.aiConsentKnown`.
+  - Every steps member the app builds carries it. A headless run takes it from the snapshot or its `/auth/me`.
+  - `importMetrics(platform, send)` now needs its second argument.
+- **Copy** uses the app's typographic apostrophe (’), as the steps disclosure does. Otherwise it is the §4 strings
+  exactly. These strings are new (§4 doesn't give them), for the user's review (§11 Q2):
+  - the panels' titles "AI features are off" and "AI features aren’t ready yet", and "Open the meal log";
+  - `AI_NEEDED_LINE`, "This needs ÖRZA’s AI features. You can allow them in Settings › Privacy & data.", for a refusal
+    where the feature isn't known;
+  - the manage sheet's "Turn off AI features" button.
 
 ## 11. Open questions for the user
 

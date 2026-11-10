@@ -15,8 +15,9 @@
  */
 import { useSyncExternalStore } from 'react';
 
-import { isAiConsentRefusal, isLocalAiRefusal, runAiGate, type AiFeature } from '@/lib/aiConsent';
+import { aiConsentState, isAiConsentRefusal, isLocalAiRefusal, runAiGate, type AiFeature } from '@/lib/aiConsent';
 import { getAiConsentAllowed, NETWORK_MESSAGE } from '@/lib/api';
+import { useUser } from '@/lib/auth';
 import type { PublicUser } from '@/lib/types';
 import { toast } from '@/ui';
 
@@ -44,12 +45,16 @@ type Declined = 'declined' | 'unavailable';
 
 /** `/auth/me` for the gate: short — the member is waiting on a button. */
 const REFRESH_TIMEOUT_MS = 6_000;
+/** The sheet's answer waits for its exit at most this long (in case its `onClosed` never comes). */
+const CLOSE_WAIT_MS = 1_200;
 
 let host: AiConsentHostBinding | null = null;
 let prompt: AiConsentPrompt = { visible: false, feature: 'chat', saving: false, error: null };
 let declines: Partial<Record<AiFeature, Declined>> = {};
 /** Resolves the sheet's question (Allow saved → true; Not now, closed, back → false). */
 let answer: ((allowed: boolean) => void) | null = null;
+/** The sheet's answer, held until the sheet has gone (`aiConsentSheetClosed`). */
+let closing: { resolve: (allowed: boolean) => void; allowed: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
 let pending: Promise<boolean> | null = null;
 const listeners = new Set<() => void>();
 
@@ -104,6 +109,7 @@ export function bindAiConsentHost(binding: AiConsentHostBinding): () => void {
 /** Another member (or none): an open question is answered "no", and nothing declined carries over. */
 export function resetAiConsent() {
   closeSheet(false);
+  aiConsentSheetClosed();
   setDeclines({});
 }
 
@@ -178,17 +184,33 @@ function forgetConsent() {
 
 function openSheet(feature: AiFeature): Promise<boolean> {
   return new Promise((resolve) => {
+    aiConsentSheetClosed();
     answer?.(false);
     answer = resolve;
     setPrompt({ visible: true, feature, saving: false, error: null });
   });
 }
 
+/**
+ * The answer is given once the sheet has slid away (`aiConsentSheetClosed`): one modal at a time — after Allow, Snap
+ * opens the camera or gallery, which iOS won't present over a sheet that is still closing.
+ */
 function closeSheet(allowed: boolean) {
   const a = answer;
   answer = null;
   if (prompt.visible || prompt.saving) setPrompt({ visible: false, saving: false });
-  a?.(allowed);
+  if (!a) return;
+  aiConsentSheetClosed();
+  closing = { resolve: a, allowed, timer: setTimeout(aiConsentSheetClosed, CLOSE_WAIT_MS) };
+}
+
+/** The sheet has gone (its `onClosed`): the gate gets its answer. */
+export function aiConsentSheetClosed() {
+  const c = closing;
+  closing = null;
+  if (!c) return;
+  clearTimeout(c.timer);
+  c.resolve(c.allowed);
 }
 
 /** Not now, the backdrop, the close button, Android back — "no" (ignored while Allow is saving). */
@@ -220,12 +242,16 @@ export function clearAiDeclines() {
   if (Object.keys(declines).length) setDeclines({});
 }
 
-/** The gate said no for `feature`: Not now (`declined`) or an old server (`unavailable`). */
+/**
+ * The gate said no for `feature`: Not now (`declined`) or an old server (`unavailable`) — until the member's copy says
+ * otherwise (allowed on the web or another phone, picked up by a refresh; a server that now knows the consent).
+ */
 export function useAiDeclined(feature: AiFeature): { declined: boolean; unavailable: boolean } {
   const d = useSyncExternalStore(
     subscribe,
     () => declines[feature] ?? null,
     () => declines[feature] ?? null
   );
-  return { declined: d === 'declined', unavailable: d === 'unavailable' };
+  const state = aiConsentState(useUser());
+  return { declined: d === 'declined' && state !== 'allowed', unavailable: d === 'unavailable' && state === 'unsupported' };
 }
