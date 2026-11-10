@@ -711,3 +711,10 @@ batch 1" log entry); 3 is still open.
   no Metro; local-only network config + bogus vercel.app pin, as D1 W11). Windows wiped the session scratchpad (tools, Toolbox zip,
   DB backups) — durable helpers now live in `scripts/e2e/` (`api.mjs`, `typepw.mjs`); the Toolbox stays installed on the emulator.
 - 2026-11-10: V1 run 3 on the RELEASE-TYPE TEST BUILD of `14fe8c1` (local-only network config + bogus vercel.app pin; `scripts/e2e/check-release-apk.sh` → SAFE; new qa4 session in the local DB): **E-3 PASS** (past days = Health Connect totals, first-grant day partial / whole by S-H2, edit → "Edited by you", steps after the edit add on, a record dated before it does not) and **E-4 PASS** (a website edit lower shows on the phone at its next foreground and automatic saves never undo it; a past day reconciles down to Health Connect after Toolbox deletions, but not one edited on the website). No app bug; one ANR on the swapping 2 GB AVD (environment, as D1 N8). Details + state for E-5…: `docs/notes/steps-v2-V1.md` run 3.
+- 2026-11-10: V1 run 4 (cut off by a usage limit after E-7): **E-5 PASS** (member switch: B gets no past days and nothing from before
+  its consent, no reads before consent, A → B → A floor at the last sign-out; sign-out cancels all native alarms in a release build),
+  **E-6 PASS** (switch off: no reads, no saves; back on counts once), **E-7 PASS with a library BUG**: `expo-background-task` 57.0.21
+  cancels its own running worker when a cold process restores the task (`getWorkerInfo` took the APPEND chain's finished WorkInfo →
+  REPLACE) → cold background runs read Health Connect but were frozen before saving. Fixed with `patch-package`
+  (`patches/expo-background-task+57.0.21.patch`, `13d9025`, same as upstream 58.0.12; drop it on the SDK 58 upgrade). Resumed
+  (`wf_1ed3af09-ae8`): rebuild with the patch + E-7 cold retest, E-6b Disconnect, E-8, E-9, then the UI / accessibility pass.
