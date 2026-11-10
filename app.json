@@ -126,7 +126,7 @@
       [
         "expo-sensors",
         {
-          "motionPermission": "ÖRZA uses your iPhone's motion data to count your steps when Apple Health has none, and saves each day's total to your ÖRZA account."
+          "motionPermission": "ÖRZA uses your iPhone's motion data to count your steps when Apple Health has none, and saves each day's total to your ÖRZA account. If you allow AI features, they also go with your Ask ÖRZA chats."
         }
       ],
       [
@@ -143,7 +143,7 @@
       [
         "@kingstinct/react-native-healthkit",
         {
-          "NSHealthShareUsageDescription": "ÖRZA reads your steps, sleep, resting heart rate and weight from Apple Health to fill in Today and your Health trends. Only daily totals are saved to your ÖRZA account.",
+          "NSHealthShareUsageDescription": "ÖRZA reads your steps, sleep, resting heart rate and weight from Apple Health to fill in Today and your Health trends. Only daily totals are saved to your ÖRZA account. If you allow AI features, steps and weight also go with your Ask ÖRZA chats.",
           "NSHealthUpdateUsageDescription": false,
           "background": true
         }

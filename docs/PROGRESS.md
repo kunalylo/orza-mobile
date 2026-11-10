@@ -778,3 +778,9 @@ batch 1" log entry); 3 is still open.
   Local test server now = `5e0e097` via preview config **`orza-localtest-noai`** (`scripts/e2e/localtest-noai.cmd`: AI blocked —
   check `/api/credits/balance` → `ai_enabled:false`; the plain `orza-localtest` config has AI ON, its `.env.local` has a real key).
   DB backup before this: session scratchpad `orza-db-before-ai-consent.json`. Running: device checks `wf_fb38fa3f-56f` (§8 AC-1…AC-11).
+- 2026-11-10: USER DECISIONS (AI consent, plan §11): (Q2) copy APPROVED — the consent sheet, Not-now lines, Settings row, steps /
+  Health lines, the privacy-page edits on `ai-consent-backend` (OpenAI named, "report insights" dropped, "You choose." and
+  "Health data only with your permission.") and the two iOS purpose strings (now in app.json); PUSH `ai-consent-backend` to the
+  live web once the AI-consent device checks pass. (Q1) the WEBSITE asks the same consent too, BEFORE the iPhone release (build it
+  next on a web branch; its push needs the user's OK again). (Q3) leave out "OpenAI doesn't use this content to train its models"
+  until someone confirms the OpenAI organisation's data-sharing setting.
