@@ -718,3 +718,6 @@ batch 1" log entry); 3 is still open.
   REPLACE) → cold background runs read Health Connect but were frozen before saving. Fixed with `patch-package`
   (`patches/expo-background-task+57.0.21.patch`, `13d9025`, same as upstream 58.0.12; drop it on the SDK 58 upgrade). Resumed
   (`wf_1ed3af09-ae8`): rebuild with the patch + E-7 cold retest, E-6b Disconnect, E-8, E-9, then the UI / accessibility pass.
+- 2026-11-10: USER APPROVED the B6 privacy copy (the `#phone-app` section + edits on `steps-v2-backend`) and OK'd pushing
+  `steps-v2-backend` to the live web repo ONCE THE V1 PHONE TESTS PASS (V4: fast-forward main, Vercel deploy check, confirm
+  `applied` modes in production, check the live /privacy#phone-app in the app's privacy screen, delete the legacy save branch).
