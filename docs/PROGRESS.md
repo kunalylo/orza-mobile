@@ -748,3 +748,6 @@ batch 1" log entry); 3 is still open.
 - 2026-11-10: web steps v2 LIVE — main `a3e3c0e`, Vercel "Deployment has completed"; live /privacy shows the `#phone-app`
   section and the new lead; unauthenticated `/api/track/steps` → 401 as before. V4 left: `applied` seen in a real production
   answer → J6 legacy-save cleanup; the live privacy page in the app's privacy screen on the real phone (V2).
+- 2026-11-10: USER DECISION (D3, Apple 5.1.2(i)): app-wide AI consent is asked AT FIRST AI USE — a one-time sheet naming
+  OpenAI and what is sent, Allow / Not now; AI features wait until allowed, the rest of the app works without it. Then the
+  iPhone may send automatic steps/weight (`SEND_IPHONE_HEALTH_DATA`). Plan + build: `docs/notes/ai-consent.md`.
