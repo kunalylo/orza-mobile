@@ -730,3 +730,10 @@ batch 1" log entry); 3 is still open.
   process ends; no reads after), **E-9 PASS** ("Log steps" when undetermined; "Not now" survives a force-stop), **E-8 PASS**
   (connect sheet = Steps, Sleep, Resting heart rate, Weight only; charts from `tracking.steps`). Details + state:
   `docs/notes/steps-v2-V1.md` run 5. Left in V1: the UI / accessibility pass.
+- 2026-11-10: V1 run 6 — UI / accessibility pass on the new steps screens (Today card in every reachable state, the
+  disclosure / Turn on / off sheets, Health screen switch card + connect caption, Settings switch) at the default size and
+  on a 360 dp phone with font 1.3, TalkBack labels via `scripts/e2e/a11y.mjs`. Fixed: the native switch was 46 x 27 dp →
+  48 dp target (`06fbf69`); "Keep coun…" / "Manage …" cut at large text → wrap (`06fbf69`); "Connect Health Conn…" →
+  "Connect" when tight (`22ac1c5`); LIVE pill one TalkBack stop. Rebuilt twice (release-type test build, SAFE each time),
+  all re-checked on the device. Shots in `docs/notes/steps-v2-V1-shots/`; details `docs/notes/steps-v2-V1.md` run 6.
+  Follow-up (app-wide, not done): other native switches are 46 x 27 dp; sheet close / header icon buttons are 44 dp.
