@@ -222,13 +222,16 @@ function SheetModal({
         <ScrollRevealContext.Provider value={null}>
           <GestureHandlerRootView style={styles.fill}>
             <Animated.View style={[styles.backdrop, backdropStyle]}>
+              {/* A screen reader reaches the backdrop only when it is the sheet's one way to close: with the header's
+                  close button it was a second, screen-wide "Close" that took TalkBack's first focus as the sheet opened
+                  (the AI consent sheet read "Close, Button" before its title — AC-10). */}
               <Pressable
                 style={styles.fill}
                 onPress={requestClose}
                 accessibilityRole="button"
                 accessibilityLabel="Close"
-                accessible={closable}
-                importantForAccessibility={closable ? 'auto' : 'no-hide-descendants'}
+                accessible={closable && !showClose}
+                importantForAccessibility={closable && !showClose ? 'auto' : 'no-hide-descendants'}
               />
             </Animated.View>
 
