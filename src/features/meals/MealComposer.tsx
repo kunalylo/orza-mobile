@@ -14,6 +14,8 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 
+import { AiDeclinedNote } from '@/features/ai/AiDeclinedNote';
+import { ensureAiConsent, onAiRefusal } from '@/features/ai/consent';
 import { ApiError, errorMessage, validationField } from '@/lib/api';
 import { useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
@@ -55,7 +57,10 @@ export interface MealComposerHandle {
   startVoice: () => void;
 }
 
-/** "Tell ÖRZA what you ate" — type or speak a meal; ÖRZA parses and logs it. */
+/**
+ * "Tell ÖRZA what you ate" — type or speak a meal; ÖRZA parses and logs it. Logging waits for the AI consent (the
+ * sheet at first use, `docs/notes/ai-consent.md`); after Not now a line says why, and the food list button stays.
+ */
 export function MealComposer({
   ref,
   date,
@@ -140,7 +145,7 @@ export function MealComposer({
     }
   };
 
-  const submit = () => {
+  const submit = async () => {
     const value = text.trim();
     if (submitting || inFlight.current) return;
     if (value.length < 2) {
@@ -150,13 +155,18 @@ export function MealComposer({
       inputRef.current?.focus();
       return;
     }
+    // The AI consent first (the sheet at first use; typed and spoken alike). Not now: nothing sent, the text stays.
+    inFlight.current = true;
+    if (!(await ensureAiConsent('meal_text'))) {
+      inFlight.current = false;
+      return;
+    }
     // Valid: put the keyboard away so the "Understanding…" state and the logged card are visible.
     inputRef.current?.blur();
     if (voice.listening) voice.cancel();
     setFieldError(null);
     setFormError(null);
     haptics.firm();
-    inFlight.current = true;
     logText.mutate(
       { text: value, date, meal_type: mealType === 'auto' ? undefined : mealType, source: usedVoice.current ? 'voice' : 'text' },
       {
@@ -169,6 +179,8 @@ export function MealComposer({
           onLogged(res);
         },
         onError: (e) => {
+          // The server refused (no AI consent for this account): its sheet takes over; after Allow, logged again.
+          if (onAiRefusal(e, 'meal_text', () => void submitRef.current())) return;
           haptics.error();
           // The server's zod 400 reads "text: Tell ÖRZA a little more…" (no `field`).
           const invalid = validationField(e);
@@ -184,6 +196,12 @@ export function MealComposer({
       }
     );
   };
+
+  /** The latest `submit` (a refusal's retry runs after the sheet, a few renders later). */
+  const submitRef = useRef(submit);
+  useEffect(() => {
+    submitRef.current = submit;
+  });
 
   const applyExample = (ex: string) => {
     usedVoice.current = false;
@@ -248,7 +266,7 @@ export function MealComposer({
           error={fieldError}
           returnKeyType="send"
           submitBehavior="submit"
-          onSubmitEditing={submit}
+          onSubmitEditing={() => void submit()}
           inputStyle={styles.input}
         />
         <Text variant="mono" tone="subtle" style={styles.counter} accessibilityElementsHidden importantForAccessibility="no">
@@ -358,6 +376,8 @@ export function MealComposer({
         </Animated.View>
       ) : null}
 
+      <AiDeclinedNote feature="meal_text" style={styles.declined} />
+
       <View style={styles.actions}>
         <Button
           label={submitting ? 'Understanding…' : 'Log meal'}
@@ -367,7 +387,7 @@ export function MealComposer({
           icon={submitting ? undefined : 'check'}
           loading={submitting}
           disabled={!text.trim() || voice.listening}
-          onPress={submit}
+          onPress={() => void submit()}
           haptic="none"
         />
         <Button label="Add from food list" variant="secondary" block icon="list" onPress={onOpenFoodList} disabled={submitting} />
@@ -469,6 +489,7 @@ const styles = StyleSheet.create({
   chipRow: { gap: spacing.sm, paddingHorizontal: spacing.lg + 2 },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.lg },
   mealLabel: { marginBottom: spacing.sm },
+  declined: { marginTop: spacing.lg },
   formError: {
     flexDirection: 'row',
     gap: spacing.sm,

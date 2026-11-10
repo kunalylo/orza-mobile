@@ -4,6 +4,7 @@
  */
 import type { QueryClient } from '@tanstack/react-query';
 
+import { AI_NEEDED_LINE, declinedLine, isAiConsentRefusal, type AiFeature } from '@/lib/aiConsent';
 import { ApiError, errorMessage, validationField } from '@/lib/api';
 
 import { DAY_SUMMARY_ROOTS } from '@/features/meals/api';
@@ -19,11 +20,17 @@ export interface AiErrorInfo {
   field?: string;
   /** 402 — offer a way to the Credits screen. */
   needsCredits: boolean;
+  /** 403 `ai_consent_required` — the AI consent sheet takes over (`features/ai/consent.onAiRefusal`). */
+  needsConsent: boolean;
   /** Worth trying again (offline, timeout, busy, server hiccup). */
   retryable: boolean;
 }
 
-export function aiErrorInfo(e: unknown): AiErrorInfo {
+/** `feature` words a consent refusal as that feature's declined line (otherwise a general one), never the server's text. */
+export function aiErrorInfo(e: unknown, feature?: AiFeature): AiErrorInfo {
+  if (e instanceof ApiError && isAiConsentRefusal(e)) {
+    return { message: feature ? declinedLine(feature) : AI_NEEDED_LINE, code: e.code, needsCredits: false, needsConsent: true, retryable: false };
+  }
   if (e instanceof ApiError) {
     const needsCredits = e.status === 402 || e.code === 'no_credits';
     const invalid = validationField(e);
@@ -35,10 +42,11 @@ export function aiErrorInfo(e: unknown): AiErrorInfo {
       code: e.code,
       field: invalid?.field,
       needsCredits,
+      needsConsent: false,
       retryable: e.isNetwork || e.status === 429 || e.status >= 500,
     };
   }
-  return { message: errorMessage(e), code: 'unknown', needsCredits: false, retryable: true };
+  return { message: errorMessage(e), code: 'unknown', needsCredits: false, needsConsent: false, retryable: true };
 }
 
 /**

@@ -1,11 +1,12 @@
 /**
- * Snap & Know side panels — tips, analysing skeleton, problem states (AI off, no credits, slow down, permission, error)
- * and the logged confirmation. Wording follows the web's `ScanPanels.tsx`.
+ * Snap & Know side panels — tips, analysing skeleton, problem states (AI consent, AI off, no credits, slow down,
+ * permission, error) and the logged confirmation. Wording follows the web's `ScanPanels.tsx`.
  */
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
+import { ALLOW_AI_LABEL } from '@/lib/aiConsent';
 import { colors, radii, spacing } from '@/theme';
 import { Button, GlassCard, Icon, Skeleton, Text, type IconName } from '@/ui';
 
@@ -145,6 +146,41 @@ const P = ({ children, small }: { children: ReactNode; small?: boolean }) => (
     {children}
   </Text>
 );
+
+/**
+ * The member said Not now to the AI consent (or this server doesn't know it yet, `unavailable`): Snap & Know waits;
+ * "Allow AI features" asks again, and the food list never needs AI.
+ */
+export function AiConsentPanel({
+  message,
+  unavailable,
+  asking,
+  onAllow,
+  onFoodList,
+}: {
+  message: string;
+  unavailable: boolean;
+  asking: boolean;
+  onAllow: () => void;
+  onFoodList: () => void;
+}) {
+  return (
+    <StatusPanel
+      icon="mci:creation"
+      tone="energy"
+      eyebrow="AI features"
+      title={unavailable ? 'AI features aren’t ready yet' : 'AI features are off'}
+      actions={
+        <>
+          {unavailable ? null : <Button label={ALLOW_AI_LABEL} icon="check" onPress={onAllow} loading={asking} block />}
+          <Button label="Open the meal log" icon="list" variant={unavailable ? 'primary' : 'secondary'} onPress={onFoodList} block />
+        </>
+      }
+    >
+      <P>{message}</P>
+    </StatusPanel>
+  );
+}
 
 export function AiDisabledPanel({ message, onTypeInstead }: { message?: string; onTypeInstead: () => void }) {
   return (

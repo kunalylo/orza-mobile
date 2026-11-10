@@ -1,6 +1,7 @@
 /**
  * Ask ÖRZA — chat with the coach (English, Hindi, Hinglish; text or voice). Conversations live in a bottom sheet;
- * `?session=<id>` opens one, `?q=<text>` pre-fills the composer. See src/features/chat.
+ * `?session=<id>` opens one, `?q=<text>` pre-fills the composer. See src/features/chat. A send waits for the AI
+ * consent; after Not now a line above the composer says why (past chats stay readable).
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -8,6 +9,7 @@ import { FlatList, Keyboard, Platform, StyleSheet, View, type ListRenderItem } f
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AiDeclinedNote } from '@/features/ai/AiDeclinedNote';
 import { ChatWelcome, QuickActionStrip } from '@/features/chat/ChatWelcome';
 import { Composer } from '@/features/chat/Composer';
 import { dayKey, dayLabel } from '@/features/chat/format';
@@ -217,6 +219,7 @@ export default function AskOrza() {
 
   const footer = (
     <View style={[styles.footer, { paddingBottom: keyboardVisible ? spacing.sm : Math.max(insets.bottom, spacing.md) }]}>
+      <AiDeclinedNote feature="chat" style={styles.declined} />
       {messages.length > 0 && historyState === 'idle' ? <QuickActionStrip onAction={chat.runQuickAction} busy={busy} /> : null}
       <Composer
         value={chat.input}
@@ -298,6 +301,7 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
     boxShadow: '0px 10px 30px rgba(20,20,20,0.12)',
   },
+  declined: { marginBottom: spacing.sm },
   footer: {
     paddingHorizontal: gutter - 4,
     paddingTop: spacing.sm,

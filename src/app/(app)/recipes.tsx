@@ -1,10 +1,16 @@
-/** Recipes: generate (AI or ÖRZA's curated collection), save, and browse Saved / Recent. See src/features/recipes. */
+/**
+ * Recipes: generate (AI or ÖRZA's curated collection), save, and browse Saved / Recent. See src/features/recipes.
+ * Generating waits for the AI consent (the sheet at first use); after Not now a line above the generator says why, and
+ * saved recipes stay.
+ */
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AiDeclinedNote } from '@/features/ai/AiDeclinedNote';
+import { ensureAiConsent, onAiRefusal } from '@/features/ai/consent';
 import { aiErrorInfo } from '@/features/chat/ai';
 import { onRecipeDeleted, useGenerateRecipe, useRecipes, useToggleSave } from '@/features/recipes/api';
 import { KitchenCard } from '@/features/recipes/KitchenCard';
@@ -36,6 +42,8 @@ export default function Recipes() {
   const [tab, setTab] = useState<Tab | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const lastRequest = useRef<GenerateRequest>({});
+  /** Waiting on the AI consent gate (its sheet may be up): another tap waits its turn. */
+  const gating = useRef(false);
   const scrollRef = useRef<ScrollView>(null);
   const resultY = useRef(0);
   const scrollY = useRef(0);
@@ -65,7 +73,16 @@ export default function Recipes() {
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, resultY.current - spacing.md), animated: !reduce }));
 
   async function runGenerate(req: GenerateRequest) {
-    if (generate.isPending) return;
+    if (generate.isPending || gating.current) return;
+    // The AI consent first (the sheet at first use). Not now: nothing sent, the form stays as it was.
+    gating.current = true;
+    let allowed = false;
+    try {
+      allowed = await ensureAiConsent('recipe');
+    } finally {
+      gating.current = false;
+    }
+    if (!allowed) return;
     lastRequest.current = req;
     setErrors({});
     setResult(null);
@@ -82,16 +99,24 @@ export default function Recipes() {
       toast.success(res.ai ? 'Your recipe is ready' : "Here's a recipe that fits you");
       scrollToResult();
     } catch (e) {
-      haptics.error();
-      const info = aiErrorInfo(e);
       // The view had scrolled down to the "cooking" card, which is gone now: back to the studio, where a field error
       // shows and "Generate recipe" can be tapped again.
       requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: !reduce }));
+      // The server refused (no AI consent for this account): its sheet takes over; after Allow, generated again.
+      if (onAiRefusal(e, 'recipe', () => void generateRef.current(req))) return;
+      haptics.error();
+      const info = aiErrorInfo(e, 'recipe');
       if (info.field && GENERATOR_FIELDS.has(info.field)) setErrors({ [info.field]: info.message });
       else toast.error(info.message, info.needsCredits ? 6000 : undefined);
       if (info.needsCredits) void refresh();
     }
   }
+
+  /** The latest `runGenerate` (a refusal's retry runs after the sheet, a few renders later). */
+  const generateRef = useRef(runGenerate);
+  useEffect(() => {
+    generateRef.current = runGenerate;
+  });
 
   function toggleSave(r: Recipe) {
     if (save.isPending) return;
@@ -189,6 +214,8 @@ export default function Recipes() {
           subtitle="AI-generated Indian recipes personalised for your goals — tuned to your diet, allergies and calorie budget."
         />
 
+        <AiDeclinedNote feature="recipe" style={styles.declined} />
+
         <Animated.View entering={reduce ? undefined : FadeInDown.springify().damping(18).stiffness(100).mass(1)}>
           <RecipeGenerator
             aiEnabled={q.data ? q.data.ai_enabled : null}
@@ -266,6 +293,7 @@ const styles = StyleSheet.create({
   noPad: { paddingBottom: 0 },
   content: { paddingHorizontal: gutter },
   block: { marginTop: spacing.lg },
+  declined: { marginBottom: spacing.lg },
   section: { marginTop: spacing.xxxl },
   sectionTitle: { marginTop: 4 },
   segmented: { marginTop: spacing.lg, marginBottom: spacing.lg },

@@ -48,6 +48,8 @@ export type ScanPhase = 'idle' | 'ready' | 'scanning' | 'result' | 'logged';
 
 /** Why the scan panel shows a problem instead of tips / results. */
 export type ScanProblem =
+  /** The AI consent: Not now, a server refusal, or an old server (`unavailable`) — docs/notes/ai-consent.md. */
+  | { kind: 'ai_consent'; message: string; unavailable: boolean }
   | { kind: 'ai_disabled'; message: string }
   | { kind: 'no_credits'; message: string }
   | { kind: 'rate_limited'; message: string }

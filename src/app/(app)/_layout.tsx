@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 
+import { AiConsentHost } from '@/features/ai/AiConsentHost';
 import { AlarmPermissionPrompt } from '@/features/alarms/AlarmPermissionPrompt';
 import { useAlarmSync } from '@/lib/alarms/useAlarmSync';
 import { useHealthAutoSync } from '@/lib/health/sync';
@@ -24,6 +25,8 @@ export default function AppLayout() {
       <MemberStack />
       {/* "Let your medicine alarms ring" — after the first alarm medicine / a prescription, when a permission is missing. */}
       <AlarmPermissionPrompt />
+      {/* "Allow ÖRZA's AI features?" — the first time a member starts an AI feature (docs/notes/ai-consent.md). */}
+      <AiConsentHost />
     </>
   );
 }

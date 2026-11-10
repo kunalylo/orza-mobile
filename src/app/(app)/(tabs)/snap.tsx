@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Alert, AppState, BackHandler, Linking, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
+import { ensureAiConsent, onAiRefusal, useAiDeclined } from '@/features/ai/consent';
+import { AI_UNAVAILABLE, declinedLine } from '@/lib/aiConsent';
 import { ApiError, errorMessage, validationField } from '@/lib/api';
 import { useAuth, useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
@@ -16,6 +18,7 @@ import type { Meal, MealType } from '@/features/meals/types';
 import { DEFAULT_TZ, FALLBACK_COSTS, MEAL_SINGULAR, formatDayLabel, formatNumber, guessMealType, isMealType, isRealDay, todayInTz } from '@/features/meals/utils';
 import { scanProblem, useConfirmScan, useScanMeal } from '@/features/snap/api';
 import {
+  AiConsentPanel,
   AiDisabledPanel,
   AnalysingPanel,
   LoggedPanel,
@@ -37,6 +40,8 @@ type Photo = { uri: string; dataUrl: string };
 /**
  * Snap & Know — take or choose a photo of a meal → ÖRZA's AI estimate → review / edit the items → log.
  * Route params (from Meals / Today): `date=YYYY-MM-DD` (a past day to log to) and `meal_type=…`.
+ * The photo is only for AI, so the AI consent comes before the camera or gallery opens (and again before Analyse, for a
+ * photo recovered after Android restarted the app): Not now opens neither and shows the AI consent panel.
  */
 export default function Snap() {
   const user = useSignedInUser();
@@ -64,6 +69,8 @@ export default function Snap() {
   const [problem, setProblem] = useState<ScanProblem | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const [logged, setLogged] = useState<Meal | null>(null);
+  const aiDeclined = useAiDeclined('snap');
+  const [askingAi, setAskingAi] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
   const sideY = useRef(0);
@@ -136,12 +143,19 @@ export default function Snap() {
   const picking = useRef(false);
   const scanSent = useRef(false);
 
-  /** Get a photo (camera / gallery, or one recovered after Android restarted the app) and prepare it for analysis. */
-  const preparePhoto = async (source: PhotoSource, get: () => Promise<PickedPhoto[]>, recovered = false) => {
+  /**
+   * Get a photo (camera / gallery, or one recovered after Android restarted the app) and prepare it for analysis.
+   * `consent`: the AI consent first (the sheet at first use) — Not now opens no camera or gallery.
+   */
+  const preparePhoto = async (source: PhotoSource, get: () => Promise<PickedPhoto[]>, recovered = false, consent = false) => {
     if (busy || logging || picking.current) return;
     picking.current = true;
     setPreparing(source);
     try {
+      if (consent && !(await ensureAiConsent('snap'))) {
+        scrollToSide();
+        return;
+      }
       const picked = await get();
       // Getting this far means access was given (e.g. "Allow access" → allowed, then the camera was closed): the
       // "ÖRZA needs your camera" panel no longer applies.
@@ -167,7 +181,7 @@ export default function Snap() {
       setPreparing(null);
     }
   };
-  const pick = (source: PhotoSource) => preparePhoto(source, () => pickPhotos(source, { owner: SNAP_PICK_OWNER }));
+  const pick = (source: PhotoSource) => preparePhoto(source, () => pickPhotos(source, { owner: SNAP_PICK_OWNER }), false, true);
 
   // Android stopped ÖRZA while the camera was open and restarted it with the photo (low memory): the tabs layout opens
   // Snap, and the photo continues here instead of being lost.
@@ -210,9 +224,15 @@ export default function Snap() {
 
   /* ─── analyse ─── */
 
-  const analyse = () => {
+  const runAnalyse = async () => {
     if (!photo || busy || scanSent.current) return;
     scanSent.current = true;
+    // The AI consent (a recovered photo arrives without `pick`'s ask; a withdrawal may have come since).
+    if (!(await ensureAiConsent('snap'))) {
+      scanSent.current = false;
+      scrollToSide();
+      return;
+    }
     setPhase('scanning');
     setProblem(null);
     setNoteError(null);
@@ -230,6 +250,8 @@ export default function Snap() {
         },
         onError: (e) => {
           setPhase('ready');
+          // The server refused (no AI consent for this account): its sheet takes over; after Allow, analysed again.
+          if (onAiRefusal(e, 'snap', () => void analyseRef.current())) return;
           haptics.error();
           // A photo with no food can still use credits once the daily refunds are used up — resync the balance.
           if (e instanceof ApiError && (e.code === 'no_food' || e.status === 402)) void refresh().catch(() => null);
@@ -247,6 +269,23 @@ export default function Snap() {
         },
       }
     );
+  };
+  const analyse = () => void runAnalyse();
+  /** The latest analysis (a refusal's retry runs after the sheet, a few renders later). */
+  const analyseRef = useRef(runAnalyse);
+  useEffect(() => {
+    analyseRef.current = runAnalyse;
+  });
+
+  /** "Allow AI features" on the consent panel: the sheet again; the member then takes or analyses the photo. */
+  const allowAi = () => {
+    if (askingAi) return;
+    setAskingAi(true);
+    void ensureAiConsent('snap')
+      .then((ok) => {
+        if (ok) setProblem((p) => (p?.kind === 'ai_consent' ? null : p));
+      })
+      .finally(() => setAskingAi(false));
   };
 
   /* ─── log ─── */
@@ -337,6 +376,14 @@ export default function Snap() {
 
   /* ─── side panel ─── */
 
+  // Not now (or an old server): the AI consent panel, until the member allows AI features.
+  const consentProblem: Extract<ScanProblem, { kind: 'ai_consent' }> | null =
+    problem?.kind === 'ai_consent'
+      ? problem
+      : aiDeclined.declined || aiDeclined.unavailable
+        ? { kind: 'ai_consent', message: aiDeclined.unavailable ? AI_UNAVAILABLE : declinedLine('snap'), unavailable: aiDeclined.unavailable }
+        : null;
+
   let side: ReactNode;
   if (aiOff) side = <AiDisabledPanel message={problem?.kind === 'ai_disabled' ? problem.message : undefined} onTypeInstead={() => openMeals(true)} />;
   else if (phase === 'logged' && logged) side = <LoggedPanel meal={logged} onViewLog={() => openMeals()} onScanAnother={scanAnother} />;
@@ -356,6 +403,16 @@ export default function Snap() {
       />
     );
   else if (scanning) side = <AnalysingPanel />;
+  else if (consentProblem)
+    side = (
+      <AiConsentPanel
+        message={consentProblem.message}
+        unavailable={consentProblem.unavailable}
+        asking={askingAi}
+        onAllow={allowAi}
+        onFoodList={() => openMeals()}
+      />
+    );
   else if (problem?.kind === 'no_credits') side = <NoCreditsPanel onCredits={openCredits} onLogFree={() => openMeals()} onRetry={photo ? analyse : undefined} />;
   else if (problem?.kind === 'rate_limited') side = <SlowDownPanel message={problem.message} onRetry={photo ? analyse : undefined} onTypeInstead={() => openMeals(true)} />;
   else if (problem?.kind === 'permission') {
@@ -499,7 +556,7 @@ export default function Snap() {
             if (moved && Date.now() < sideScrollUntil.current) scrollToSideNow();
           }}
         >
-          <Animated.View key={sideKey(phase, problem, aiOff)} entering={reduce ? undefined : FadeInDown.delay(60).springify().damping(18).stiffness(100).mass(1)}>
+          <Animated.View key={sideKey(phase, consentProblem ?? problem, aiOff)} entering={reduce ? undefined : FadeInDown.delay(60).springify().damping(18).stiffness(100).mass(1)}>
             {side}
           </Animated.View>
         </View>

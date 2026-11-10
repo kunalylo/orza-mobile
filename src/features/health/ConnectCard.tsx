@@ -218,10 +218,10 @@ function ConnectState({ health }: { health: Health }) {
         </AllowInHealthConnect>
       ) : (
         <Text variant="caption" tone="subtle" align="center">
-          {platform === 'android'
-            ? // R/U review: the AI coach reads steps and weight (Health Connect's policy: explicit, informed consent).
-              'You choose exactly what to share on the next screen. Only daily totals are saved to your ÖRZA account — when you use an AI feature, like the coach, the ones it needs go with your request to our AI provider — and you can disconnect any time.'
-            : 'You choose exactly what to share on the next screen. Only daily totals are saved to your ÖRZA account, and you can disconnect any time.'}
+          {/* The AI coach reads steps and weight: OpenAI named on both platforms (Health Connect's policy, App Store
+              5.1.3(i): explicit, informed consent) — and only once the member allowed AI features (ai-consent.md §4). */}
+          You choose exactly what to share on the next screen. Only daily totals are saved to your ÖRZA account — if you allow
+          AI features, your steps and weight go with your Ask ÖRZA chats to OpenAI — and you can disconnect any time.
         </Text>
       )}
     </View>

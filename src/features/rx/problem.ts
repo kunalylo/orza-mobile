@@ -1,11 +1,12 @@
 /**
  * Why a prescription scan didn't work, in words for people — drives the problem panel on the capture screen
- * (manual entry, "Get more credits", "Try again").
+ * (manual entry, "Allow AI features", "Get more credits", "Try again").
  */
+import { AI_UNAVAILABLE, declinedLine, isAiConsentRefusal } from '@/lib/aiConsent';
 import { ApiError, errorMessage } from '@/lib/api';
 import { PhotoError } from '@/lib/image';
 
-export type RxProblemKind = 'ai_disabled' | 'ai_busy' | 'no_credits' | 'rate_limited' | 'offline' | 'photo' | 'error';
+export type RxProblemKind = 'ai_consent' | 'ai_unavailable' | 'ai_disabled' | 'ai_busy' | 'no_credits' | 'rate_limited' | 'offline' | 'photo' | 'error';
 
 export interface RxProblem {
   kind: RxProblemKind;
@@ -19,7 +20,19 @@ function waitText(seconds?: number): string {
   return `in about ${Math.round(seconds / 60)} minutes`;
 }
 
+/**
+ * The AI consent (`docs/notes/ai-consent.md`): Not now — reading waits, typing the medicines never needs AI — or
+ * (`unavailable`) a server that doesn't know the consent yet.
+ */
+export function aiConsentProblem(unavailable: boolean): RxProblem {
+  return unavailable
+    ? { kind: 'ai_unavailable', title: 'AI features aren’t ready yet', message: AI_UNAVAILABLE }
+    : { kind: 'ai_consent', title: 'AI features are off', message: declinedLine('rx') };
+}
+
 export function rxProblem(e: unknown): RxProblem {
+  // The AI consent's refusal (the screen's `onAiRefusal` normally takes it first and opens the sheet).
+  if (isAiConsentRefusal(e)) return aiConsentProblem(false);
   if (e instanceof PhotoError) {
     return { kind: 'photo', title: "That photo didn't work", message: e.message };
   }

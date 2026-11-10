@@ -1,20 +1,23 @@
 /**
  * Scan a prescription — take or choose a photo, ÖRZA's AI reads it (scan line over the photo), then the editable review
  * opens. Manual entry when AI is off / out of credits / the member prefers typing. History of past prescriptions below.
+ * "Read" waits for the AI consent (the sheet at first use) — only Read: the photo may also go to manual entry, which
+ * isn't AI. After Not now the problem panel says why, with "Type the medicines instead".
  */
 import { router, useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 
+import { ensureAiConsent, onAiRefusal, useAiDeclined } from '@/features/ai/consent';
 import { useAiStatus } from '@/features/meals/api';
 import { FALLBACK_COSTS, formatNumber } from '@/features/meals/utils';
 import { useLocalToday, useMedsTimezone } from '@/features/meds/api';
 import { usePrescriptions, useScanPrescription } from '@/features/rx/api';
 import { HistoryList } from '@/features/rx/HistoryList';
 import { pickRxPhoto, type RxPhoto } from '@/features/rx/photo';
-import { rxProblem, type RxProblem } from '@/features/rx/problem';
+import { aiConsentProblem, rxProblem, type RxProblem } from '@/features/rx/problem';
 import { ProblemPanel } from '@/features/rx/ProblemPanel';
 import { rxPhotoDraft } from '@/features/rx/rows';
 import { Viewfinder } from '@/features/rx/Viewfinder';
@@ -49,6 +52,10 @@ export default function PrescriptionScan() {
   const [preparing, setPreparing] = useState(false);
   const [problem, setProblem] = useState<RxProblem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const aiDeclined = useAiDeclined('rx');
+  const [askingAi, setAskingAi] = useState(false);
+  /** Waiting on the AI consent gate (its sheet may be up): another tap waits its turn. */
+  const gating = useRef(false);
   const scanning = scan.isPending;
   const busy = preparing || scanning;
 
@@ -78,8 +85,17 @@ export default function PrescriptionScan() {
     }
   }
 
-  function read() {
-    if (!photo || scanning) return;
+  async function read() {
+    if (!photo || scanning || gating.current) return;
+    // The AI consent first (the sheet at first use). Not now: nothing sent, the photo stays for "Type instead".
+    gating.current = true;
+    let allowed = false;
+    try {
+      allowed = await ensureAiConsent('rx');
+    } finally {
+      gating.current = false;
+    }
+    if (!allowed) return;
     setProblem(null);
     scan.mutate(photo.dataUrl, {
       onSuccess: (res) => {
@@ -91,11 +107,32 @@ export default function PrescriptionScan() {
         router.push({ pathname: '/rx/review', params: { id: res.prescription.id } });
       },
       onError: (e) => {
+        // The server refused (no AI consent for this account): its sheet takes over; after Allow, read again.
+        if (onAiRefusal(e, 'rx', () => void readRef.current())) return;
         haptics.error();
         setProblem(rxProblem(e));
       },
     });
   }
+  /** The latest `read` (a refusal's retry runs after the sheet, a few renders later). */
+  const readRef = useRef(read);
+  useEffect(() => {
+    readRef.current = read;
+  });
+
+  /** "Allow AI features" on the panel: the sheet again; the member then taps Read. */
+  function allowAi() {
+    if (askingAi) return;
+    setAskingAi(true);
+    void ensureAiConsent('rx')
+      .then((ok) => {
+        if (ok) setProblem((p) => (p?.kind === 'ai_consent' ? null : p));
+      })
+      .finally(() => setAskingAi(false));
+  }
+
+  // Not now (or an old server): the AI consent panel, until the member allows AI features.
+  const shownProblem = problem ?? (aiDeclined.declined || aiDeclined.unavailable ? aiConsentProblem(aiDeclined.unavailable) : null);
 
   function typeInstead() {
     if (scanning) return;
@@ -135,9 +172,18 @@ export default function PrescriptionScan() {
           <Viewfinder uri={photo?.uri ?? null} scanning={scanning} />
 
           <Animated.View layout={layoutTransition} style={styles.controls}>
-            {problem ? <ProblemPanel problem={problem} onManual={typeInstead} onRetry={photo ? read : undefined} retrying={scanning} /> : null}
+            {shownProblem ? (
+              <ProblemPanel
+                problem={shownProblem}
+                onManual={typeInstead}
+                onRetry={photo ? () => void read() : undefined}
+                retrying={scanning}
+                onAllowAi={allowAi}
+                allowing={askingAi}
+              />
+            ) : null}
 
-            {aiOff && !problem ? (
+            {aiOff && !shownProblem ? (
               <Animated.View entering={FadeIn} style={styles.aiOff}>
                 <Icon name="info" size={16} color={colors.cyan700} />
                 <Text variant="small" color={colors.cyan700} style={styles.flex}>
@@ -168,7 +214,7 @@ export default function PrescriptionScan() {
                   size="lg"
                   block
                   haptic="firm"
-                  onPress={read}
+                  onPress={() => void read()}
                   disabled={preparing}
                   accessibilityHint={`Uses ${cost} AI credits. You have ${formatNumber(credits)}.`}
                 />

@@ -1,7 +1,8 @@
 /**
  * Settings hub — account summary, then rows into each sub-page (profile, targets, preferences, memory, password,
  * your data) plus sign out / sign out of all devices. Port of the web's /dashboard/settings sections. Privacy & data
- * also holds the phone's "Count steps automatically" switch (steps v2 P9, U4 — `features/health/StepsSwitch.tsx`).
+ * also holds the phone's "Count steps automatically" switch (steps v2 P9, U4 — `features/health/StepsSwitch.tsx`) and
+ * "AI features", the account's AI consent (`features/ai/AiFeaturesRow.tsx`, docs/notes/ai-consent.md §3.5).
  */
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -9,6 +10,7 @@ import { useState } from 'react';
 import { Alert, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 
+import { AiFeaturesRow } from '@/features/ai/AiFeaturesRow';
 import { StepsSwitchRow } from '@/features/health/StepsSwitch';
 import { useAccountSync } from '@/features/settings/api';
 import { DIET_OPTIONS, formatNumber, labelOf } from '@/features/settings/options';
@@ -212,6 +214,7 @@ export default function Settings() {
         footer="Your data is stored securely and never sold. We share it only to run ÖRZA — for example with our AI provider when you use an AI feature — as our privacy policy explains."
       >
         <StepsSwitchRow />
+        <AiFeaturesRow />
         <SettingsRow icon="download" tint={TINTS.cyan} title="Export my data" subtitle="Everything ÖRZA stores about you, as a JSON file" onPress={() => router.push('/account/data')} />
         <SettingsRow icon="shield" tint={TINTS.cyan} title="Privacy policy" chevron={false} trailing={<Icon name="arrow-up-right" size={16} color={colors.subtle} />} onPress={() => openWeb('/privacy')} />
         <SettingsRow icon="mci:shield-check-outline" tint={TINTS.cyan} title="Trust & safety" chevron={false} trailing={<Icon name="arrow-up-right" size={16} color={colors.subtle} />} onPress={() => openWeb('/trust')} />

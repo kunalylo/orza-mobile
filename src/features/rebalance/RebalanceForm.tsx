@@ -1,8 +1,13 @@
-/** Occasion chips, "what did you eat?", optional calories and a 2–5 day spread → POST /compensation/plan. */
-import { useRef, useState } from 'react';
+/**
+ * Occasion chips, "what did you eat?", optional calories and a 2–5 day spread → POST /compensation/plan. Creating a plan
+ * waits for the AI consent (the sheet at first use); after Not now a line above the button says why.
+ */
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, type TextInput } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
+import { AiDeclinedNote } from '@/features/ai/AiDeclinedNote';
+import { ensureAiConsent, onAiRefusal } from '@/features/ai/consent';
 import { aiErrorInfo } from '@/features/chat/ai';
 import { haptics } from '@/lib/haptics';
 import { spacing } from '@/theme';
@@ -35,6 +40,8 @@ export function RebalanceForm({
   const [days, setDays] = useState<Days>('3');
   const [errors, setErrors] = useState<Errors>({});
   const customRef = useRef<TextInput>(null);
+  /** Waiting on the AI consent gate (its sheet may be up): another tap waits its turn. */
+  const gating = useRef(false);
 
   function pick(value: string) {
     setOccasion(value);
@@ -43,7 +50,7 @@ export function RebalanceForm({
   }
 
   async function submit() {
-    if (create.isPending) return;
+    if (create.isPending || gating.current) return;
     const occ = occasion === 'Other' ? custom.trim() : occasion;
     const next: Errors = {};
     if (!occ) next.occasion = occasion === 'Other' ? 'Tell ÖRZA what the occasion was.' : "Pick the occasion you're rebalancing for.";
@@ -56,6 +63,15 @@ export function RebalanceForm({
       haptics.error();
       return;
     }
+    // The AI consent (the sheet at first use). Not now: nothing sent, the form stays as it was.
+    gating.current = true;
+    let allowed = false;
+    try {
+      allowed = await ensureAiConsent('rebalance');
+    } finally {
+      gating.current = false;
+    }
+    if (!allowed) return;
 
     try {
       const res = await create.mutateAsync({
@@ -66,13 +82,21 @@ export function RebalanceForm({
       });
       onCreated(res);
     } catch (e) {
+      // The server refused (no AI consent for this account): its sheet takes over; after Allow, created again.
+      if (onAiRefusal(e, 'rebalance', () => void submitRef.current())) return;
       haptics.error();
-      const info = aiErrorInfo(e);
+      const info = aiErrorInfo(e, 'rebalance');
       if (info.field && FIELDS.has(info.field)) setErrors({ [info.field]: info.message });
       else toast.error(info.message, info.needsCredits ? 6000 : undefined);
       if (info.needsCredits) onNeedCredits?.();
     }
   }
+
+  /** The latest `submit` (a refusal's retry runs after the sheet, a few renders later). */
+  const submitRef = useRef(submit);
+  useEffect(() => {
+    submitRef.current = submit;
+  });
 
   const footnote = aiEnabled
     ? `Personalised by ÖRZA's AI for ${cost ?? 1} credit${(cost ?? 1) === 1 ? '' : 's'} — the built-in plan is always there if credits run out.`
@@ -168,6 +192,7 @@ export function RebalanceForm({
         <Text variant="caption" tone="subtle">
           {footnote}
         </Text>
+        <AiDeclinedNote feature="rebalance" style={styles.declined} />
         <Button
           label={create.isPending ? 'Creating your plan…' : 'Create my plan'}
           icon={create.isPending ? undefined : 'mci:star-four-points-outline'}
@@ -193,5 +218,6 @@ const styles = StyleSheet.create({
   daysLabel: { marginBottom: 8, marginLeft: 4 },
   daysHint: { marginTop: 7, marginLeft: 4 },
   footer: { marginTop: spacing.xl, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(20,20,20,0.12)' },
+  declined: { marginTop: spacing.md },
   cta: { marginTop: spacing.md },
 });

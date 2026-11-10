@@ -4,6 +4,7 @@
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { declinedLine, isAiConsentRefusal } from '@/lib/aiConsent';
 import { api, ApiError, errorMessage } from '@/lib/api';
 import { PhotoError, PhotoPermissionError } from '@/lib/image';
 
@@ -53,6 +54,8 @@ export function scanProblem(e: unknown): ScanProblem {
     };
   }
   if (e instanceof PhotoError) return { kind: 'error', message: e.message, retry: false };
+  // The AI consent's refusal (the screen's `onAiRefusal` normally takes it first and opens the sheet).
+  if (isAiConsentRefusal(e)) return { kind: 'ai_consent', message: declinedLine('snap'), unavailable: false };
   if (e instanceof ApiError) {
     // Only the server's "AI is switched off" turns scanning off. Other 503s are temporary — `ai_busy` (the AI provider
     // is rate-limiting) or a gateway hiccup — so they fall through to a retryable error for the same photo.

@@ -1,14 +1,17 @@
-/** Why a scan didn't work, with the way forward: type the medicines, get credits, or try again. */
+/** Why a scan didn't work, with the way forward: type the medicines, allow AI features, get credits, or try again. */
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
 
+import { ALLOW_AI_LABEL } from '@/lib/aiConsent';
 import { colors, radii, spacing } from '@/theme';
 import { Button, Icon, Text, type IconName } from '@/ui';
 
 import type { RxProblem } from './problem';
 
 const ICON: Record<RxProblem['kind'], IconName> = {
+  ai_consent: 'mci:creation',
+  ai_unavailable: 'mci:creation',
   ai_disabled: 'mci:robot-off-outline',
   ai_busy: 'mci:timer-sand',
   no_credits: 'mci:circle-multiple-outline',
@@ -18,7 +21,22 @@ const ICON: Record<RxProblem['kind'], IconName> = {
   error: 'alert-triangle',
 };
 
-export function ProblemPanel({ problem, onManual, onRetry, retrying }: { problem: RxProblem; onManual: () => void; onRetry?: () => void; retrying?: boolean }) {
+export function ProblemPanel({
+  problem,
+  onManual,
+  onRetry,
+  retrying,
+  onAllowAi,
+  allowing,
+}: {
+  problem: RxProblem;
+  onManual: () => void;
+  onRetry?: () => void;
+  retrying?: boolean;
+  /** `ai_consent`: the AI consent sheet again. */
+  onAllowAi?: () => void;
+  allowing?: boolean;
+}) {
   const canRetry = !!onRetry && (problem.kind === 'error' || problem.kind === 'offline' || problem.kind === 'rate_limited' || problem.kind === 'ai_busy');
   return (
     <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)} exiting={FadeOut.duration(160)} style={styles.panel} accessibilityRole="alert">
@@ -37,6 +55,9 @@ export function ProblemPanel({ problem, onManual, onRetry, retrying }: { problem
       </View>
       <View style={styles.actions}>
         <Button label="Type the medicines instead" icon="edit-3" size="sm" variant="primary" onPress={onManual} />
+        {problem.kind === 'ai_consent' && onAllowAi ? (
+          <Button label={ALLOW_AI_LABEL} icon="check" size="sm" variant="secondary" onPress={onAllowAi} loading={allowing} />
+        ) : null}
         {problem.kind === 'no_credits' ? (
           <Button label="Get more credits" icon="plus-circle" size="sm" variant="secondary" onPress={() => router.push('/credits')} />
         ) : null}

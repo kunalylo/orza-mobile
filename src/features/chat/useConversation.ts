@@ -2,11 +2,16 @@
  * Ask ÖRZA conversation state. Server data lives in React Query (sessions list + each conversation's history);
  * this hook only keeps what the server doesn't know yet: the in-flight / failed message of the current view,
  * per-reply notices and which replies arrived during this visit (to animate them).
+ *
+ * Every send (composer, suggestion chips, quick actions, Retry) waits for the AI consent first (`ensureAiConsent`,
+ * `docs/notes/ai-consent.md` §3.4): Not now sends nothing and leaves the text where it was.
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TextInput } from 'react-native';
 
+import { ensureAiConsent, onAiRefusal } from '@/features/ai/consent';
+import { declinedLine } from '@/lib/aiConsent';
 import { ApiError, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
@@ -43,6 +48,8 @@ export function useConversation({ initialSessionId, initialDraft }: { initialSes
   const activeRef = useRef<string | null>(initialSessionId ?? null);
   const viewRef = useRef(0);
   const pendingRef = useRef<Pending | null>(null);
+  /** A send is waiting on the AI consent gate (its sheet may be up): another send waits its turn. */
+  const gatingRef = useRef(false);
   /** The first-load auto-open already ran (or isn't needed). */
   const startedRef = useRef(!!initialSessionId);
   /** The user has sent something in this visit — the auto-open must not replace it. */
@@ -146,12 +153,21 @@ export function useConversation({ initialSessionId, initialDraft }: { initialSes
    */
   async function send(raw: string, { fromComposer = false }: { fromComposer?: boolean } = {}) {
     const text = raw.trim();
-    if (!text || pendingRef.current) return;
+    if (!text || pendingRef.current || gatingRef.current) return;
     if (text.length > MAX_MESSAGE) {
       setComposerError('Please keep messages under 2,000 characters.');
       haptics.error();
       return;
     }
+    // The AI consent (the sheet at first use). Not now: nothing is sent, the composer keeps the text.
+    gatingRef.current = true;
+    let allowed = false;
+    try {
+      allowed = await ensureAiConsent('chat');
+    } finally {
+      gatingRef.current = false;
+    }
+    if (!allowed || pendingRef.current) return;
     const p: Pending = { view: viewRef.current, sessionId: activeRef.current, tempId: `tmp-${Date.now()}` };
     pendingRef.current = p;
     sentRef.current = true;
@@ -197,8 +213,21 @@ export function useConversation({ initialSessionId, initialDraft }: { initialSes
         setActiveId(res.session_id);
       }
     } catch (e) {
+      // The server refused (no AI consent for this account any more): its sheet takes over — the message stays as
+      // "Not sent" with Retry, and goes again by itself after Allow.
+      const resend = () => {
+        if (viewRef.current !== p.view || pendingRef.current) return;
+        setLocal((ls) => ls.filter((x) => x.id !== p.tempId));
+        void send(text);
+      };
+      if (onAiRefusal(e, 'chat', resend)) {
+        if (viewRef.current === p.view) {
+          setLocal((ls) => ls.map((m) => (m.id === p.tempId ? { ...m, status: 'failed', failure: { message: declinedLine('chat'), needsCredits: false } } : m)));
+        }
+        return;
+      }
       haptics.error();
-      const info = aiErrorInfo(e);
+      const info = aiErrorInfo(e, 'chat');
       const sameView = viewRef.current === p.view;
       if (info.field === 'message') {
         // A validation problem: give the text back so it can be edited.
