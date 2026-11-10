@@ -15,12 +15,17 @@
  * - A user copy that lands after sign-out, or that belongs to an earlier session (a `/auth/me` refresh or a mutation
  *   answer still in flight when the member signed out — and maybe into another account), is dropped: it never brings a
  *   user back on screen or writes their profile snapshot into the Keychain of a signed-out phone.
+ * - AI consent (`docs/notes/ai-consent.md` §3.3): the API client's backstop follows the user in state
+ *   (`setAiConsentAllowed`; closed while signed out). Only the consent's own answers (`setUser(…, {aiConsent: true})`),
+ *   sign-in and `/auth/me` change it: a screen's copy (credits, profile…) keeps the consent in state — a copy made before
+ *   an Allow or a Turn off never undoes it — and a refresh that was in flight across such a change keeps it too.
  */
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { createContext, use, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, Platform, type AppStateStatus } from 'react-native';
 
-import { ApiError, api, deviceHeaderValue, getSessionToken, setSessionToken, setUnauthorizedHandler } from './api';
+import { aiConsentState } from './aiConsent';
+import { ApiError, api, deviceHeaderValue, getSessionToken, setAiConsentAllowed, setSessionToken, setUnauthorizedHandler } from './api';
 import { registerDevice, resetDeviceRegistration } from './device';
 import { haptics } from './haptics';
 import { KEYS, readSecure, readSecureJson, userSnapshot, writeSecure, writeSecureJson } from './secure';
@@ -47,9 +52,11 @@ export interface AuthContextValue {
   refresh: () => Promise<PublicUser | null>;
   /**
    * Replace the user with a fresher copy an endpoint returned (e.g. onboarding completion). Ignored once signed out, or
-   * when the copy is of another account than the signed-in one (an answer to a request from an earlier session).
+   * when the copy is of another account than the signed-in one (an answer to a request from an earlier session). The
+   * copy's `ai_consent` counts only with `aiConsent: true` (the consent endpoints' answers, a server refusal); otherwise
+   * the consent in state stays.
    */
-  setUser: (user: PublicUser) => void;
+  setUser: (user: PublicUser, opts?: { aiConsent?: boolean }) => void;
   /** Boot retry after `unreachable`. */
   retry: () => void;
   /** A `retry` is in flight: the offline screen stays up with a busy button (never a blank screen). */
@@ -60,6 +67,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 /** The offline screen's "Try again" shows its spinner at least this long (offline, the request fails at once). */
 const RETRY_MIN_MS = 700;
+
+/** `next` with the AI consent of `current` (when `current` has the field): a copy that isn't the consent's own answer. */
+function keepAiConsent(next: PublicUser, current: PublicUser | null): PublicUser {
+  return current && current.id === next.id && current.ai_consent !== undefined ? { ...next, ai_consent: current.ai_consent } : next;
+}
 
 /** True when a request never got a real answer from ÖRZA (offline, timeout, server down) — worth retrying later. */
 function unreachable(e: unknown): boolean {
@@ -118,24 +130,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const lastRefresh = useRef(0);
   /** Id of the user in state, readable synchronously by late answers (`setUser`). */
   const userId = useRef<string | null>(null);
+  /** The user in state, synchronously (the AI consent a screen's copy keeps). */
+  const current = useRef<PublicUser | null>(null);
+  /** When this phone last changed the member's AI consent (Allow, Turn off, a server refusal): older copies keep it. */
+  const consentChangedAt = useRef(0);
   /**
    * The session a deliberate sign-out is ending. Between `/auth/logout` and `clearLocal()` (the calendar clean-up can
    * take seconds) screens still refetch with it and the server answers 401 — that is our own sign-out, not an expiry.
    */
   const endingToken = useRef<string | null>(null);
 
-  /** Puts a user in place (state + Keychain snapshot). Callers make sure it belongs to the current session. */
-  const applyUser = useCallback((next: PublicUser) => {
+  /** The user on screen, with the AI consent's backstop following it (no Keychain write). */
+  const showUser = useCallback((next: PublicUser) => {
     userId.current = next.id;
+    current.current = next;
+    setAiConsentAllowed(aiConsentState(next) === 'allowed');
     setUserState(next);
-    void writeSecureJson(KEYS.user, userSnapshot(next));
   }, []);
+
+  /** Puts a user in place (state + Keychain snapshot). Callers make sure it belongs to the current session. */
+  const applyUser = useCallback(
+    (next: PublicUser) => {
+      showUser(next);
+      void writeSecureJson(KEYS.user, userSnapshot(next));
+    },
+    [showUser]
+  );
 
   /** `setUser` for screens and mutations: only a copy of the signed-in account, while a session exists. */
   const setUser = useCallback(
-    (next: PublicUser) => {
+    (next: PublicUser, opts: { aiConsent?: boolean } = {}) => {
       if (!getSessionToken() || userId.current !== next.id) return;
-      applyUser(next);
+      if (opts.aiConsent) consentChangedAt.current = Date.now();
+      applyUser(opts.aiConsent ? next : keepAiConsent(next, current.current));
     },
     [applyUser]
   );
@@ -144,8 +171,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearLocal = useCallback(async (opts: { accountDeleted?: boolean } = {}) => {
     const signedOutId = userId.current;
     setSessionToken(null);
+    setAiConsentAllowed(false);
     resetDeviceRegistration();
     userId.current = null;
+    current.current = null;
+    consentChangedAt.current = 0;
     setUserState(null);
     setStatus('signedOut');
     queryClient.clear();
@@ -164,13 +194,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async (): Promise<PublicUser | null> => {
     const token = getSessionToken();
     if (!token) return null;
+    const started = Date.now();
     try {
       const { user: me } = await api.get<{ user: PublicUser }>('/auth/me');
       // Signed out (or into another account) while this was in flight: that answer belongs to the old session.
       if (getSessionToken() !== token) return null;
       lastRefresh.current = Date.now();
-      applyUser(me);
-      return me;
+      // The AI consent changed on this phone while this was in flight: that change is newer than this copy.
+      const fresh = consentChangedAt.current >= started ? keepAiConsent(me, current.current) : me;
+      applyUser(fresh);
+      return fresh;
     } catch {
       return null; // 401 is handled by the unauthorized handler; offline keeps the snapshot
     }
@@ -203,8 +236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setSessionToken(token);
       if (snapshot?.id) {
-        userId.current = snapshot.id;
-        setUserState(snapshot);
+        showUser(snapshot);
         setStatus('signedIn');
         void refresh();
         void registerDevice();
@@ -235,7 +267,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [bootKey, applyUser, refresh]);
+  }, [bootKey, applyUser, showUser, refresh]);
 
   // Foreground: re-register the phone (throttled) and refresh the user if it's been a while.
   useEffect(() => {

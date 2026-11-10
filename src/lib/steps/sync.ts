@@ -23,9 +23,10 @@
  *   save of a past day), the server's answer (an edit marker this phone hasn't taken becomes the day's base, M5c2), and
  *   — a past day — final once settled (`plan.isFinal`, M7: 72 h after the day while a health store is ON, else an hour
  *   after it once a phone count read it whole). The member's own number is `saveManualSteps` (`manual` mode).
- * - iPhone: a number that comes from Apple Health or the motion sensor isn't sent until the app-wide AI data consent
- *   ships (coordinator decision: the server's coach reads `tracking.steps`) — `health/types.SEND_IPHONE_HEALTH_DATA`.
- *   Today still shows it.
+ * - iPhone: a number that comes from Apple Health or the motion sensor goes only to a server that knows the app-wide AI
+ *   consent (`health/types.iphoneSendsHealthData`, decided per run from the member's latest copy — the app's, or a
+ *   headless run's snapshot / `/auth/me`): the server's coach reads `tracking.steps`, and such a server keeps them out
+ *   of AI without the member's consent. Today still shows it.
  * - `syncStepsInBackground()`: the same without UI — the session and member come from the Keychain, the member's
  *   profile (its time zone, M8) refreshed from the server first; Android reads stored counts only (no live sensor read),
  *   and at most `BACKGROUND_PAST_DAYS` past days per run.
@@ -41,7 +42,8 @@ import { KEYS, readSecure, readSecureJson, userSnapshot, writeSecureJson } from 
 import type { PublicUser } from '@/lib/types';
 
 import { addDays, safeTimeZone, utcToZoned } from '../alarms/schedule';
-import { SEND_IPHONE_HEALTH_DATA } from '../health/types';
+import { serverKnowsAiConsent } from '../aiConsent';
+import { iphoneSendsHealthData } from '../health/types';
 
 import { autoCount } from './merge';
 import {
@@ -88,12 +90,15 @@ import type { DayReading, ReadConsent, RefreshReason, StepsAccess } from './type
 export type { RefreshReason } from './types';
 
 /**
- * iPhone: automatic step counts from Apple Health (HealthKit) or the motion sensor (Motion & Fitness) are not sent until
- * the app-wide AI data consent ships (`health/types.SEND_IPHONE_HEALTH_DATA`; coordinator decision, App Store 5.1.2(i) /
- * 5.1.3(i): the server's coach builds its prompt from `tracking.steps`). Today still shows them; the member's typed
- * number is sent. Android is unaffected.
+ * iPhone: automatic step counts from Apple Health (HealthKit) or the motion sensor (Motion & Fitness) are held — not sent —
+ * for a member whose server doesn't know the app-wide AI consent (`health/types.iphoneSendsHealthData`; App Store
+ * 5.1.2(i) / 5.1.3(i): the server's coach builds its prompt from `tracking.steps`, and only a server with the consent
+ * keeps them out of AI without the member's OK). Today still shows them; the member's typed number is sent. Android is
+ * unaffected.
  */
-const holdIphoneHealthData = stepsReader.platform === 'ios' && !SEND_IPHONE_HEALTH_DATA;
+function holdsIphoneHealthData(member: StepsMember): boolean {
+  return stepsReader.platform === 'ios' && !iphoneSendsHealthData(member.aiConsentKnown);
+}
 
 /** No consent: what the readers get to switch every source off. */
 const NO_CONSENT: ReadConsent = { store: false, phone: false };
@@ -104,10 +109,12 @@ export interface StepsMember {
   id: string;
   /** IANA zone the member's days are counted in (their profile time zone, like the server). */
   timeZone: string;
+  /** The server's `{user}` answers carry `ai_consent` (`aiConsent.serverKnowsAiConsent`): an iPhone may send its health data. */
+  aiConsentKnown: boolean;
 }
 
-export function stepsMemberOf(user: { id: string; profile?: { timezone?: string | null } | null }): StepsMember {
-  return { id: user.id, timeZone: safeTimeZone(user.profile?.timezone) };
+export function stepsMemberOf(user: { id: string; profile?: { timezone?: string | null } | null; ai_consent?: PublicUser['ai_consent'] }): StepsMember {
+  return { id: user.id, timeZone: safeTimeZone(user.profile?.timezone), aiConsentKnown: serverKnowsAiConsent(user) };
 }
 
 /** The member while the app UI runs (set by `useStepsAutoSync`); null in a headless background run. */
@@ -310,7 +317,18 @@ async function readAndPublish(member: StepsMember, opts: RefreshOptions) {
         healthEmpty: appleHealthEmpty(member.id, today, gate, access),
       });
       if (read.length) {
-        job = { userId: member.id, epoch: myEpoch, consent: gate.consent, today, tz, days: read, storeOn: gate.storeOn, onSaved: opts.onSaved, onServerSteps: opts.onServerSteps };
+        job = {
+          userId: member.id,
+          epoch: myEpoch,
+          consent: gate.consent,
+          today,
+          tz,
+          days: read,
+          storeOn: gate.storeOn,
+          hold: holdsIphoneHealthData(member),
+          onSaved: opts.onSaved,
+          onServerSteps: opts.onServerSteps,
+        };
       }
     } else if (state.date !== today) {
       // The read timed out: keep the last reading unless the day changed.
@@ -436,6 +454,8 @@ interface SaveJob {
   days: DayReading[];
   /** A health store is ON for the member (its past days settle 72 h after they end, M7). */
   storeOn: boolean;
+  /** iPhone, a server without the AI consent: Apple Health and motion counts are not sent (`holdsIphoneHealthData`). */
+  hold: boolean;
   onSaved?: (date: string, tracking: TrackingDay) => void;
   onServerSteps?: (date: string, steps: number) => void;
 }
@@ -506,7 +526,7 @@ const MANUAL_WAIT_MS = 25_000;
 async function runSave(job: SaveJob) {
   const signedOut = () => job.epoch !== epoch;
   const deps = depsUntil(signedOut);
-  const hold = holdIphoneHealthData ? countsIphoneHealthData : undefined;
+  const hold = job.hold ? countsIphoneHealthData : undefined;
   // Today first (what the member is looking at), then past days newest first.
   const days = [...job.days].sort((a, b) => (a.date === job.today ? -1 : b.date === job.today ? 1 : b.date.localeCompare(a.date)));
   for (const day of days) {

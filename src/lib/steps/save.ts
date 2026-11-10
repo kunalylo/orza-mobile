@@ -98,8 +98,9 @@ export interface SaveOptions {
   stale?: () => boolean;
   /**
    * A day's number this phone must not send yet (`policy.countsIphoneHealthData` on an iPhone — Apple Health or the
-   * motion sensor — until the app-wide AI consent ships): no automatic save of it — no raise, no reconcile, no settling
-   * raise. The day is otherwise handled as usual (edits taken, final when settled).
+   * motion sensor — while its server doesn't know the app-wide AI consent, `health/types.iphoneSendsHealthData`): no
+   * automatic save of it — no raise, no reconcile, no settling raise. The day is otherwise handled as usual (edits
+   * taken, final when settled).
    */
   hold?: (value: DayValue) => boolean;
 }

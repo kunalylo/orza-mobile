@@ -22,6 +22,7 @@ import { AppState } from 'react-native';
 import { mergeServerSteps, mergeTracking } from '@/features/today/api';
 import { useAuth, useSignedInUser } from '@/lib/auth';
 
+import { serverKnowsAiConsent } from '../aiConsent';
 import { safeTimeZone } from '../alarms/schedule';
 import { healthBridge } from '../health/bridge';
 
@@ -82,13 +83,14 @@ export function useStepsAutoSync() {
   const member = status === 'signedIn' && user && !user.is_admin ? user : null;
   const id = member?.id ?? null;
   const tz = safeTimeZone(member?.profile?.timezone);
+  const aiConsentKnown = serverKnowsAiConsent(member);
 
   useEffect(() => {
     if (!id) {
       bindStepsMember(null);
       return undefined;
     }
-    const m: StepsMember = { id, timeZone: tz };
+    const m: StepsMember = { id, timeZone: tz, aiConsentKnown };
     bindStepsMember(m);
     const run = (reason: RefreshReason) => void refreshSteps(m, foregroundOptions(qc, reason));
     run('launch');
@@ -96,7 +98,7 @@ export function useStepsAutoSync() {
       if (s === 'active') run('foreground');
     });
     return () => sub.remove();
-  }, [id, tz, qc]);
+  }, [id, tz, aiConsentKnown, qc]);
 
   useEffect(() => () => bindStepsMember(null), []);
 }
@@ -116,6 +118,7 @@ export function useTodaySteps({ live = true }: TodayStepsOptions = {}) {
   const s = useSyncExternalStore(subscribeStepsState, getStepsState);
   const userId = user.id;
   const tz = safeTimeZone(user.profile?.timezone);
+  const aiConsentKnown = serverKnowsAiConsent(user);
   const mine = s.userId === userId;
   const record = useDayRecord(userId, mine ? s.date : null);
   const consent = useStepsConsent(userId);
@@ -125,7 +128,7 @@ export function useTodaySteps({ live = true }: TodayStepsOptions = {}) {
   useFocusEffect(
     useCallback(() => {
       if (!live) return undefined;
-      const m: StepsMember = { id: userId, timeZone: tz };
+      const m: StepsMember = { id: userId, timeZone: tz, aiConsentKnown };
       const run = () => {
         // Timers keep running for a while in the background on Android; a sensor read there would only time out.
         if (AppState.currentState !== 'active') return;
@@ -140,13 +143,13 @@ export function useTodaySteps({ live = true }: TodayStepsOptions = {}) {
         clearInterval(timer);
         sub.remove();
       };
-    }, [live, userId, tz, qc])
+    }, [live, userId, tz, aiConsentKnown, qc])
   );
 
   /** A read now, in the background — never waiting on a run already in flight (its saves can take a while). */
   const refresh = useCallback(() => {
-    void refreshStepsNow({ id: userId, timeZone: tz }, qc);
-  }, [userId, tz, qc]);
+    void refreshStepsNow({ id: userId, timeZone: tz, aiConsentKnown }, qc);
+  }, [userId, tz, aiConsentKnown, qc]);
 
   /** A permission answer arrived: shown at once, then a read. */
   const afterAnswer = useCallback(async () => {

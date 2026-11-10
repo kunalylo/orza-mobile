@@ -185,10 +185,10 @@ function standsFor(value: DayValue, by: SourceTag | undefined): boolean {
 /**
  * The day's number comes from the iPhone's health and fitness data: its winner is Apple Health's reading (HealthKit) or
  * CMPedometer's (Motion & Fitness) — the whole day's, or what it counted after the day's base. App Store 5.1.3(i) names
- * both; until the app-wide AI data consent ships (coordinator decision, 5.1.2(i)) the server's coach would read it from
- * `tracking.steps`, so the iPhone holds such a number back (`save.SaveOptions.hold`,
- * `health/types.SEND_IPHONE_HEALTH_DATA`; R/U review: the motion count too). The member's typed number (a base alone)
- * is theirs.
+ * both, and the server's coach reads `tracking.steps`: for a server that doesn't know the app-wide AI consent (so can't
+ * keep it out of AI without the member's OK, 5.1.2(i)) the iPhone holds such a number back (`save.SaveOptions.hold`,
+ * `health/types.iphoneSendsHealthData`; R/U review: the motion count too). The member's typed number (a base alone) is
+ * theirs.
  */
 export function countsIphoneHealthData(value: DayValue): boolean {
   const w = value.winner;

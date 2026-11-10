@@ -18,6 +18,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 
+import { serverKnowsAiConsent } from '@/lib/aiConsent';
 import { api, ApiError, errorMessage } from '@/lib/api';
 import { useAuth, useSignedInUser } from '@/lib/auth';
 import { forgetHcGrant, noteHcGrant, setHcRefused } from '@/lib/steps/store';
@@ -32,6 +33,7 @@ import {
   AUTO_SYNC_INTERVAL_MS,
   HealthNotAuthorizedError,
   importMetrics,
+  iphoneSendsHealthData,
   SYNC_DAYS,
   type HealthAvailability,
   type HealthDayInput,
@@ -106,6 +108,11 @@ export function invalidateHealthDependents(qc: QueryClient) {
 export interface SyncOptions {
   /** `auto` respects the 3-hour throttle; `manual` / `connect` always run. */
   reason: 'auto' | 'manual' | 'connect';
+  /**
+   * The server's `{user}` answers carry `ai_consent` (`aiConsent.serverKnowsAiConsent` of the member's copy): an
+   * iPhone's weight goes only then (`health/types.iphoneSendsHealthData`).
+   */
+  aiConsentKnown: boolean;
   queryClient?: QueryClient;
 }
 
@@ -130,9 +137,9 @@ export async function syncHealth(userId: string, opts: SyncOptions): Promise<Hea
       updateHealthRecord(userId, { lastAttemptAt: startedAt });
       return { status: 'skipped', reason: 'unsupported' };
     }
-    // Never steps (§0.5): they go through the steps sync alone.
-    // Never steps; on an iPhone no weight either until the app-wide AI consent ships (`importMetrics`).
-    const days = importRows(await healthBridge.readDays(SYNC_DAYS), importMetrics(healthBridge.platform));
+    // Never steps (§0.5): they go through the steps sync alone. On an iPhone no weight either for a server that doesn't
+    // know the AI consent (`importMetrics`).
+    const days = importRows(await healthBridge.readDays(SYNC_DAYS), importMetrics(healthBridge.platform, iphoneSendsHealthData(opts.aiConsentKnown)));
     if (!days.length) {
       updateHealthRecord(userId, {
         lastAttemptAt: startedAt,
@@ -175,16 +182,17 @@ export function useHealthAutoSync() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const userId = user && !user.is_admin ? user.id : null;
+  const aiConsentKnown = serverKnowsAiConsent(user);
 
   useEffect(() => {
     if (!userId) return undefined;
-    const run = () => void syncHealth(userId, { reason: 'auto', queryClient: qc });
+    const run = () => void syncHealth(userId, { reason: 'auto', aiConsentKnown, queryClient: qc });
     run();
     const sub = AppState.addEventListener('change', (s: AppStateStatus) => {
       if (s === 'active') run();
     });
     return () => sub.remove();
-  }, [userId, qc]);
+  }, [userId, aiConsentKnown, qc]);
 }
 
 export type ConnectResult =
@@ -273,7 +281,7 @@ export function useHealthSync() {
         await agreeToSteps(user.id, 'store');
         void refreshStepsNow(stepsMemberOf(user), qc);
       }
-      const outcome = await syncHealth(user.id, { reason: 'connect', queryClient: qc });
+      const outcome = await syncHealth(user.id, { reason: 'connect', aiConsentKnown: serverKnowsAiConsent(user), queryClient: qc });
       return { status: 'connected', outcome };
     } catch (e) {
       return { status: 'error', message: e instanceof ApiError ? errorMessage(e) : `We couldn’t open ${healthBridge.name}. Please try again.` };
@@ -298,7 +306,7 @@ export function useHealthSync() {
     return { revoked };
   }, [qc, user]);
 
-  const syncNow = useCallback(() => syncHealth(user.id, { reason: 'manual', queryClient: qc }), [qc, user.id]);
+  const syncNow = useCallback(() => syncHealth(user.id, { reason: 'manual', aiConsentKnown: serverKnowsAiConsent(user), queryClient: qc }), [qc, user]);
 
   return {
     platform: healthBridge.platform,

@@ -12,7 +12,16 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { importRows } from '../../src/lib/health/aggregate';
-import { HEALTH_METRICS, IMPORT_METRICS, importMetrics, METRIC_INFO, PHONE_METRICS, SEND_IPHONE_HEALTH_DATA, type HealthDayInput } from '../../src/lib/health/types';
+import {
+  HEALTH_METRICS,
+  IMPORT_METRICS,
+  importMetrics,
+  iphoneSendsHealthData,
+  METRIC_INFO,
+  PHONE_METRICS,
+  SEND_IPHONE_HEALTH_DATA,
+  type HealthDayInput,
+} from '../../src/lib/health/types';
 
 describe('what the phone reads and imports (P5, §0.5)', () => {
   test('the phone reads four kinds; the import sends three — never steps', () => {
@@ -43,21 +52,29 @@ describe('what the phone reads and imports (P5, §0.5)', () => {
   });
 });
 
-describe('the iPhone’s weight stays on it until the app-wide AI consent (R/U review)', () => {
+describe('the iPhone’s weight goes only to a server that knows the AI consent (R/U review; ai-consent §3.7)', () => {
   // The server copies an imported weight into the day's tracking, and the coach's own replies quote it ("Your goal: …
-  // (72.5 kg → 65 kg)") — chat history the next AI request sends to the AI provider.
+  // (72.5 kg → 65 kg)") — chat history an AI request sends. The server keeps it out of AI without the consent (R1, R2);
+  // an old server (no `ai_consent` in its answers) has neither rule.
   const days: HealthDayInput[] = [{ date: '2026-10-30', weight_kg: 72.5, sleep_minutes: 430 }];
 
-  test('iPhone, while held: sleep and resting heart rate only', () => {
-    assert.equal(SEND_IPHONE_HEALTH_DATA, false);
-    assert.deepEqual([...importMetrics('ios')], ['sleep_minutes', 'resting_hr']);
-    assert.deepEqual(importRows(days, importMetrics('ios')), [{ date: '2026-10-30', sleep_minutes: 430 }]);
-    assert.deepEqual(importRows([{ date: '2026-10-31', weight_kg: 72.4 }], importMetrics('ios')), [], 'a weigh-in alone: nothing sent');
+  test('the flag is on: an iPhone talking to a server that knows the consent sends all three', () => {
+    assert.equal(SEND_IPHONE_HEALTH_DATA, true);
+    assert.equal(iphoneSendsHealthData(true), true);
+    assert.deepEqual([...importMetrics('ios', iphoneSendsHealthData(true))], [...IMPORT_METRICS]);
+    assert.deepEqual(importRows(days, importMetrics('ios', true)), [{ date: '2026-10-30', sleep_minutes: 430, weight_kg: 72.5 }]);
   });
 
-  test('Android, and the iPhone once the consent ships: all three', () => {
-    assert.deepEqual([...importMetrics('android')], [...IMPORT_METRICS]);
-    assert.deepEqual([...importMetrics('ios', true)], [...IMPORT_METRICS]);
-    assert.deepEqual(importRows(days, importMetrics('android')), [{ date: '2026-10-30', sleep_minutes: 430, weight_kg: 72.5 }]);
+  test('iPhone and an old server: sleep and resting heart rate only', () => {
+    assert.equal(iphoneSendsHealthData(false), false);
+    assert.deepEqual([...importMetrics('ios', iphoneSendsHealthData(false))], ['sleep_minutes', 'resting_hr']);
+    assert.deepEqual(importRows(days, importMetrics('ios', iphoneSendsHealthData(false))), [{ date: '2026-10-30', sleep_minutes: 430 }]);
+    assert.deepEqual(importRows([{ date: '2026-10-31', weight_kg: 72.4 }], importMetrics('ios', false)), [], 'a weigh-in alone: nothing sent');
+  });
+
+  test('Android: all three, whatever the server', () => {
+    assert.deepEqual([...importMetrics('android', false)], [...IMPORT_METRICS]);
+    assert.deepEqual([...importMetrics('android', true)], [...IMPORT_METRICS]);
+    assert.deepEqual(importRows(days, importMetrics('android', false)), [{ date: '2026-10-30', sleep_minutes: 430, weight_kg: 72.5 }]);
   });
 });

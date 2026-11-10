@@ -33,18 +33,28 @@ export const PHONE_METRICS = ['steps', 'sleep_minutes', 'resting_hr', 'weight_kg
 export const IMPORT_METRICS = ['sleep_minutes', 'resting_hr', 'weight_kg'] as const satisfies readonly HealthMetric[];
 
 /**
- * iPhone: send health and fitness data where the server's AI coach can read it. Off until the app-wide AI data consent
- * ships (coordinator decision; App Store 5.1.2(i): explicit permission before personal data goes to a third-party AI;
- * 5.1.3(i) names HealthKit and Motion & Fitness alike). Meanwhile the iPhone sends no automatic step count from Apple
- * Health or its motion sensor (`lib/steps/sync.ts` holds them: the coach's prompt and replies read `tracking.steps`),
- * and its Health import leaves weight out (`importMetrics`: the server copies an imported weight into the day's
- * tracking, and the coach's own replies quote it — chat history the next AI request sends). Sleep and resting heart
- * rate never reach the coach. Then: true. Android is unaffected (its steps disclosure names the AI provider).
+ * iPhone: send health and fitness data where the server's AI coach can read it — automatic step counts from Apple
+ * Health or the motion sensor (`lib/steps/sync.ts`) and the Health import's weight (`importMetrics`; the server copies
+ * it into the day's tracking, and the coach's own replies quote it). On since the app-wide AI consent
+ * (`docs/notes/ai-consent.md` §3.7; App Store 5.1.2(i), 5.1.3(i) names HealthKit and Motion & Fitness alike): the
+ * server refuses the app's AI requests without the account's consent (R1) and leaves tracked steps, and the replies
+ * that quote steps or weight, out of every AI prompt of an account without it (R2) — so the data reaches OpenAI only
+ * inside an Ask ÖRZA request the member allowed. Still only to a server that knows the consent (`iphoneSendsHealthData`):
+ * an old one has neither rule. Sleep and resting heart rate never reach the coach.
  */
-export const SEND_IPHONE_HEALTH_DATA = false;
+export const SEND_IPHONE_HEALTH_DATA = true;
+
+/**
+ * The iPhone may send automatic steps and weight to this server: the flag, and the server's `{user}` answers carry
+ * `ai_consent` (`lib/aiConsent.serverKnowsAiConsent` of the member's latest copy — `null` included: R1 and R2 cover a
+ * member who hasn't allowed AI). Android is not held (Health Connect's totals reach OpenAI only with the consent too).
+ */
+export function iphoneSendsHealthData(serverKnowsAiConsent: boolean): boolean {
+  return SEND_IPHONE_HEALTH_DATA && serverKnowsAiConsent;
+}
 
 /** What the Health import sends from `platform`: `IMPORT_METRICS`, without weight on an iPhone while its data is held. */
-export function importMetrics(platform: HealthPlatform, sendIphoneHealthData: boolean = SEND_IPHONE_HEALTH_DATA): readonly HealthMetric[] {
+export function importMetrics(platform: HealthPlatform, sendIphoneHealthData: boolean): readonly HealthMetric[] {
   return platform === 'ios' && !sendIphoneHealthData ? IMPORT_METRICS.filter((m) => m !== 'weight_kg') : IMPORT_METRICS;
 }
 export type HealthDayValues = Partial<Record<HealthMetric, number>>;

@@ -8,9 +8,13 @@
  * - Errors become `ApiError` with the server's `{error, code, field}`; network failures and timeouts get
  *   friendly messages; a 401 on an authenticated call signs the app out (see `setUnauthorizedHandler`) — except
  *   `code: "wrong_password"`, which only means a password typed to confirm a change was wrong.
+ * - The AI consent's backstop (`docs/notes/ai-consent.md` §3.3): while the signed-in member has no recorded AI consent
+ *   (`setAiConsentAllowed`, kept in step by the AuthProvider), a request to one of the six AI routes is refused here —
+ *   `ApiError(403, ai_consent_required)`, before `fetch` — so a screen that forgot `ensureAiConsent` still sends nothing.
  */
 import * as Device from 'expo-device';
 
+import { AI_CONSENT_REQUIRED, AI_LOCAL_REFUSAL, AI_REFUSAL_MESSAGE, isAiPath } from './aiConsent';
 import { API_BASE, API_ORIGIN, PLATFORM } from './config';
 
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -94,6 +98,19 @@ export function getSessionToken() {
 /** Called once when an authenticated request answers 401 (expired / revoked session). */
 export function setUnauthorizedHandler(handler: (() => void) | null) {
   onUnauthorized = handler;
+}
+
+/** The signed-in member's copy has a recorded AI consent (`aiConsent.aiConsentState` = allowed). Closed until it does. */
+let aiConsentAllowed = false;
+
+/** Set by the AuthProvider whenever the user in state changes (false when signed out). */
+export function setAiConsentAllowed(allowed: boolean) {
+  aiConsentAllowed = allowed;
+}
+
+/** The backstop is open: AI requests may go (`features/ai/consent.ts`' fast path). */
+export function getAiConsentAllowed() {
+  return aiConsentAllowed;
 }
 
 const DEVICE_LABEL_MAX = 80;
@@ -194,6 +211,10 @@ function messageFor(status: number, data: unknown): { message: string; code: str
 
 export async function request<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { method = opts.body !== undefined ? 'POST' : 'GET', body, timeoutMs = DEFAULT_TIMEOUT_MS, signal, auth = true } = opts;
+  // The AI consent's backstop: nothing goes to an AI route without the member's recorded consent (any method).
+  if (!aiConsentAllowed && isAiPath(path)) {
+    throw new ApiError(AI_REFUSAL_MESSAGE, { status: 403, code: AI_CONSENT_REQUIRED, data: AI_LOCAL_REFUSAL });
+  }
   const headers = { ...baseHeaders(auth), ...opts.headers };
   // The server's guard: every write is JSON, except a DELETE without a body, which may omit the Content-Type.
   let payload: string | undefined;

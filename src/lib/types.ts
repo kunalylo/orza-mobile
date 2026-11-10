@@ -48,6 +48,14 @@ export interface Preferences {
   ai_training_opt_out?: boolean;
 }
 
+/** App-wide AI consent, `users.ai_consent` on the server (`docs/notes/ai-consent.md`, `lib/aiConsent.ts`). */
+export interface AiConsent {
+  /** The consent text the member allowed (`AI_CONSENT_VERSION` of the app that asked). */
+  version: number;
+  /** The server's clock at the last Allow (ISO). */
+  at: string;
+}
+
 /** `GET /api/auth/me` → `{user}` (never includes the password hash or integration secrets). */
 export interface PublicUser {
   id: string;
@@ -64,6 +72,11 @@ export interface PublicUser {
   targets: Targets;
   preferences: Preferences;
   memory: string[];
+  /**
+   * The member allowed ÖRZA's AI features (run by OpenAI); `null`: not, or withdrawn. Missing: an old server (or a
+   * snapshot saved before this build) — the app sends no AI request and no automatic iPhone health data.
+   */
+  ai_consent?: AiConsent | null;
   integrations?: {
     health_token_preview?: string;
     health_token_created_at?: string;
