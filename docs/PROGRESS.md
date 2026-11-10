@@ -705,3 +705,8 @@ batch 1" log entry); 3 is still open.
   save-job merge per tz/day, shared-phone floor from other members' sign-out times, iPhone sends NO automatic steps/weight until the AI
   consent ships (`SEND_IPHONE_HEALTH_DATA`), Android disclosures say step totals go to the AI provider with AI requests, failed
   HealthKit checks keep the earlier answer. Running: V1 emulator checks (`wf_1ed3af09-ae8`; rebuild, Toolbox, §8.1 E-1…E-9, UI pass).
+- 2026-11-10 (after the weekly limit; PC rebooted): V1 so far — rebuild, missed-dose title, Toolbox install, E-1, E-2 PASS
+  (`docs/notes/steps-v2-V1.md`); E-3…E-9 + UI pass were BLOCKED twice because Metro's transform workers died under the PC's low RAM
+  (~850 MB available with the Claude desktop app using ~1.9 GB). Resumed (`wf_1ed3af09-ae8`) on a RELEASE-TYPE TEST BUILD (JS embedded,
+  no Metro; local-only network config + bogus vercel.app pin, as D1 W11). Windows wiped the session scratchpad (tools, Toolbox zip,
+  DB backups) — durable helpers now live in `scripts/e2e/` (`api.mjs`, `typepw.mjs`); the Toolbox stays installed on the emulator.
