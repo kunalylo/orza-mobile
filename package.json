@@ -75,5 +75,14 @@
     "test:steps": "npx --yes tsx --test scripts/tests/steps-counter.test.ts scripts/tests/steps-merge.test.ts scripts/tests/steps-policy.test.ts scripts/tests/steps-save.test.ts scripts/tests/steps-store.test.ts scripts/tests/steps-android.test.ts scripts/tests/steps-ios.test.ts scripts/tests/steps-gate.test.ts scripts/tests/health-import.test.ts scripts/tests/steps-card.test.ts scripts/tests/steps-switch.test.ts",
     "postinstall": "patch-package"
   },
+  "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": [
+          "expo-background-task"
+        ]
+      }
+    }
+  },
   "private": true
 }
