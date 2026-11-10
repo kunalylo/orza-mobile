@@ -1,6 +1,7 @@
 /** Why a scan didn't work, with the way forward: type the medicines, allow AI features, get credits, or try again. */
 import { router } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
 
 import { ALLOW_AI_LABEL } from '@/lib/aiConsent';
@@ -10,6 +11,11 @@ import { Button, Icon, Text, type IconName } from '@/ui';
 import type { RxProblem } from './problem';
 
 const WARNING_INK = '#8A5300';
+
+/** The way forward on every problem. A small phone with large text can't fit it on one line (AC-10: 360 dp at font 1.3
+ * ran it past the panel's edge), so it then shows the short label — TalkBack still reads the whole one. */
+const MANUAL_LABEL = 'Type the medicines instead';
+const MANUAL_SHORT = 'Type the medicines';
 
 const ICON: Record<RxProblem['kind'], IconName> = {
   ai_consent: 'mci:creation',
@@ -43,6 +49,15 @@ export function ProblemPanel({
   // Not now (or an old server) is the member's choice, not a fault: the calm info look of the other screens' AI notes
   // (AiDeclinedNote) instead of the warning amber.
   const calm = problem.kind === 'ai_consent' || problem.kind === 'ai_unavailable';
+  // The whole label's button width (measured while it shows, per font scale) against the actions row's width. While the
+  // short label shows nothing is measured, so the two never flip back and forth.
+  const { fontScale } = useWindowDimensions();
+  const [rowWidth, setRowWidth] = useState(0);
+  const [fullWidth, setFullWidth] = useState<{ width: number; fontScale: number } | null>(null);
+  const short = !!fullWidth && fullWidth.fontScale === fontScale && rowWidth > 0 && fullWidth.width > rowWidth + 0.5;
+  const onManualLayout = (e: LayoutChangeEvent) => {
+    if (!short) setFullWidth({ width: e.nativeEvent.layout.width, fontScale });
+  };
   return (
     <Animated.View
       entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}
@@ -63,8 +78,19 @@ export function ProblemPanel({
           </Text>
         </View>
       </View>
-      <View style={styles.actions}>
-        <Button label="Type the medicines instead" icon="edit-3" size="sm" variant="primary" onPress={onManual} />
+      <View style={styles.actions} onLayout={(e) => setRowWidth(e.nativeEvent.layout.width)}>
+        {/* Even the short label stays inside the panel (cut, not spilled) at the very largest text sizes. */}
+        <View onLayout={onManualLayout} style={short && styles.fit}>
+          <Button
+            label={short ? MANUAL_SHORT : MANUAL_LABEL}
+            accessibilityLabel={MANUAL_LABEL}
+            icon="edit-3"
+            size="sm"
+            variant="primary"
+            onPress={onManual}
+            style={short && styles.fit}
+          />
+        </View>
         {problem.kind === 'ai_consent' && onAllowAi ? (
           <Button label={ALLOW_AI_LABEL} icon="check" size="sm" variant="secondary" onPress={onAllowAi} loading={allowing} />
         ) : null}
@@ -100,4 +126,5 @@ const styles = StyleSheet.create({
   iconCalm: { backgroundColor: 'rgba(11,143,166,0.10)' },
   message: { marginTop: 2 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  fit: { maxWidth: '100%' },
 });
