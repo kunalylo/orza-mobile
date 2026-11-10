@@ -9,7 +9,7 @@
  */
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Alert, AppState, StyleSheet, View, type AppStateStatus } from 'react-native';
+import { Alert, AppState, StyleSheet, useWindowDimensions, View, type AppStateStatus } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
 import { WEB_URL } from '@/lib/config';
@@ -202,6 +202,7 @@ function ConnectState({ health }: { health: Health }) {
         size="lg"
         icon={health.platform === 'ios' ? 'mci:apple' : 'mci:heart-pulse'}
         block
+        shrinkLabel
         loading={health.connecting}
         onPress={() => void connect()}
         accessibilityHint={`Opens ${health.name} to choose what ÖRZA can read`}
@@ -226,6 +227,10 @@ function ConnectState({ health }: { health: Health }) {
 function ConnectedState({ health }: { health: Health }) {
   const { record, syncing, name, platform } = health;
   const synced = record.lastSyncAt ? timeAgo(record.lastSyncAt) : '';
+  // Equal halves while "Manage access" fits; with large text (or a narrow phone) the pair stacks instead of cutting it
+  // (as Today's empty-meal actions, D1).
+  const { fontScale } = useWindowDimensions();
+  const half = [styles.action, { minWidth: ACTION_MIN_WIDTH * fontScale }];
 
   async function syncNow() {
     haptics.tap();
@@ -332,7 +337,7 @@ function ConnectedState({ health }: { health: Health }) {
 
       <View style={styles.actions}>
         {record.needsReconnect ? (
-          <Button label="Reconnect" variant="energy" icon="link" onPress={() => void reconnect()} loading={health.connecting} style={styles.flex} />
+          <Button label="Reconnect" variant="energy" icon="link" onPress={() => void reconnect()} loading={health.connecting} style={half} />
         ) : (
           <Button
             label={syncing ? 'Syncing…' : 'Sync now'}
@@ -340,10 +345,10 @@ function ConnectedState({ health }: { health: Health }) {
             icon="refresh-cw"
             loading={syncing}
             onPress={() => void syncNow()}
-            style={styles.flex}
+            style={half}
           />
         )}
-        <Button label="Manage access" variant="ghost" icon="sliders" onPress={() => void health.openManage()} style={styles.flex} />
+        <Button label="Manage access" variant="ghost" icon="sliders" onPress={() => void health.openManage()} style={half} />
       </View>
       {blocked && record.needsReconnect && platform === 'android' ? (
         <AllowInHealthConnect health={health}>
@@ -435,6 +440,9 @@ function IconDisc({ icon, tone, small }: { icon: IconName; tone: 'energy' | 'suc
   );
 }
 
+/** "Manage access" at font scale 1 (icon + label + padding), dp. */
+const ACTION_MIN_WIDTH = 160;
+
 const styles = StyleSheet.create({
   gap: { gap: spacing.md },
   gapSm: { gap: spacing.sm },
@@ -443,6 +451,8 @@ const styles = StyleSheet.create({
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs + 2 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   actions: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  // flexBasis 0 + a font-scaled minWidth: the row wraps on the minWidth, then each line shares its width equally.
+  action: { flexGrow: 1, flexShrink: 1, flexBasis: 0 },
   disc: { alignItems: 'center', justifyContent: 'center' },
   banner: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', padding: spacing.md, borderRadius: radii.sm, borderWidth: 1 },
   bannerError: { backgroundColor: colors.errorBg, borderColor: 'rgba(176,44,44,0.18)' },

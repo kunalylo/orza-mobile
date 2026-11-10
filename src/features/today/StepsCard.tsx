@@ -65,7 +65,8 @@ function LivePill() {
   }, [reduce, pulse]);
   const dot = useAnimatedStyle(() => ({ opacity: pulse.get() }));
   return (
-    <View style={styles.live} accessibilityLabel="Updating live">
+    // One TalkBack stop ("Updating live"), not that and the pill's "LIVE" text.
+    <View style={styles.live} accessible accessibilityLabel="Updating live">
       <Animated.View style={[styles.liveDot, dot]} />
       <Text variant="eyebrow" tone="success">
         Live

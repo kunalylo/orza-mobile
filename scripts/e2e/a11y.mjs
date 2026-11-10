@@ -23,9 +23,12 @@ if (name) {
   fs.mkdirSync(out, { recursive: true });
   fs.writeFileSync(path.join(out, `ui-${name}.xml`), xml);
 }
-const density = Number((sh('wm', 'density').match(/(\d+)\s*$/m) || [])[1] || 420);
+// `wm` prints the physical value and, under an override (wm density / wm size), an "Override …" line after it: the
+// last value is the one in use.
+const last = (out, re) => [...out.matchAll(re)].pop();
+const density = Number((last(sh('wm', 'density'), /(\d+)\s*$/gm) || [])[1] || 420);
 const dp = (px) => Math.round(px / (density / 160));
-const [, sw, shh] = sh('wm', 'size').match(/(\d+)x(\d+)\s*$/m) || [0, 1080, 2400];
+const [, sw, shh] = last(sh('wm', 'size'), /(\d+)x(\d+)\s*$/gm) || [0, 1080, 2400];
 
 // A tiny XML walker for uiautomator's flat <node …> / </node> output.
 const attrs = (s) => Object.fromEntries([...s.matchAll(/([\w-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));

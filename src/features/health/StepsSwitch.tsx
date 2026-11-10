@@ -12,7 +12,7 @@
  */
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Switch, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Switch, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
 import { TINTS } from '@/features/settings/parts';
@@ -120,9 +120,13 @@ function actionIcon(a: CardAction) {
   return a.sheet.fallback ? ('smartphone' as const) : ('mci:shoe-print' as const);
 }
 
-/** The switch itself (a spinner while an answer is on its way). */
+/**
+ * The switch itself (a spinner while an answer is on its way). Android's native switch measures about 46 × 27 dp and
+ * takes touches only inside its own bounds (no hit slop for native views), so it is laid out at least 48 × 48 dp — the
+ * track stays centred and the whole box toggles.
+ */
 function Toggle({ value, enabled, waiting, hint, onChange }: { value: boolean; enabled: boolean; waiting: boolean; hint: string; onChange: (v: boolean) => void }) {
-  if (waiting) return <ActivityIndicator size="small" color={colors.coral} accessibilityLabel="Working" />;
+  if (waiting) return <ActivityIndicator size="small" color={colors.coral} accessibilityLabel="Working" style={isIOS ? undefined : styles.toggleBox} />;
   return (
     <Switch
       value={value}
@@ -136,6 +140,7 @@ function Toggle({ value, enabled, waiting, hint, onChange }: { value: boolean; e
       trackColor={{ false: 'rgba(20,20,20,0.16)', true: colors.coral }}
       thumbColor={isIOS ? undefined : value ? colors.white : '#F4F1EC'}
       ios_backgroundColor="rgba(20,20,20,0.16)"
+      style={isIOS ? undefined : styles.toggleBox}
     />
   );
 }
@@ -272,6 +277,10 @@ function OffSheet({
   onTurnOff: () => void;
   onOpen: () => void;
 }) {
+  // Equal halves while "Keep counting" fits; with large text (or a narrow phone) "Turn off" wraps below instead of
+  // cutting the label (as Today's empty-meal actions, D1).
+  const { fontScale } = useWindowDimensions();
+  const half = [styles.footerButton, { minWidth: FOOTER_BUTTON_MIN_WIDTH * fontScale }];
   return (
     <Sheet
       visible={visible}
@@ -281,8 +290,8 @@ function OffSheet({
       title={copy.title}
       footer={
         <View style={styles.footer}>
-          <Button label="Keep counting" variant="ghost" onPress={onKeep} disabled={busy} style={styles.flex} />
-          <Button label="Turn off" variant="primary" onPress={onTurnOff} loading={busy} style={styles.flex} />
+          <Button label="Keep counting" variant="ghost" onPress={onKeep} disabled={busy} style={half} />
+          <Button label="Turn off" variant="primary" onPress={onTurnOff} loading={busy} style={half} />
         </View>
       }
     >
@@ -314,8 +323,12 @@ function OffSheet({
   );
 }
 
+/** "Keep counting" at font scale 1 (label + padding), dp. */
+const FOOTER_BUTTON_MIN_WIDTH = 156;
+
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
+  toggleBox: { minWidth: 48, minHeight: 48 },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   disc: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   discOn: { backgroundColor: colors.energyBg },
@@ -337,7 +350,9 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 14, minHeight: 64 },
   rowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairlineStrong },
   rowIcon: { width: 40, height: 40, borderRadius: radii.sm, alignItems: 'center', justifyContent: 'center' },
-  footer: { flexDirection: 'row', gap: spacing.sm },
+  footer: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  // flexBasis 0 + a font-scaled minWidth: the row wraps on the minWidth, then each line shares its width equally.
+  footerButton: { flexGrow: 1, flexShrink: 1, flexBasis: 0 },
   note: {
     flexDirection: 'row',
     gap: spacing.sm,
