@@ -1418,8 +1418,14 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
 
 **Phase V: verify and ship**
 
-- [ ] **V1.** All checks: typecheck, lint, `test:steps`, `test:alarms`. Run §8.1 E-1…E-9 on the emulator against the
+- [x] **V1.** All checks: typecheck, lint, `test:steps`, `test:alarms`. Run §8.1 E-1…E-9 on the emulator against the
   local server with the B-batch. Fix and retest. Record the results in `docs/notes/steps-v2.md`.
+  DONE 2026-11-10 (`41d8dca`; case log `docs/notes/steps-v2-V1.md` runs 1–6, shots `steps-v2-V1-shots/`): all PASS on a
+  release-type test build (Metro died under low RAM). Fixed on the way: `expo-background-task` 57.0.21 cancelled cold
+  background runs (patch-package + `buildFromSource`, `patches/README.md`; drop on SDK 58), 48 dp steps switch, large-text
+  wraps (off sheet, Health actions, "Connect"), one TalkBack stop for LIVE. Open, app-wide: other native switches 46×27 dp,
+  sheet close / header icon buttons 44 dp; copy: after a Health Disconnect the switch reads "Not on yet" for a member who
+  had counting on.
 - [ ] **V2.** Ask the user to connect the Android phone(s). Run §8.2 A-1…A-11.
 - [ ] **V3-c** (only if A-1 latency > 5 min). Foreground live top-up: while Today is open, add the sampler's `sampleNow()`
   delta since the latest Recording bucket end, as a phone source compared under M1. Never an FGS.
