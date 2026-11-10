@@ -773,3 +773,8 @@ batch 1" log entry); 3 is still open.
   chat Retry plus Not now no longer loses the message; Rx's consent panel comes before an older problem; the "never"
   point and the turn-off toast are reworded. test:ai 32, test:steps 419, test:alarms 69, typecheck, lint; web typecheck,
   check-ai-consent 56/56 (local, AI off). Open: the iOS purpose strings (user review), AV §8 on the emulator, §11 Q1/Q2.
+- 2026-11-10: AI consent BUILT + reviewed (`wf_218817e9-f76`): mobile `ba22911`…`7a628d4` (test:ai 32), backend branch
+  `ai-consent-backend` `c2604c4` + `5e0e097` in `E:\aylo\orza-backend` (NOT pushed; privacy edits on it need the user's review).
+  Local test server now = `5e0e097` via preview config **`orza-localtest-noai`** (`scripts/e2e/localtest-noai.cmd`: AI blocked —
+  check `/api/credits/balance` → `ai_enabled:false`; the plain `orza-localtest` config has AI ON, its `.env.local` has a real key).
+  DB backup before this: session scratchpad `orza-db-before-ai-consent.json`. Running: device checks `wf_fb38fa3f-56f` (§8 AC-1…AC-11).
