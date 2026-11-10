@@ -12,7 +12,7 @@ import { AI_PRIVACY_PATH, consentCopy, type ConsentContext, type ConsentCopy, ty
 import { WEB_URL } from '@/lib/config';
 import { haptics } from '@/lib/haptics';
 import { colors, radii, spacing } from '@/theme';
-import { Button, Icon, Sheet, Text, toast, type IconName } from '@/ui';
+import { Button, Icon, Orb, Sheet, Text, toast, type IconName } from '@/ui';
 
 const POINT_ICON: Record<ConsentPointIcon, IconName> = {
   meals: 'camera',
@@ -20,6 +20,17 @@ const POINT_ICON: Record<ConsentPointIcon, IconName> = {
   recipes: 'mci:chef-hat',
   rx: 'file-text',
   never: 'lock',
+};
+
+/** The feature the sheet opened for, as the More menu and the tabs show it. */
+const FEATURE_ICON: Record<ConsentContext, IconName> = {
+  chat: 'mci:chat-processing-outline',
+  meal_text: 'mci:silverware-fork-knife',
+  snap: 'camera',
+  recipe: 'mci:chef-hat',
+  rebalance: 'mci:scale-balance',
+  rx: 'file-text',
+  settings: 'mci:creation',
 };
 
 export const CONSENT_PLATFORM: 'ios' | 'android' = Platform.OS === 'ios' ? 'ios' : 'android';
@@ -43,6 +54,37 @@ function Point({ icon, children, index }: { icon: IconName; children: string; in
         {children}
       </Text>
     </Animated.View>
+  );
+}
+
+function FlowDots() {
+  return (
+    <View style={styles.flowLine}>
+      {[0, 1, 2].map((i) => (
+        <View key={i} style={styles.flowDot} />
+      ))}
+    </View>
+  );
+}
+
+/**
+ * A small picture of what the sheet asks about, as the steps disclosure has one: the feature → ÖRZA → the AI provider
+ * (a generic sparkle, no provider logo). Decorative: the lead says it in words.
+ */
+function AiFlow({ context }: { context: ConsentContext }) {
+  const reduce = useReducedMotion();
+  return (
+    <View style={styles.flow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={[styles.flowTile, styles.flowFeature]}>
+        <Icon name={FEATURE_ICON[context]} size={22} color={colors.energyInk} />
+      </View>
+      <FlowDots />
+      <Orb size={52} tone="light" orbits={false} paused={reduce} />
+      <FlowDots />
+      <View style={[styles.flowTile, styles.flowAi]}>
+        <Icon name="mci:creation" size={22} color={colors.violet600} />
+      </View>
+    </View>
   );
 }
 
@@ -134,10 +176,12 @@ export function AiConsentSheet({
             onPress={onAllow}
             accessibilityHint="Lets ÖRZA send what each AI feature needs to OpenAI"
           />
-          <Button label={copy.notNow} variant="ghost" onPress={onNotNow} disabled={saving} />
+          {/* Full width under Allow, like the app's other two-choice footers — not a stray label at the left edge. */}
+          <Button label={copy.notNow} variant="ghost" block onPress={onNotNow} disabled={saving} />
         </View>
       }
     >
+      <AiFlow context={context} />
       <ConsentPoints copy={copy} />
     </Sheet>
   );
@@ -151,6 +195,12 @@ const styles = StyleSheet.create({
   pointIcon: { width: 32, height: 32, borderRadius: radii.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.energyBg },
   after: { gap: spacing.sm },
   link: { alignSelf: 'flex-start', marginLeft: -spacing.sm },
+  flow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.md, marginBottom: spacing.xs },
+  flowTile: { width: 52, height: 52, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth },
+  flowFeature: { backgroundColor: colors.energyBg, borderColor: 'rgba(194,65,12,0.16)' },
+  flowAi: { backgroundColor: colors.violet50, borderColor: 'rgba(110,62,214,0.18)' },
+  flowLine: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  flowDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.hairlineStrong },
   footer: { gap: spacing.xs },
   error: {
     flexDirection: 'row',

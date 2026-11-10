@@ -10,7 +10,7 @@ import Animated, { FadeInDown, LinearTransition, useReducedMotion } from 'react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiDeclinedNote } from '@/features/ai/AiDeclinedNote';
-import { ensureAiConsent, onAiRefusal } from '@/features/ai/consent';
+import { ensureAiConsent, onAiRefusal, useAiDeclined } from '@/features/ai/consent';
 import { aiErrorInfo } from '@/features/chat/ai';
 import { onRecipeDeleted, useGenerateRecipe, useRecipes, useToggleSave } from '@/features/recipes/api';
 import { KitchenCard } from '@/features/recipes/KitchenCard';
@@ -68,6 +68,14 @@ export default function Recipes() {
 
   // Deleting the result's recipe (on its detail screen, pushed above this one) closes the result card too.
   useEffect(() => onRecipeDeleted(qc, (id) => setResult((cur) => (cur?.recipe.id === id ? null : cur))), [qc]);
+
+  // After Not now, the line saying why sits above the studio — on a small phone a screen above "Generate recipe", so
+  // nothing seemed to happen (AC-10). Bring it into view when it appears.
+  const declined = useAiDeclined('recipe');
+  const declinedShown = declined.declined || declined.unavailable;
+  useEffect(() => {
+    if (declinedShown) requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: !reduce }));
+  }, [declinedShown, reduce]);
 
   const scrollToResult = () =>
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, resultY.current - spacing.md), animated: !reduce }));

@@ -144,7 +144,7 @@ export function AiFeaturesRow() {
         <View style={styles.body}>
           <View style={[styles.status, on ? styles.statusOn : styles.statusOff]}>
             <View style={[styles.dot, on ? styles.dotOn : styles.dotOff]} />
-            <Text variant="label" color={on ? colors.success : colors.muted} style={styles.flex}>
+            <Text variant="label" color={on ? colors.success : colors.muted} style={styles.statusText}>
               {status ?? AI_UNAVAILABLE}
             </Text>
           </View>
@@ -156,8 +156,9 @@ export function AiFeaturesRow() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, minWidth: 0 },
   body: { gap: spacing.lg },
+  // Shrink (and wrap) only: `flex: 1` stretched the pill across the sheet, where it read as an empty input field.
+  statusText: { flexShrink: 1 },
   status: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start', paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radii.pill },
   statusOn: { backgroundColor: colors.successBg },
   statusOff: { backgroundColor: colors.canvas2 },

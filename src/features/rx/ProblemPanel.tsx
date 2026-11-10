@@ -9,6 +9,8 @@ import { Button, Icon, Text, type IconName } from '@/ui';
 
 import type { RxProblem } from './problem';
 
+const WARNING_INK = '#8A5300';
+
 const ICON: Record<RxProblem['kind'], IconName> = {
   ai_consent: 'mci:creation',
   ai_unavailable: 'mci:creation',
@@ -38,17 +40,25 @@ export function ProblemPanel({
   allowing?: boolean;
 }) {
   const canRetry = !!onRetry && (problem.kind === 'error' || problem.kind === 'offline' || problem.kind === 'rate_limited' || problem.kind === 'ai_busy');
+  // Not now (or an old server) is the member's choice, not a fault: the calm info look of the other screens' AI notes
+  // (AiDeclinedNote) instead of the warning amber.
+  const calm = problem.kind === 'ai_consent' || problem.kind === 'ai_unavailable';
   return (
-    <Animated.View entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)} exiting={FadeOut.duration(160)} style={styles.panel} accessibilityRole="alert">
+    <Animated.View
+      entering={FadeInDown.springify().damping(18).stiffness(100).mass(1)}
+      exiting={FadeOut.duration(160)}
+      style={[styles.panel, calm && styles.panelCalm]}
+      accessibilityRole="alert"
+    >
       <View style={styles.head}>
-        <View style={styles.icon}>
-          <Icon name={ICON[problem.kind]} size={18} color={colors.warning} />
+        <View style={[styles.icon, calm && styles.iconCalm]}>
+          <Icon name={ICON[problem.kind]} size={18} color={calm ? colors.cyan700 : colors.warning} />
         </View>
         <View style={styles.flex}>
-          <Text variant="title" color="#8A5300">
+          <Text variant="title" color={calm ? colors.ink : WARNING_INK}>
             {problem.title}
           </Text>
-          <Text variant="small" color="#8A5300" style={styles.message}>
+          <Text variant="small" color={calm ? colors.text : WARNING_INK} style={styles.message}>
             {problem.message}
           </Text>
         </View>
@@ -86,6 +96,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.warningBg,
   },
+  panelCalm: { backgroundColor: colors.infoBg, borderColor: 'rgba(11,143,166,0.22)' },
+  iconCalm: { backgroundColor: 'rgba(11,143,166,0.10)' },
   message: { marginTop: 2 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });
