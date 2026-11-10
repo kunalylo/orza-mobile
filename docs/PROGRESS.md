@@ -794,3 +794,17 @@ batch 1" log entry); 3 is still open.
   "update the app", no loop (reverted). AC-9 is covered by `test:ai` (A1/A2/A3/A5/A6). Snap and Rx hide their AI action
   while the server says AI is off, so their gates were reached via an offline cold start (status unknown), then online.
   Still open: **AC-10** (UI / accessibility of the sheet, notes, row and manage sheet), the spoken meal on a real phone.
+- 2026-11-11: **AI consent AC-10 (UI / accessibility) PASS after 3 fixes**, on the release-type test build of `b02ca98`
+  (`check-release-apk.sh` SAFE, local server only, 0 AI calls; `docs/notes/ai-consent.md` §10.4, screenshots in
+  `docs/notes/ai-consent-shots/`). Checked at the default size and at 360 dp with font 1.3: the consent sheet (6 features),
+  the Not-now lines, the Snap and Rx panels, and Settings › AI features with its manage sheet and turn-off confirm. Nothing
+  is cut, Allow and Not now are 56 and 48 dp, TalkBack reads the points in order, the title is a heading (TalkBack's log),
+  and back means Not now. Fixes:
+  - `cb15b8d`: the flow picture, a full-width Not now, the status pill, Recipes scrolls to the Not-now line, the Rx panel
+    in the calm tone.
+  - `8cbfa44`: the Rx panel's "Type the medicines instead" ran past the panel on the small phone; it now shows "Type the
+    medicines" there (new copy for review).
+  - `b02ca98`: the shared Sheet's backdrop took TalkBack's first focus as "Close, Button"; it is no longer a stop when the
+    sheet has a close button.
+  Follow-up: the Rx screen's "Read prescription · 2 credits" and "Prefer typing? Enter medicines manually" are cut at
+  360 dp with font 1.3. AV is complete; still open: the spoken meal on a real phone.
