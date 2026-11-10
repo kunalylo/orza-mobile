@@ -751,3 +751,5 @@ batch 1" log entry); 3 is still open.
 - 2026-11-10: USER DECISION (D3, Apple 5.1.2(i)): app-wide AI consent is asked AT FIRST AI USE — a one-time sheet naming
   OpenAI and what is sent, Allow / Not now; AI features wait until allowed, the rest of the app works without it. Then the
   iPhone may send automatic steps/weight (`SEND_IPHONE_HEALTH_DATA`). Plan + build: `docs/notes/ai-consent.md`.
+  Running: `wf_218817e9-f76` (plan → mobile + backend branch `ai-consent-backend` in `E:\aylo\orza-backend` → review; nothing
+  pushed). Resume with `resumeFromRunId` after a limit; the web branch needs the user's OK (and any privacy line their review).
