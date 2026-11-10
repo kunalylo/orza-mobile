@@ -721,3 +721,12 @@ batch 1" log entry); 3 is still open.
 - 2026-11-10: USER APPROVED the B6 privacy copy (the `#phone-app` section + edits on `steps-v2-backend`) and OK'd pushing
   `steps-v2-backend` to the live web repo ONCE THE V1 PHONE TESTS PASS (V4: fast-forward main, Vercel deploy check, confirm
   `applied` modes in production, check the live /privacy#phone-app in the app's privacy screen, delete the legacy save branch).
+- 2026-11-10: V1 run 5 (release-type test build, local-only safeguards, `check-release-apk.sh` SAFE): the `13d9025` patch was
+  a NO-OP on Android — SDK 57 links `expo-background-task`'s prebuilt AAR, so the patched Kotlin was never compiled. Fixed in
+  `c81bc0e` (`package.json` `expo.autolinking.android.buildFromSource: ["expo-background-task"]`, `patches/README.md`; drop
+  both on SDK 58). Rebuilt (the module now compiles from source; the APK's dex has the patched `getWorkerInfo`): **E-7 retest
+  PASS** (two cold background runs in a row read Health Connect and saved — "Worker is already scheduled, skipping
+  cancel-and-replace", no "was cancelled"), **E-6b Disconnect PASS** (Health Connect: ÖRZA "Not allowed access" once the
+  process ends; no reads after), **E-9 PASS** ("Log steps" when undetermined; "Not now" survives a force-stop), **E-8 PASS**
+  (connect sheet = Steps, Sleep, Resting heart rate, Weight only; charts from `tracking.steps`). Details + state:
+  `docs/notes/steps-v2-V1.md` run 5. Left in V1: the UI / accessibility pass.
