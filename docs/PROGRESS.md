@@ -784,3 +784,13 @@ batch 1" log entry); 3 is still open.
   live web once the AI-consent device checks pass. (Q1) the WEBSITE asks the same consent too, BEFORE the iPhone release (build it
   next on a web branch; its push needs the user's OK again). (Q3) leave out "OpenAI doesn't use this content to train its models"
   until someone confirms the OpenAI organisation's data-sharing setting.
+- 2026-11-11: **AI consent AV (device run)** on the release-type test build of `3e86e25` (local-only network config,
+  `check-release-apk.sh` SAFE) against the no-AI local server (`5e0e097`; `ai_enabled:false` before every AI case, 0 AI
+  calls): **AC-1 … AC-8 and AC-11 PASS, no app bug** (`docs/notes/ai-consent.md` §10.4). New account `qa6@orza.test`: every
+  entry point opens the sheet before any request (the server log shows only the gate's `/auth/me`), Snap's camera never
+  opens first; Not now / X / back keep the text and show the §4 lines; Allow → PUT → the action goes; another session's
+  PUT is picked up without a sheet; a server 403 → sheet → one re-send; Settings Turn off (confirm, toast, steps keep
+  counting); offline Allow shows the network line and nothing is queued; a temporary server version 2 → 403 → 409 →
+  "update the app", no loop (reverted). AC-9 is covered by `test:ai` (A1/A2/A3/A5/A6). Snap and Rx hide their AI action
+  while the server says AI is off, so their gates were reached via an offline cold start (status unknown), then online.
+  Still open: **AC-10** (UI / accessibility of the sheet, notes, row and manage sheet), the spoken meal on a real phone.
