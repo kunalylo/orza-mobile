@@ -808,3 +808,8 @@ batch 1" log entry); 3 is still open.
     sheet has a close button.
   Follow-up: the Rx screen's "Read prescription · 2 credits" and "Prefer typing? Enter medicines manually" are cut at
   360 dp with font 1.3. AV is complete; still open: the spoken meal on a real phone.
+- 2026-11-11: AI consent device checks PASS (AC-1…AC-8, AC-10, AC-11; AC-9 by test:ai; 0 AI calls; UI fixes `cb15b8d`,
+  `8cbfa44`, `b02ca98`; shots `docs/notes/ai-consent-shots/`). Mobile pushed (`879ae9e`). Web `ai-consent-backend` + privacy date
+  11 Nov pushed LIVE (main `3829653`, user OK'd 2026-11-10). Running: the WEBSITE ask (`wf_59b0d066-b01`, branch `ai-consent-web`
+  in `E:\aylo\orza-backend`, plan §12): same consent at first AI use on the web, then the server refuses AI without consent for
+  every client. Its push needs the user's OK (and their review of the privacy sentence).
