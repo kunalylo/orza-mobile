@@ -170,3 +170,107 @@ would ring real alarms).
 |---|---|---|
 | R-V2. Release-type test build + safety | PASS | `main` HEAD `24addbb`. The build copy already held an arm64 build of `8cc5230` (12:05, `gradle-build-v2.log`: `prebuild --clean` 11:47 with `.env.local` = only `EXPO_PUBLIC_API_URL=http://127.0.0.1:3100`, the test network config wired on `<application>`, BUILD SUCCESSFUL in 19m 18s); `8cc5230..24addbb` is docs only (`docs/PROGRESS.md`, `docs/notes/ai-report.md`), package files unchanged since `3e86e25` → no `npm ci`, no second prebuild (as R6). Build copy `checkout -- .` + detached at `24addbb`; incremental `assembleRelease -PreactNativeArchitectures=arm64-v8a --max-workers=2` (14:13) BUILD SUCCESSFUL in 1m, `:app:createBundleReleaseJsAndAssets` and `:expo-background-task:compileReleaseKotlin` UP-TO-DATE (the module still built from source, not the prebuilt AAR); APK `lib/arm64-v8a/` only, sha256 `6f7088cd…a2adf3`. `scripts/e2e/check-release-apk.sh 127.0.0.1:3100` (now takes the expected origin; default `10.0.2.2:3100`) → ok 1 (`networkSecurityConfig` → `0x7f150002` = `xml/d1_test_network_security`, `res/Cy.xml`), ok 4 (not debuggable), ok 2 (`[127.0.0.1,localhost cleartext=true no-pin][vercel.app+sub cleartext=false bogus-pin]`, no base-config), ok 3 (bundle has `http://127.0.0.1:3100` as the inlined API URL) → **SAFE**. The same APK against the default origin → FAIL 2 + FAIL 3 → STOP, as it should. **Script fix on the way:** check 3 used to pass for `10.0.2.2:3100` on ANY bundle — the dev-only config-error help text in `src/app/_layout.tsx` ("EXPO_PUBLIC_API_URL=http://10.0.2.2:3100") is in every bundle; an occurrence right after `EXPO_PUBLIC_API_URL=` no longer counts (the emulator runs 3–6 were still safe: their check 2 and the bogus pin held). The bundle's other origins: `https://orza-nine.vercel.app` (`config.ts`'s release default, unused when the URL is inlined; blocked by the pin anyway), `http://localhost:8081` (dev tooling). |
 | Install on the phone | BLOCKED (phone not connected) | From 14:12 to 14:23 `adb devices` listed nothing; Windows lists the phone's USB devices (`USB\VID_2D95&PID_6002\10MG4JF1U40003S`, "ADB Interface") as known but NOT present — the phone is unplugged (or the cable / USB mode gives no data link). Waited and polled (3 min after the build was ready, then again while writing this). Nothing was installed or run on the phone; no system setting changed (`svc power stayon` not set). |
+| A-9 background in Doze (warm + cold `am kill` run) | BLOCKED (phone not connected) | Second attempt 14:24–14:29 IST: `adb devices` empty for the whole 3-min poll (14:24:42–14:27:53) and again at 14:29:43; Windows PnP lists the phone (`USB\VID_2D95&PID_6002\10MG4JF1U40003S`, shown as "Y51 Pro 5G", and its "ADB Interface") as known but `Present = False`: unplugged, or a charge-only cable / USB mode. Nothing ran on the phone (no `svc power stayon`, no `deviceidle`, no zone change), so there is nothing to restore. The local server is up (127.0.0.1:3100 answers); the APK to install is unchanged (sha256 `6f7088cd…a2adf3`, SAFE in R-V2; `24addbb..e465623` changes only docs and the check script). Procedure for the resume: below. |
+| A-10 zone (Asia/Singapore) | BLOCKED (phone not connected) | Not attempted. Safe only with a full restore (procedure below). If `cmd alarm set-timezone` is refused on this vivo build, it becomes NEEDS-USER: the user changes the zone in Settings › System › Date & time, then changes it back. |
+| AL-1…AL-4 medicine alarms on the real phone | BLOCKED (phone not connected) | No test medicine was created. It is created only with the phone in hand, about 4 min ahead, so nothing rings with nobody watching. qa7 and qa8 have no medicines. Procedure below. |
+| Walk plan (A-1, A-2, A-8) for the coordinator + user | WRITTEN | "V2 walk plan" below. |
+
+**Resume procedure (once `adb devices` lists `10MG4JF1U40003S device`).** `A="adb -s 10MG4JF1U40003S"`. First:
+`$A reverse tcp:3100 tcp:3100` and `$A shell svc power stayon usb` (restore `false` at the end). Install the SAFE APK; vivo may
+show "Install via USB", which the user taps. Sign in qa7 with `typepw.mjs`, only after checking that the focused field is a
+password field. `db-rows.mjs qa7@orza.test` must show a new `sessions` / `devices` row (the LOCAL server). Then run the blocked
+first-ask cases above.
+- **A-9:** qa7 counting via Health Connect, with background granted. Press Home (ÖRZA in the background). Job id:
+  `$A shell dumpsys jobscheduler | grep -A6 "in.co.ylo.orza/androidx.work"`. Doze: `$A shell dumpsys battery unplug`,
+  `$A shell input keyevent 26` (screen off), `$A shell dumpsys deviceidle force-idle`, then `dumpsys deviceidle get deep` = IDLE.
+  Walk a few steps first so Health Connect holds new steps. Then `$A shell cmd jobscheduler run -f in.co.ylo.orza <id>`, read
+  logcat for `BackgroundTaskWork|orza-alarm-sync|Worker result|was cancelled`, and check `db-rows.mjs qa7` (today updated).
+  Cold run: `$A shell am kill in.co.ylo.orza` (`pidof` empty), more steps, then force the job twice about 30 s apart (the first
+  run after a cold start can be lost with "Job didn't exist in JobStore"). Expect a save and no "Worker was cancelled" /
+  "Enqueuing worker … REPLACE" (the `c81bc0e` patch). Restore: `dumpsys deviceidle unforce`, `dumpsys battery reset`,
+  screen on. **Caveat:** the app reaches the server over `adb reverse`, on the phone's loopback, and Doze's network firewall
+  lets loopback through. So A-9 here proves that the job runs and saves in Doze. It does not prove that the network can be
+  reached in a real Doze window; that needs the production build on mobile data.
+- **A-10:** record `settings get global auto_time_zone` and `getprop persist.sys.timezone` (expected 1 / Asia/Kolkata). Then
+  `settings put global auto_time_zone 0` and `cmd alarm set-timezone Asia/Singapore`. Checks: after 21:30 IST (00:00 SGT),
+  Today has no row for tomorrow, `db-rows.mjs qa7` has no next-day row, and the profile zone stays Asia/Kolkata. Restore:
+  `cmd alarm set-timezone <recorded zone>`, then `settings put global auto_time_zone <recorded>`, and read both back. On any
+  refusal, stop and mark it NEEDS-USER.
+- **AL-1…AL-4 (alarms):** state first: `dumpsys package in.co.ylo.orza | grep -E "POST_NOTIFICATIONS|SCHEDULE_EXACT_ALARM"`,
+  `appops get in.co.ylo.orza SCHEDULE_EXACT_ALARM`, `appops get in.co.ylo.orza USE_FULL_SCREEN_INTENT`, `dumpsys deviceidle
+  whitelist | grep orza`, `am get-standby-bucket in.co.ylo.orza`, `cmd appops get in.co.ylo.orza RUN_ANY_IN_BACKGROUND`.
+  - Medicine on qa7: `node scripts/e2e/api.mjs qa7@orza.test POST /meds '{"name":"QA phone alarm","form":"tablet","dose":"1
+    tablet","timing":"any","schedule":{"times":["HH:MM"],"days":[],"start_date":"<today>"},"as_needed":false}'`, with HH:MM
+    about 4 min from now (IST).
+  - Open ÖRZA to sync. The "Let your medicine alarms ring" sheet leads to the system notification prompt: Allow. If the card
+    asks, allow "Alarms & reminders" too. `dumpsys alarm | grep -B1 -A3 in.co.ylo.orza` must show an RTC_WAKEUP / alarm-clock
+    entry at HH:MM (`expo.modules.orzaalarms.FIRE`).
+  - Screen off (`input keyevent 26`). At HH:MM a screenshot (`exec-out screencap -p`) must show ÖRZA's full-screen alarm over
+    the lock screen with "QA phone alarm". Also check `dumpsys window | grep -E "mKeyguardOccluded|isKeyguardShowing"` and
+    `dumpsys audio | grep -i "USAGE_ALARM"`.
+  - Tap Take on the alarm screen (it works without unlocking, C4). `GET /meds/today` via `api.mjs` must show the dose taken.
+  - A second dose about 4 min ahead, after `am kill` from Home (not force-stop): it must still ring. Then the user's real
+    Recents swipe (walk plan W4).
+  - Clean-up: `api.mjs qa7@orza.test DELETE /meds/<id>`, open ÖRZA, then `dumpsys alarm | grep -c orzaalarms.FIRE` = 0.
+
+**V2 walk plan (coordinator + user).** `A="adb -s 10MG4JF1U40003S"`; run from `E:\aylo\orza-mobile`. While the phone is
+unplugged for a walk, the app cannot reach the local server: nothing listens on the phone's own 127.0.0.1. Readings stay on
+the phone and are saved after replug + `reverse`. Production stays unreachable either way (bogus pin). The agent never reads
+the vivo Health app; the user reads any reference count themselves.
+
+P. **Snapshot S, before and after every walk.** Phone plugged; `$A reverse tcp:3100 tcp:3100` (re-run after every
+   reconnect and reboot); `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3100/` = 200. Then:
+   `$A shell dumpsys package in.co.ylo.orza | grep -E "READ_STEPS|READ_HEALTH_DATA_IN_BACKGROUND|ACTIVITY_RECOGNITION|stopped=|lastUpdateTime"`,
+   `$A shell dumpsys jobscheduler | grep -A6 "in.co.ylo.orza/androidx.work"`, `$A shell dumpsys alarm | grep -c in.co.ylo.orza`,
+   `$A shell pidof in.co.ylo.orza`, `node scripts/e2e/db-rows.mjs <qa> --since=<ISO>`, Today's number from `ui` (ÖRZA only),
+   and `$A logcat -d -s OrzaSteps:V WM-WorkerWrapper:V BackgroundTaskScheduler:V | tail -30`. Set `svc power stayon false`
+   before unplugging.
+1. **W1: A-1 Recording API latency (qa8, Health Connect refused).**
+   a. Sign out qa7 (Settings › Sign out); `dumpsys alarm | grep -c orzaalarms.FIRE` = 0.
+   b. Give qa8 a real refusal: `$A shell pm revoke in.co.ylo.orza android.permission.health.READ_STEPS` and the same for
+      `READ_HEALTH_DATA_IN_BACKGROUND`; `pm clear-permission-flags in.co.ylo.orza <each> user-set user-fixed`; then
+      `am force-stop in.co.ylo.orza` (no medicines at this point; Health Connect applies a revoke when the process ends).
+      S must show both `granted=false` and `ACTIVITY_RECOGNITION granted=false`.
+   c. Sign in qa8. "Count my steps automatically" → Continue → the Health Connect sheet (Steps only) → **Don't allow**. The
+      refused card shows **"Use this phone's motion sensor instead"**: tap it → the phone disclosure ("…Google Play services
+      keeps them for ÖRZA…") → Continue → the system "Physical activity" prompt → **Allow** (time T_sub). Check:
+      `ACTIVITY_RECOGNITION granted=true`; no "Recording API subscribe failed" in `OrzaSteps`; Today's source reads "Counted
+      by this phone" without "· approximate" (the Recording API, not the sampler).
+   d. Stand still for 5 min, then note N0 and the server row.
+   e. Unplug; ÖRZA at Home. The user walks **500 steps** and notes the END time T1.
+   f. Open ÖRZA on Today at once and reopen it every minute (or replug + `reverse` and the agent polls `ui` every 30 s with
+      `date`), until the number first shows ≥ N0 + 450: time T2. Wait up to 15 min. **Latency = T2 − T1.**
+   g. S: the server's today = Today. If the latency is over 5 min, do plan step V3-c.
+2. **W2: A-2 reboot + app update (qa8).**
+   a. S; note N0.
+   b. Unplug, walk about 300 steps, replug, open ÖRZA: N1 ≈ N0 + 300. Press Home.
+   c. **Reboot**, done by the user, or by the coordinator with the user there (only the user can enter the PIN after it).
+      After unlock: `adb wait-for-device`, `getprop sys.boot_completed` = 1, `reverse` again, `svc power stayon usb`. Do NOT
+      open ÖRZA. After 2–3 min: `logcat -d | grep -iE "in.co.ylo.orza.*(BootReceiver|BOOT_COMPLETED)"` (vivo may hold boot
+      broadcasts back for apps without autostart), and the WorkManager job is back in `dumpsys jobscheduler`.
+   d. Unplug, walk about 300 steps **without opening ÖRZA**, replug, open: N2 ≈ N1 + 300 means the subscription survived the
+      reboot. If N2 ≈ N1, it was lost: re-subscribe on launch / at boot.
+   e. Update: `bash scripts/e2e/check-release-apk.sh <apk> 127.0.0.1:3100` = SAFE, then `$A install -r <apk>`;
+      `lastUpdateTime` changed. Do NOT open ÖRZA. The job and alarms come back (MY_PACKAGE_REPLACED).
+   f. Unplug, walk about 300, replug, open: N3 ≈ N2 + 300, and the server's today = N3.
+3. **W3: A-8 killed app for ~3 h + walk (qa8; then qa7 on Health Connect if time allows).**
+   a. S; note N0 and the job id J.
+   b. Home, then `$A shell am kill in.co.ylo.orza`: `pidof` empty, `stopped=false`. Never force-stop: it cancels ÖRZA's job
+      and alarms until the next open.
+   c. Unplug; the phone in normal use or a pocket for about 3 h. Walk **about 1,000 steps** at some point (note the times).
+      Don't open ÖRZA.
+   d. Replug, `reverse`. Before opening: `pidof`; `logcat -d -b all | grep -E "BackgroundTaskWork|orza-alarm-sync|Worker result|was cancelled|Cancelling"`
+      (the hourly runs during the 3 h could not save offline, but they must have run, with no cancel);
+      `dumpsys jobscheduler | grep -A12 "in.co.ylo.orza/androidx.work"` (the last run).
+   e. `cmd jobscheduler run -f in.co.ylo.orza J` twice, about 30 s apart: the server's today = N0 + about 1,000, **without
+      opening ÖRZA**.
+   f. Open ÖRZA: Today = the server (no double count, no loss).
+   g. qa7 / Health Connect: the same, after granting Health Connect again (Care › Health sync › Connect, or Today's "Open
+      Health Connect"). Health Connect counts this phone itself, so the reference is Health Connect's own day total (the
+      user reads it).
+4. **W4: vivo Recents swipe (user only, about 2 min, with one test alarm armed; part of AL-4).** The user swipes ÖRZA away
+   from Recents. Then check `dumpsys package in.co.ylo.orza | grep stopped=` and `dumpsys alarm | grep -c orzaalarms.FIRE`.
+   `stopped=true` with 0 alarms means vivo force-stops on a swipe: the medicine alarms are gone until ÖRZA is opened. The app
+   would then need to ask vivo users to allow ÖRZA in Settings › Battery › Background power consumption management ("Allow
+   high background power consumption") and in Autostart, where the phone has it. The agent only reads these screens. Let the
+   dose time pass and see whether it rings.
