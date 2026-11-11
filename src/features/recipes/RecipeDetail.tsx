@@ -127,9 +127,10 @@ export function RecipeDetail({ recipe }: { recipe: Recipe }) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  // An AI recipe's line holds Report (36 dp): 4 dp down, so its slop stays inside the scroll view (48 dp); the title
-  // stays about as far from the line's text as before.
-  eyebrowReport: { marginTop: spacing.xs, marginBottom: -spacing.sm },
+  // An AI recipe's line holds Report (36 dp): 4 dp down, so its slop stays inside the scroll view, and 8 dp over the
+  // title (48 dp); the title stays about as far from the line's text as before. zIndex: the line comes before the
+  // title (a later sibling) in the touch search, so the title doesn't take those 8 dp.
+  eyebrowReport: { marginTop: spacing.xs, marginBottom: -spacing.sm, zIndex: 1 },
   report: { marginRight: -spacing.sm },
   title: { marginTop: spacing.sm },
   desc: { marginTop: spacing.sm },

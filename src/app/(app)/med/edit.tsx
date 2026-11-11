@@ -552,7 +552,9 @@ export default function EditMedicine() {
           />
         </View>
         {draft.stockOn ? (
-          <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.fields}>
+          // box-none: the switch's 48 dp box reaches 6.5 dp into this view's empty top (its fields start 12 dp down);
+          // laid out later, the view itself would win those touches.
+          <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.fields} pointerEvents="box-none">
             <View style={styles.row2}>
               <TextField
                 label="Left now"

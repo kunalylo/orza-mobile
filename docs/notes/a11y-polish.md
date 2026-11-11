@@ -15,6 +15,13 @@ at font 1.3 (the worst case). "Target" = what takes a touch: the view's bounds p
 - Where two targets overlap, the **later sibling wins** (Android's touch target search goes last child first). So a slop
   that reaches a neighbour takes the neighbour's edge. Rule used: between two small controls the slop stops at half the
   gap (0 when they touch) — `IconButton`'s new `hitSlop` prop sets single sides.
+- **A text or an empty view is a target too**: laid out after a small control, it wins the touches in its own bounds, so
+  a slop or a switch box that reaches over it is lost there. The control's row gets `zIndex: 1` instead, so the search
+  meets it first (Fabric mounts siblings in zIndex order; layout and reading order don't change): the Snap result's
+  "ÖRZA analysis" line over the dish name, the recipe screen's "Created by ÖRZA AI" line over the title, the recipe
+  card's head (Another / Close) over its title. Not a `pointerEvents="none"` wrapper around the heading: on Android
+  that view also stops hover events, which TalkBack's explore by touch needs to focus the heading. A container whose
+  top is empty gets `box-none` (the stock fields under "Remind me to refill": its children still take touches).
 - A **native switch gets no slop**: on Android it takes touches only inside its own bounds, and only when every parent's
   bounds hold the point too. So the switch itself must be 48 × 48 dp, and a row with no padding around it needs slack.
 - Android's guideline is 48 × 48 dp (Apple's 44 pt). `layout.hit` was 44; it is now 48.
@@ -33,7 +40,7 @@ the row's wider bounds pass other touches through. `fit="box"` lays the whole bo
 |---|---|---|
 | Settings › Preferences and the other toggle rows | `features/settings/parts.tsx` `ToggleRow` (16 dp row padding holds the box) | 46 × 27 → **48 × 48** |
 | Reminders list row, reminder sheet rows, Quiet hours header | `features/reminders/parts.tsx` `BrandSwitch` (`SwitchRow`, `ReminderRow`, `CardHeader` `right`) | 46 × 27 → **48 × 48**; `CardHeader` (40 dp row) gets `switchRowSlack` on the row and the header |
-| Medicine editor › Track stock "Remind me to refill" | `app/(app)/med/edit.tsx` (row had no padding → `switchRowSlack({bottom: 4})`) | 46 × 27 → **48 × 48** |
+| Medicine editor › Track stock "Remind me to refill" | `app/(app)/med/edit.tsx` (row had no padding → `switchRowSlack({bottom: 4})`; the stock fields under it are `box-none`, their empty top took 6.5 dp) | 46 × 27 → **48 × 48** |
 | Prescription row editor "SOS — only when needed" | `features/rx/RowEditorSheet.tsx` (`switchRowSlack({top: 16})`) | 46 × 27 → **48 × 48** |
 | Health card + Settings › Privacy "Count steps automatically" | `features/health/StepsSwitch.tsx` → `Switch fit="box"`, spinner `switchBoxStyle` | 48 × 48 (V1 F1) → same, now the shared component |
 
@@ -51,7 +58,7 @@ the row's wider bounds pass other touches through. `fit="box"` lays the whole bo
 | Targets callout X | 32 | 44 → **48** |
 | Medicine photo star / remove (the tile clips at 6 dp outside) | 30 | 43 → **45** |
 | Meal card Edit + Delete (2 dp apart) → `hitSlop` 1 on the facing sides | 36 | 44 tall; Edit lost 2 dp to Delete → **48 tall × 43 wide** each, neither takes the other's edge |
-| Recipe result Another + Close (4 dp apart) → 2 on the facing sides | 36 | → **48 tall × 44 wide** each |
+| Recipe result Another + Close (4 dp apart) → 2 on the facing sides; the head is `zIndex: 1` over the title 4 dp under them (it took 2 dp) | 36 | → **48 tall × 44 wide** each |
 | Rx review row Edit over Remove (touching) → 0 on the facing sides | 36 | Remove took 4 dp of Edit → **48 wide × 42 tall** each |
 | Meal item stepper +, meal-log day › (flush against the field / the date) → left 0 | 36 / 32 | took 4 dp of the field / date → **48 tall × 42 wide** (compact stepper 40), the field and date keep their edges; the date button's own slop is now top / bottom only (it took 4 dp of ‹) |
 | Medicine alarm-time chip X (flush against the time) → left 0 | 32 | took 6 dp of the time → **48 tall × 40 wide** |

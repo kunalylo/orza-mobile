@@ -141,10 +141,13 @@ export function ScanReview({
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
-  eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  // On the eyebrow's line without making it taller: its 36 dp (48 with slop) reach into the card's padding and the
-  // space above the dish name.
-  report: { marginVertical: -10, marginRight: -spacing.sm },
+  // zIndex: Report's target reaches 11 dp into the dish name, a later sibling that would win those touches otherwise;
+  // the line comes first in the touch search instead (a `pointerEvents="none"` wrapper would hide the name from
+  // TalkBack's explore by touch).
+  eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, zIndex: 1 },
+  // On the eyebrow's 14 dp line without making it taller: its 36 dp (48 with slop) reach 15 dp into the card's padding
+  // and 19 dp down, over the dish name 8 dp below.
+  report: { alignSelf: 'center', marginVertical: -11, marginRight: -spacing.sm },
   dish: { marginTop: spacing.sm },
   confRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
   note: {

@@ -242,6 +242,11 @@ off can still report. Nothing is queued offline. Play Console: mention the in-ap
 The meal screen and the chat's "Logged" meal card have no Report: the first shows the member's own meal, the second
 is reported through its reply.
 
+On the Snap result and the recipe screen, Report's slop reaches over the heading under it (the dish name 8 dp below,
+the title right under the line). A text laid out later wins those touches, so Report's line is `zIndex: 1` and comes
+first in the touch search: 48 dp there too, not 38 / 40. The heading still takes TalkBack's explore by touch (a
+`pointerEvents="none"` wrapper would stop it).
+
 ### 8.2 The sheet and the answers
 
 - One sheet for the whole app (`AiReportHost`, mounted in the member layout beside `AiConsentHost`); every trigger
@@ -283,6 +288,8 @@ is reported through its reply.
 5. TalkBack: the bubble's actions, the trigger's names, the radio cards (checked state), the counter; focus after
    the sheet closes (not handled in code: check where it lands). 360 dp with font 1.3: nothing cut in the sheet, the
    flag rows and the action rows.
+6. Targets (`a11y.mjs` bounds): each flag 48 dp with its slop; a tap 6 dp into the dish name (Snap) or the title (recipe
+   screen) under Report opens the sheet.
 
 ## 9. Open questions for the user
 

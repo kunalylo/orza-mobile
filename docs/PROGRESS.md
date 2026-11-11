@@ -859,9 +859,11 @@ batch 1" log entry); 3 is still open.
   the contract, old-server / offline / error lines and no double send hold. Fixed: four touch targets under 48 dp
   because a view laid out later wins the touches in its bounds (a text too): Report on the Snap result (38 dp: the
   dish name under it) and on the recipe screen (40: the title), the recipe card's Another / Close (46: the title) and
-  the stock switch with stock on (41.5: the fields' empty top). The heading now sits in a `pointerEvents="none"` view,
-  the fields are `box-none`; nothing moves, and the Snap "ÖRZA analysis" line is 14 dp again (Report had made it
-  16). Checks below.
+  the stock switch with stock on (41.5: the fields' empty top). The control's row is `zIndex: 1` (Fabric mounts it
+  after the heading, so the touch search meets it first; not a `pointerEvents="none"` wrapper, which on Android also
+  stops the hover events TalkBack's explore by touch needs), the fields are `box-none`; nothing moves, and the Snap
+  "ÖRZA analysis" line is 14 dp again (Report had made it 16). typecheck, lint, test:report 20, test:ai 32, test:a11y 6,
+  test:steps 419, test:alarms 69. Code only: §8.4 and the a11y device list check them on the phone.
 - 2026-11-11: TestFlight upload 1.0.0 (1) FAILED Apple processing: **ITMS-90683** missing `NSHealthUpdateUsageDescription`
   (P10 confirmed — the HealthKit library references write APIs). Fixed `b4f92a6` (the §6 honest string; also no Face ID purpose
   string — secure-store never uses biometrics; no `ios.buildNumber`). Build 2 from the iOS worktree = `8cc5230` + that fix

@@ -166,7 +166,9 @@ const styles = StyleSheet.create({
   skeletons: { gap: spacing.md, marginTop: spacing.xl },
   topBar: { height: 4 },
   resultBody: { padding: spacing.xl, paddingTop: spacing.md },
-  resultHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginRight: -spacing.sm },
+  // zIndex: Another's and Close's slop reaches 2 dp into the title, a later sibling that would win those touches
+  // otherwise; the head comes first in the touch search instead.
+  resultHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginRight: -spacing.sm, zIndex: 1 },
   resultTitle: { marginTop: spacing.xs },
   desc: { marginTop: spacing.sm },
   notice: {
