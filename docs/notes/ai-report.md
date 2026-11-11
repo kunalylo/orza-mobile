@@ -1,7 +1,10 @@
 # In-app AI reports: plan and API contract
 
 Date: 2026-11-11. Status: **contract written; server, admin page and website built on `web:` branch
-`ai-report-backend`** (not pushed; its push needs the user's OK). The phone's Report action is the next step (§8).
+`ai-report-backend`, commit `00de068`** (not pushed; its push needs the user's OK). `check-ai-report.mjs` 47/47 on a
+local AI-off server (50/50 with the day limit); the website's Report on a chat reply and an AI recipe was looked at in
+the browser at desktop and phone width (dialog, Send disabled until a reason, Escape and Cancel, focus back on Report).
+The admin page was checked through its API only. The phone's Report action is the next step (§8).
 
 **Why (Google Play, AI-Generated Content).** An app whose AI writes content (a chatbot as a central feature is in
 scope) must let people report or flag offensive AI output **inside the app, without leaving it**, and the reports must
@@ -21,7 +24,7 @@ feed back into moderation. `ai-consent.md` §1 and §9 list this as the missing 
    document with a stable id that the member sees as ÖRZA's own text. Prescription reads are left out (§2).
 2. **One endpoint**: `POST /api/ai/reports {kind, ref_id, reason, note?}`, signed in (cookie or the app's Bearer token).
    Only the member's own item can be reported; anything else is 404, so ids never leak.
-3. **No AI consent needed.** A report sends nothing to OpenAI, so it uses `requireUser()`, not `requireAiUser()`. A
+3. **No AI consent needed.** A report sends nothing to OpenAI, so it only needs a signed-in member, not `requireAiUser()`. A
    member who turned AI features off can still report an earlier reply.
 4. **One report per member per item.** A second report of the same item replaces the first (reason, note, snapshot),
    and a reviewed report goes back to "To review".
@@ -89,17 +92,19 @@ Body:
 | `note` | string \| null | Optional, ≤ 500 characters after trimming (line breaks kept, runs of blank lines folded). Empty = none. |
 
 Answers, in this order:
-1. **401** `unauthorized` when signed out.
-2. **429** `rate_limited` (with `Retry-After`) after 10 reports in a minute: "You've sent several reports in a row.
+1. **403** `cross_site` for a cookie request from another site and **415** when not JSON (the usual guard, before
+   anything else; the app's Bearer requests skip the origin part).
+2. **401** `unauthorized` when signed out.
+3. **429** `rate_limited` (with `Retry-After`) after 10 reports in a minute: "You've sent several reports in a row.
    Please try again in 1 minute."
-3. **400** `validation` for a bad body (`kind: Choose what you're reporting`, `reason: Choose a reason`,
-   `note: Keep the note under 500 characters`, …); 413 over 16 KB; 415 when not JSON; 403 `cross_site` for a cookie
-   request from another site (the usual guard).
-4. **404** `not_found` "We couldn't find that to report. It may have been deleted." when the item doesn't exist, isn't
+4. **400** `validation` for a bad body (`kind: Choose what you're reporting`, `reason: Choose a reason`,
+   `note: Keep the note under 500 characters`, …); 413 over 16 KB.
+5. **404** `not_found` "We couldn't find that to report. It may have been deleted." when the item doesn't exist, isn't
    the member's, or isn't reportable (a member's own message, a manual meal).
-5. **429** `rate_limited` "You've sent a lot of reports today. Thank you, the team will look at them." when the
-   account already reported 30 other items in the last 24 hours (changing a report already counted is always allowed).
-6. **201** for a first report, **200** when it replaced the member's earlier report of the same item:
+6. **429** `rate_limited` (no `Retry-After`) "You've sent a lot of reports today. Thank you, the team will look at
+   them." when the account already reported 30 other items in the last 24 hours (changing a report sent in those 24
+   hours is always allowed).
+7. **201** for a first report, **200** when it replaced the member's earlier report of the same item:
 
 ```json
 { "report": { "id": "…", "kind": "chat", "ref_id": "…", "reason": "offensive", "note": null,
@@ -208,6 +213,8 @@ built-in plan and a food-list meal; then 401, 400s, 404s (unknown id, another me
 a manual meal), 201, the second report → 200 with one document, the website cookie path and the cross-site guard,
 the minute limit, a member refused by the admin APIs, and (with `ORZA_ADMIN_EMAIL` / `ORZA_ADMIN_PASSWORD` for a local
 admin) the list, the snapshot, the member's email, Reviewed on and off, re-report → back to review, export and deletion.
+`ORZA_CHECK_DAY_LIMIT=1` adds the 30-items-a-day limit (about 3 more minutes, paced by the minute limit). Not covered:
+a Snap result (scans need the AI); its loader is read in review.
 
 ---
 
