@@ -2,7 +2,8 @@
 
 Date: 2026-11-10. Status: **mobile and backend built and reviewed** (AM1–AM6 `ba22911`, `830283c`, `96a58c1`;
 AB1–AB4 `web: c2604c4`; AR fixes `web: 5e0e097` and the mobile AR commit, §10.3; nothing pushed). AV (§8) done on the
-emulator (§10.4; AC-10 fixes `cb15b8d`, `8cbfa44`, `b02ca98`). Next: the user's answers (§11). Tick items in §10 as they are built; §10.1 is the entry-point check.
+emulator (§10.4; AC-10 fixes `cb15b8d`, `8cbfa44`, `b02ca98`). §11 Q1 answered 2026-11-11: the website asks too
+(§12, `web:` branch `ai-consent-web`). Next: the user's other answers (§11). Tick items in §10 as they are built; §10.1 is the entry-point check.
 
 **User decision (2026-11-10, D3, App Store 5.1.2(i))**
 - The phone app asks for AI consent **at first AI use**. The first time a member starts any AI feature, a one-time
@@ -812,6 +813,7 @@ session scratchpad `e2e/`. Times are IST.
    - That means the website coach won't know today's steps for those members. This is the price of flipping
      `SEND_IPHONE_HEALTH_DATA` now.
    - Alternative: keep the iPhone flag off until the website asks too.
+   - **Answered 2026-11-11: yes, before the iPhone release.** The plan for the website is §12.
 2. **Privacy policy and copy review.** These need the user's review before going live: the §4 strings (sheet,
    declined lines, settings, the steps line, the connect caption, the iOS purpose strings), and these privacy-page
    changes (`web:src/app/(site)/privacy/page.tsx`).
@@ -828,6 +830,115 @@ session scratchpad `e2e/`. Times are IST.
    - **`#phone-app`, "In AI chat, if you use it:":** becomes "In AI chat, if you've allowed AI features:".
    - **Optional**, only if the OpenAI organisation's data-sharing (training) setting is confirmed off: "OpenAI
      doesn't use this content to train its models."
+
+---
+
+## 12. Website ask (2026-11-11; §11 Q1: yes)
+
+The website asks the same consent, on the same record and endpoint, so one Allow or Turn off works on the website
+and in the app. Then the server refuses AI requests without consent from every client. Build: `web:` branch
+`ai-consent-web` from `main` = `3829653`.
+
+### 12.1 Web AI entry points
+A grep of `web:src` for the six paths finds exactly six call sites, all through `lib/api-client.ts`. Onboarding uses
+`/onboarding/step`, which is not AI.
+
+| Feature | Call site | Every way in | Not AI (no gate) |
+|---|---|---|---|
+| `chat` | `components/chat/ChatView.tsx` `send()` | Send and Enter in the composer (voice only fills it), starter questions (`send: true`), quick actions with a `prompt` (the empty chat and the row above the composer), Retry on a failed message (`retry()`) | `?q=`, meal starters and "Log a meal" only pre-fill. Today's links only open Ask ÖRZA. History, sessions, delete |
+| `meal_text` | `components/meals/MealComposer.tsx` `submit()` (Meal log) | Log meal, Enter, typed or spoken (voice only fills the box) | Add from food list, edit, move, delete |
+| `snap` | `components/meals/ScanView.tsx` `analyse()` | Analyse photo, Enter in the note, Try again on the error and no-credits panels | Take photo, Upload, Retake, Choose another, Use another photo, scan confirm |
+| `recipe` | `app/dashboard/recipes/page.tsx` `generate()` | Generate recipe (button, Enter), Another on the result card | Save, log a serving, delete |
+| `rebalance` | `components/goals/RebalanceForm.tsx` `submit()` (Rebalance) | Create my plan, after its own field checks | Past plans, delete |
+| `rx` | `components/care/meds/PrescriptionsView.tsx` `scan()` | Read prescription, Try again on the problem panel | Take photo, Upload, Retake, Type the medicines instead, manual entry, Create alarms |
+
+### 12.2 The web gate
+- `web:src/lib/ai-consent-shared.ts` (pure): `AI_CONSENT_VERSION` and `hasAiConsent`, shared by the server
+  (`lib/ai-consent.ts` re-exports them) and the browser.
+- `web:src/components/ai/`: `copy.ts` (pure strings), `AiConsentProvider.tsx` (mounted once in `AppShell`, inside
+  `UserProvider`; it holds the dialog), `AiDeclinedNote.tsx`, `AiFeaturesManage.tsx` (Settings).
+- `ensureAiConsent(feature): Promise<boolean>`:
+  - The session user (`useUser()`, read on the server at page load) has consent: true at once.
+  - Otherwise it reads `/auth/me` first (at most 5 s). A consent given on the phone after the page loaded is then
+    used without asking.
+  - Still none: the dialog. **Allow** sends `PUT {version}`, then `setUser(res.user)`, and the action runs.
+    **Not now**, Escape, the close button or a click outside mean "no". Nothing is sent, and the feature's line shows
+    with "Allow AI features".
+  - One gate at a time. A second call while the dialog is open resolves false, so nothing is sent twice.
+  - If `/auth/me` or the PUT answers for another account (someone signed in again in another tab), the page reloads
+    and nothing is sent.
+- Each entry point runs its own checks, then `if (!(await ensureAiConsent(f))) return;`, then the request. On Not now
+  the text, form or photo stays.
+- `onAiRefusal(e, f, retry)` comes first in each entry point's error handling. A 403 `ai_consent_required` clears the
+  copy's consent and opens the dialog at once (no refresh). After Allow, `retry` runs once. A retry only follows a
+  200, so there is no loop.
+- **Snap gates at Analyse, not before the picker** (unlike the phone). A browser opens its file picker only inside the
+  tap itself, so the picker can't wait for the dialog. Picking sends nothing: the photo is resized and kept in the
+  browser until Analyse.
+- **Without consent the whole route is refused**, so its built-in fallback waits for Allow too (built-in coach,
+  food-list parser, library recipe, built-in plan), as on the phone. Snap and Rx with AI off keep their "not
+  available" states.
+- **Settings → Preferences**: a row "AI features" right above "Help improve ÖRZA’s AI". Its subtitle follows §4, and a
+  "Manage" button opens a dialog with the status, the points, the link, and one button. Allow AI features sends the
+  PUT itself. Turn off AI features asks to confirm, then sends DELETE and shows a toast.
+
+### 12.3 Copy (the §4 strings adapted for the website; the user reviews them)
+- **Dialog:** eyebrow, title, the per-feature first sentence, the shared sentence and points 1, 3, 4 and 5 are
+  unchanged.
+  - Point 2's platform sentence: "Steps can come from Apple Health, Health Connect or your phone’s motion sensor, and
+    weight from Apple Health or Health Connect."
+  - After the points, the first two lines are unchanged. The third becomes: "Your choice applies on the website and in
+    the ÖRZA app. Turn AI features off any time in Settings → Preferences."
+  - The link "How ÖRZA uses AI" opens `/privacy#ai-processing` in a new tab, so the dialog stays. The buttons are
+    Allow and Not now.
+- **Errors in the dialog:** offline gives the website's "We couldn't reach ÖRZA. Check your connection and try
+  again." A 409 gives "This version of ÖRZA can’t turn on AI features. Please reload the page." Anything else gives
+  "Couldn’t save your choice. Please try again."
+- **Not now:** the §4 lines, unchanged, plus "Allow AI features". Snap adds "Open the meal log". Rx adds "Type the
+  medicines instead".
+- **Settings:**
+  - Subtitles: "On · run by OpenAI" and "Off · ÖRZA asks before the first use".
+  - Manage dialog: eyebrow "Preferences", title "AI features", status "On since 11 Nov 2026" or "Off". Buttons "Allow
+    AI features" and "Turn off AI features".
+  - Confirm: "Turn off AI features?" with the body "Ask ÖRZA, Snap & Know, typed and spoken meals, recipes, rebalance
+    plans and prescription scans stop on the website and in the app until you allow them again. Your meals, chats and
+    plans stay." Buttons "Turn off" and "Keep on".
+  - Toasts: "AI features are off. ÖRZA will ask before using them again." and "AI features are on."
+- **Server 403 `error`:** an app request keeps "Allow ÖRZA's AI features in the app to use this." A website request gets
+  "Please reload the page to allow ÖRZA's AI features." Only an open tab on the old bundle shows it (§12.5).
+- **Phone follow-up (not in this step):** the app's turn-off toast ("… off in the app …") and confirm body ("… stop in
+  the app …") can drop "in the app", because a Turn off in the app now stops the website too.
+
+### 12.4 Enforcement switch
+- `requireAiUser()` drops the phone-only condition: any request from an account without consent gets 403
+  `ai_consent_required`.
+  - The 401 still comes first. The check still runs before the body, credits, photo storage and `aiEnabled()`.
+  - `isAppRequest` now only picks the message.
+- R2 stays as a second line of defence. No request without consent reaches it now.
+
+### 12.5 Rollout order
+1. The user reviews §12.3 and the privacy sentence (§12.6).
+2. **One deploy** carries the web UI and the enforcement together. Enforcement without the UI would refuse website
+   members with no way to allow.
+3. **Open tabs on the old bundle** get the 403 on an AI action. Each entry point already shows the server's `error`
+   through its generic path:
+   - Ask ÖRZA: a toast, and the message is marked not sent.
+   - Meal log, recipes and rebalance: a toast.
+   - Snap: the "Let's try that again" panel with the text.
+   - Rx: the "We couldn't read that prescription" panel with the text and "Type the medicines instead".
+
+   The text says to reload. After a reload, the new bundle asks. Nothing is stored or spent before the refusal.
+4. The phone app needs no change: it already asks, and the server's app text is unchanged.
+5. Then the iPhone build (AU).
+
+### 12.6 Privacy page
+- The "You choose." item becomes: "ÖRZA asks before your first AI feature, on the website and in the phone app, and
+  sends nothing to OpenAI until you allow it. Your choice is saved to your account, so it applies everywhere you sign
+  in. You can turn AI features off any time on the website under Settings → Preferences → AI features, or in the app
+  under Settings → Privacy & data → AI features; AI features then stop until you allow them again, and nothing else
+  changes."
+- The rest of `#ai-processing` and `#phone-app` stays true. `PRIVACY_UPDATED` stays 11 November 2026 if this deploys
+  today. Otherwise it moves to the deploy day.
 
 ---
 
