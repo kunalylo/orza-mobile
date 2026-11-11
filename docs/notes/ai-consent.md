@@ -855,8 +855,9 @@ A grep of `web:src` for the six paths finds exactly six call sites, all through 
 ### 12.2 The web gate
 - `web:src/lib/ai-consent-shared.ts` (pure): `AI_CONSENT_VERSION` and `hasAiConsent`, shared by the server
   (`lib/ai-consent.ts` re-exports them) and the browser.
-- `web:src/components/ai/`: `copy.ts` (pure strings), `AiConsentProvider.tsx` (mounted once in `AppShell`, inside
-  `UserProvider`; it holds the dialog), `AiDeclinedNote.tsx`, `AiFeaturesManage.tsx` (Settings).
+- `web:src/components/ai/`: `copy.ts` (pure strings), `AiConsentProvider.tsx` (mounted once in the members' dashboard
+  layout, inside `UserProvider`; it holds the dialog), `ConsentDetails.tsx`, `AiDeclinedNote.tsx`, `AiFeaturesManage.tsx`
+  (Settings).
 - `ensureAiConsent(feature): Promise<boolean>`:
   - The session user (`useUser()`, read on the server at page load) has consent: true at once.
   - Otherwise it reads `/auth/me` first (at most 5 s). A consent given on the phone after the page loaded is then
@@ -939,6 +940,33 @@ A grep of `web:src` for the six paths finds exactly six call sites, all through 
   changes."
 - The rest of `#ai-processing` and `#phone-app` stays true. `PRIVACY_UPDATED` stays 11 November 2026 if this deploys
   today. Otherwise it moves to the deploy day.
+
+### 12.7 Build and checks (2026-11-11, `web: 5eb4f7e` on `ai-consent-web`, not pushed)
+- `npm run typecheck` is clean. `scripts/check-ai-consent.mjs` passes 83/83 against `next dev -p 3101` with the
+  `noai-preload` (JSON-file DB, `ai_enabled:false` checked first). The new website cases: the six refuse a cookie session
+  without consent (403, the reload text), the app's text is unchanged, a cross-site PUT is refused (`cross_site`) and
+  records nothing, and a website PUT lets both clients through. A website DELETE stops both clients, an app PUT is used by
+  the website, and an app DELETE stops the website.
+- **Browser run** (the desktop app's browser pane on `localhost:3101`, a throwaway onboarded account, 0 AI calls: the
+  log has no OpenAI line):
+  - Chat: Send → one `/auth/me` → the dialog, with no `chat/send`. Not now and Escape keep the text and show the line.
+    "Allow AI features" → `PUT 200`. The next Send goes at once.
+  - A stale page (DELETE behind it): `chat/send 403` → the dialog with no refresh → `PUT 200` → one `chat/send 200`,
+    replacing the "Not sent" message.
+  - Meal log, recipes, rebalance and Rx: each shows the dialog with its own first sentence, sends nothing, keeps the
+    text, form or photo, and shows its line.
+  - Snap: same, then Allow → `meals/scan 503 ai_disabled` (AI off).
+  - Snap and Rx hide their AI buttons while `/credits/balance` says AI is off (as in AV). They were reached with a
+    page-only `fetch` shim that reported AI on; the server stayed AI-off.
+  - Settings: "On · run by OpenAI" / "Off · ÖRZA asks before the first use". Manage shows "On since 11 Nov 2026".
+    Allow AI features gives "AI features are on."; Turn off → confirm (Keep on focused) → DELETE → "AI features are off.
+    ÖRZA will ask before using them again."
+  - Focus goes to the dialog itself, not to Allow. Its accessible name is the title alone (the eyebrow is hidden).
+  - Layout at 1280×820, 375×700 and 360×640: Allow and Not now stay in view, and the list scrolls on its own. Two fixes
+    went in before the commit: the link's screen-reader text stretched the dialog's scroll, and the list cap was too
+    tall below `sm`.
+- **Not run:** an old-bundle tab against the new server. Its generic handling was checked in the code instead (§12.5).
+  The pane's console shows a service-worker registration error from the push client; it predates this change.
 
 ---
 
