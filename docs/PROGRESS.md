@@ -828,3 +828,13 @@ batch 1" log entry); 3 is still open.
   `wf_4aab3930-0bf` (pre-release polish): app-wide 48 dp touch targets + cut labels at large text (`docs/notes/a11y-polish.md`),
   in-app "Report this AI reply" for Google Play's AI-content policy (contract `docs/notes/ai-report.md`; web branch
   `ai-report-backend` incl. an admin list — its push needs the user's OK), then review. Device check + D3 store pack after.
+- 2026-11-11: USER connected a real Android phone (vivo V2544, Android 16, SDK ext 21, step counter) → V2 running
+  (`wf_eb3e63db-9c4`: arm64 release-type test build to the local server over `adb reverse` 127.0.0.1:3100, non-walking cases +
+  medicine alarms on the real phone; walks with the user after). User HAS Apple Developer + Play Console accounts (from
+  FatafatDecor). **D2 started:** first iOS EAS build (production profile, `--auto-submit` to TestFlight) from a clean worktree
+  `E:\aylo\orza-mobile-ios` (8cc5230; node_modules is a junction to the main repo's) — the user signed in to Apple in the terminal;
+  EAS reused FatafatDecor's distribution certificate + push key, made a provisioning profile for `in.co.ylo.orza`. Build
+  https://expo.dev/accounts/kunal_ylo/projects/orza/builds/9f7e1cc5-2888-46aa-8e55-0cb361c60399.
+  **D3 RISK:** the Apple team is "Kunal Patil (Individual)" — App Review 5.1.1(ix) expects apps in regulated fields (healthcare,
+  sensitive data) to be submitted by a legal entity → likely an Organization account (D-U-N-S) before the App Store submission.
+  TestFlight internal testing is fine. Also: remove `ios.buildNumber` from app.json (ignored with remote versions).
