@@ -1,15 +1,20 @@
-/** Compassionate Rebalancing — a supportive 2–5 day plan after a special meal, plus past plans. See src/features/rebalance. */
+/**
+ * Compassionate Rebalancing — a supportive 2–5 day plan after a special meal, plus past plans. See src/features/rebalance.
+ * An AI-personalised plan has Report (docs/notes/ai-report.md).
+ */
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ReportAiButton } from '@/features/ai/ReportAiButton';
 import { useRebalancePlans } from '@/features/rebalance/api';
 import { PlanHistory } from '@/features/rebalance/PlanHistory';
 import { HowItWorks, PlanView } from '@/features/rebalance/PlanView';
 import { RebalanceForm } from '@/features/rebalance/RebalanceForm';
 import { formatDayDate, resultTitle, type RebalanceCreateResponse } from '@/features/rebalance/types';
+import { canReportPlan } from '@/lib/aiReport';
 import { errorMessage } from '@/lib/api';
 import { useAuth, useSignedInUser } from '@/lib/auth';
 import { haptics } from '@/lib/haptics';
@@ -132,6 +137,7 @@ export default function Rebalance() {
               {user.credits <= 0 && q.data?.ai_enabled ? (
                 <Button label="Get credits" icon="zap" variant="ghost" size="sm" onPress={() => router.push('/credits')} />
               ) : null}
+              {canReportPlan(plan) ? <ReportAiButton kind="rebalance" refId={plan.id} look="button" /> : null}
             </View>
           </View>
         ) : null}

@@ -1,6 +1,8 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
 
+import { ReportAiButton } from '@/features/ai/ReportAiButton';
+import { canReportMeal } from '@/lib/aiReport';
 import { colors, radii, spacing } from '@/theme';
 import { Button, GlassCard, Icon, IconButton, Tag, Text } from '@/ui';
 
@@ -8,7 +10,10 @@ import { MealItemRow } from './MealItemRow';
 import type { TextLogResponse } from './types';
 import { MEAL_LABEL, formatNumber } from './utils';
 
-/** "Just logged" card under the composer: what ÖRZA understood, anything it couldn't place, and quick fixes. */
+/**
+ * "Just logged" card under the composer: what ÖRZA understood, anything it couldn't place, and quick fixes. An AI
+ * estimate has Report (docs/notes/ai-report.md).
+ */
 export function LoggedResult({
   result,
   onDismiss,
@@ -110,6 +115,7 @@ export function LoggedResult({
         <View style={styles.actions}>
           <Button label="Adjust portions" icon="edit-3" variant="secondary" size="sm" onPress={onEdit} />
           <Button label="Undo" icon={undoing ? undefined : 'corner-up-left'} variant="ghost" size="sm" onPress={onUndo} loading={undoing} haptic="warning" />
+          {canReportMeal(result) ? <ReportAiButton kind="meal" refId={meal.id} look="button" /> : null}
         </View>
         {ai ? (
           <Text variant="caption" tone="subtle" style={styles.wellness}>

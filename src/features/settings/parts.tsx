@@ -136,17 +136,19 @@ export function FieldGroup({ label, error, hint, children, style }: { label: str
   );
 }
 
-/** Vertical radio cards with a hint line (activity, household). */
+/** Vertical radio cards with a hint line (activity, household; the AI report's reasons). */
 export function ChoiceList<T extends string>({
   options,
   value,
   onChange,
   label,
+  disabled,
 }: {
   options: { value: T; label: string; hint?: string }[];
   value: T | '';
   onChange: (v: T) => void;
   label: string;
+  disabled?: boolean;
 }) {
   return (
     <View accessibilityRole="radiogroup" accessibilityLabel={label} style={styles.choices}>
@@ -156,14 +158,15 @@ export function ChoiceList<T extends string>({
           <Pressable
             key={o.value}
             accessibilityRole="radio"
-            accessibilityState={{ checked: on }}
+            accessibilityState={{ checked: on, disabled: !!disabled }}
             accessibilityLabel={o.hint ? `${o.label}, ${o.hint}` : o.label}
+            disabled={disabled}
             onPress={() => {
               if (on) return;
               haptics.select();
               onChange(o.value);
             }}
-            style={({ pressed }) => [styles.choice, on && styles.choiceOn, pressed && !on && styles.rowPressed]}
+            style={({ pressed }) => [styles.choice, on && styles.choiceOn, pressed && !on && styles.rowPressed, disabled && !on && styles.pending]}
           >
             <View style={[styles.radio, on && styles.radioOn]}>{on ? <View style={styles.radioDot} /> : null}</View>
             <View style={styles.flex}>

@@ -1,7 +1,8 @@
 /**
  * Ask ÖRZA — chat with the coach (English, Hindi, Hinglish; text or voice). Conversations live in a bottom sheet;
  * `?session=<id>` opens one, `?q=<text>` pre-fills the composer. See src/features/chat. A send waits for the AI
- * consent; after Not now a line above the composer says why (past chats stay readable).
+ * consent; after Not now a line above the composer says why (past chats stay readable). Every ÖRZA reply has Report
+ * under it, and a long press offers Copy reply and Report this reply (docs/notes/ai-report.md).
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -10,10 +11,11 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiDeclinedNote } from '@/features/ai/AiDeclinedNote';
+import { openAiReport } from '@/features/ai/report';
 import { ChatWelcome, QuickActionStrip } from '@/features/chat/ChatWelcome';
 import { Composer } from '@/features/chat/Composer';
 import { dayKey, dayLabel } from '@/features/chat/format';
-import { AssistantBubble, DaySeparator, TypingIndicator, UserBubble } from '@/features/chat/MessageBubble';
+import { AssistantBubble, DaySeparator, ReplyOptionsSheet, TypingIndicator, UserBubble, copyReply } from '@/features/chat/MessageBubble';
 import { SessionsSheet, confirmDeleteSession } from '@/features/chat/SessionsSheet';
 import type { UIMessage } from '@/features/chat/types';
 import { useConversation } from '@/features/chat/useConversation';
@@ -23,6 +25,9 @@ import { colors, gutter, spacing } from '@/theme';
 import { EmptyState, Icon, IconButton, Orb, PressableScale, Screen, Skeleton, Text, goBackOrHome } from '@/ui';
 
 type Row = { kind: 'msg'; key: string; message: UIMessage } | { kind: 'day'; key: string; label: string };
+
+/** iPhone: the Report sheet waits this long after the reply's options sheet has gone (one modal at a time). */
+const AFTER_SHEET_MS = Platform.OS === 'ios' ? 300 : 0;
 
 function useKeyboardVisible() {
   const [visible, setVisible] = useState(false);
@@ -59,6 +64,22 @@ export default function AskOrza() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [showJump, setShowJump] = useState(false);
   const listRef = useRef<FlatList<Row>>(null);
+  // A reply's long press: its options sheet, then (Report) the Report sheet once the options have gone.
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const optionsFor = useRef<UIMessage | null>(null);
+  const reportNext = useRef(false);
+  const reportTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (reportTimer.current) clearTimeout(reportTimer.current);
+    },
+    [],
+  );
+  function openOptions(m: UIMessage) {
+    optionsFor.current = m;
+    reportNext.current = false;
+    setOptionsOpen(true);
+  }
 
   const { messages, historyState, showTyping, busy, activeId } = chat;
   const memoryCount = chat.user?.memory?.length ?? 0;
@@ -86,7 +107,7 @@ export default function AskOrza() {
     return m.role === 'user' ? (
       <UserBubble message={m} onRetry={busy ? undefined : chat.retry} onGetCredits={() => router.push('/credits')} />
     ) : (
-      <AssistantBubble message={m} />
+      <AssistantBubble message={m} onOptions={openOptions} />
     );
   };
 
@@ -257,6 +278,29 @@ export default function AskOrza() {
           focusComposer();
         }}
         onDelete={(s) => confirmDeleteSession(s, () => void chat.removeSession(s))}
+      />
+      <ReplyOptionsSheet
+        visible={optionsOpen}
+        onClose={() => setOptionsOpen(false)}
+        onCopy={() => {
+          setOptionsOpen(false);
+          if (optionsFor.current) void copyReply(optionsFor.current.content);
+        }}
+        onReport={() => {
+          reportNext.current = true;
+          setOptionsOpen(false);
+        }}
+        onClosed={() => {
+          const m = optionsFor.current;
+          const report = reportNext.current;
+          optionsFor.current = null;
+          reportNext.current = false;
+          if (!report || !m) return;
+          reportTimer.current = setTimeout(() => {
+            reportTimer.current = null;
+            openAiReport('chat', m.id);
+          }, AFTER_SHEET_MS);
+        }}
       />
     </Screen>
   );

@@ -1,10 +1,12 @@
-/** The "ÖRZA is cooking" card while a recipe is created, and the freshly generated recipe card. */
+/** The "ÖRZA is cooking" card while a recipe is created, and the freshly generated recipe card (Report on an AI one). */
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut, useReducedMotion } from 'react-native-reanimated';
 
+import { ReportAiButton } from '@/features/ai/ReportAiButton';
+import { canReportRecipe } from '@/lib/aiReport';
 import { colors, diagonal, gradients, radii, spacing } from '@/theme';
 import { Button, GlassCard, Icon, IconButton, Orb, Skeleton, Tag, Text } from '@/ui';
 
@@ -149,6 +151,7 @@ export function RecipeResultCard({
               accessibilityLabel={recipe.saved ? 'Saved — tap to remove from saved' : 'Save recipe'}
             />
           </View>
+          {canReportRecipe(recipe) ? <ReportAiButton kind="recipe" refId={recipe.id} style={styles.report} /> : null}
         </View>
       </GlassCard>
     </Animated.View>
@@ -184,4 +187,6 @@ const styles = StyleSheet.create({
   previewDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.coral },
   more: { marginTop: 2 },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xl },
+  // 12 dp under the buttons, so its slop stays clear of theirs; the card's padding holds the rest.
+  report: { marginTop: spacing.md, marginBottom: -spacing.sm, marginLeft: -spacing.sm },
 });

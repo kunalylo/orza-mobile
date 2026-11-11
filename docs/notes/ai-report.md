@@ -4,7 +4,8 @@ Date: 2026-11-11. Status: **contract written; server, admin page and website bui
 `ai-report-backend`, commit `00de068`** (not pushed; its push needs the user's OK). `check-ai-report.mjs` 47/47 on a
 local AI-off server (50/50 with the day limit); the website's Report on a chat reply and an AI recipe was looked at in
 the browser at desktop and phone width (dialog, Send disabled until a reason, Escape and Cancel, focus back on Report).
-The admin page was checked through its API only. The phone's Report action is the next step (§8).
+The admin page was checked through its API only. **Phone side built** (§8: Report on every reportable output, the
+sheet, `npm run test:report`); code only, its device check is §8.4.
 
 **Why (Google Play, AI-Generated Content).** An app whose AI writes content (a chatbot as a central feature is in
 scope) must let people report or flag offensive AI output **inside the app, without leaving it**, and the reports must
@@ -36,8 +37,8 @@ feed back into moderation. `ai-consent.md` §1 and §9 list this as the missing 
 7. **Moderation**: a new admin console page, **AI reports** (`/dashboard/admin/reports`), lists reports newest first
    with the kind, reason, note, the reported text, the date, the member's email and a **Reviewed** switch. The Overview
    shows how many wait for review.
-8. **The website gets the same Report action** on Ask ÖRZA replies and AI recipes (this build). The phone adds it next
-   (§8).
+8. **The website gets the same Report action** on Ask ÖRZA replies and AI recipes (this build). The phone has it on
+   all five kinds (§8).
 9. **Account data**: reports are in the member's data export and are deleted with the account.
 
 ---
@@ -171,8 +172,12 @@ out, strip steps and health data).
 - Note: label "Anything to add? (optional)", counter "0/500".
 - Hint under it: "The team sees this reply with your report." (recipe / plan / result in place of reply).
 - Buttons: "Send report", "Cancel".
-- Sent: toast "Report sent" with "Thanks. The ÖRZA team will review it."
-- Errors: the server's text (404, 429), offline "We couldn't reach ÖRZA. Check your connection and try again."
+- Sent: toast "Report sent" with "Thanks. The ÖRZA team will review it." (the phone: one toast, "Report sent. Thanks.
+  The ÖRZA team will review it.").
+- Errors: the server's text (404, 429), offline "We couldn't reach ÖRZA. Check your connection and try again." (the
+  phone uses its API client's offline line, "Can't reach ÖRZA right now. Check your connection and try again.").
+- Phone only: an older server without the endpoint, "Reporting isn’t available yet. Please try again later."; the long
+  press on a reply, "Copy reply" / "Report this reply" (screen readers: "Reply options").
 
 **Privacy page** (proposed, not edited in this build; the user reviews it): under "Information you give us", add
 "**Reports:** if you report an AI answer, a copy of that answer with your reason and note, which the ÖRZA team reviews
@@ -218,20 +223,68 @@ a Snap result (scans need the AI); its loader is read in review.
 
 ---
 
-## 8. Phone follow-up (next step)
+## 8. Phone (built 2026-11-11)
 
-- A `features/ai/report.ts` client (`POST /ai/reports`, the body above), a shared Report sheet with the §5 copy, and
-  "Report" next to:
-  1. every ÖRZA reply in Ask ÖRZA (`kind: "chat"`, the message id) — **required for the Play release**;
-  2. an AI recipe (`source === "ai"`) — **required**;
-  3. an AI rebalance plan (`plan.ai`), the Snap result before Save (`scan`, `scan.id`) and a typed or spoken meal's
-     result card when it shows the AI's note (`meal`) — where the screen shows the AI's text.
-- No consent gate (§0.3). Offline: the usual network line, nothing queued.
-- Play Console: mention the in-app reporting in the app content answers (D3).
+No AI consent gate (§0.3): `/ai/reports` is not one of the backstop's AI paths, so a member who turned AI features
+off can still report. Nothing is queued offline. Play Console: mention the in-app reporting in the app content answers
+(D3).
 
----
+### 8.1 Where Report shows
+
+| Output | Where | `kind` / `ref_id` | Shown when |
+|---|---|---|---|
+| Ask ÖRZA reply | Under every ÖRZA bubble (a small flag + "Report", 36 dp, 48 with its slop), and a **long press** on the bubble: an options sheet with Copy reply / Report this reply. TalkBack and VoiceOver also get Copy reply and Report this reply as actions on the bubble. | `chat` / the message `id` | Every stored reply, the built-in coach's too (`canReportChat`; never a `tmp-` or sending one) |
+| Recipe | The new recipe card on Recipes (under its buttons) and the recipe screen (on the "Created by ÖRZA AI" line) | `recipe` / `id` | `source === "ai"` |
+| Rebalance plan | The new plan's action row and an expanded past plan (ghost "Report" button) | `rebalance` / `id` | `plan.ai` |
+| Snap & Know | The result card before Log, on the "ÖRZA analysis" line | `scan` / `scan.id` | Always (scans need the AI) |
+| Typed / spoken meal | The "Logged to …" card's action row (beside Adjust portions and Undo) | `meal` / `meal.id` | The card says "AI estimate" and the source is `text` or `voice` (`canReportMeal`) |
+
+The meal screen and the chat's "Logged" meal card have no Report: the first shows the member's own meal, the second
+is reported through its reply.
+
+### 8.2 The sheet and the answers
+
+- One sheet for the whole app (`AiReportHost`, mounted in the member layout beside `AiConsentHost`); every trigger
+  calls `openAiReport(kind, refId)`. The reply's long-press sheet opens it once it has gone (300 ms later on iOS, one
+  modal at a time). Another member or a sign-out closes it and drops an answer still on its way.
+- Contents (§5): title, lead, "What’s wrong?" with the four reasons as radio cards (56 dp, none picked), the note
+  (multiline, 500 characters, hint and counter under it), then Send report (disabled until a reason) and Cancel.
+  While sending nothing dismisses it and the fields are locked.
+- Sent (201 or 200 with `{report: {id}}`): the sheet closes, toast "Report sent. Thanks. The ÖRZA team will review
+  it." (one line: the app's toasts have no second line), and the trigger says "Reported" with a filled flag for the
+  rest of the visit (screen readers: "Reported. Change your report"). It still opens the sheet: reporting again
+  replaces the report.
+- Failed: the sheet stays open with the reason and note, and a line above the buttons: offline or slow, the API
+  client's own words ("Can't reach ÖRZA right now. Check your connection and try again."); 404 `not_found`, both 429s
+  and 400s, the server's text; **an older server without the endpoint** (a 404 without the route's `not_found` code,
+  which is the framework's page, or a 405 / 501): "Reporting isn’t available yet. Please try again later." A 401 signs
+  the app out as everywhere else.
+
+### 8.3 Files and checks
+
+- `src/lib/aiReport.ts` (pure): kinds, reasons, the copy, `canReport*`, `reportBody` (trimmed note, left out when
+  empty, at most 500 characters, never half an emoji), `isReportAnswer`, `isReportUnavailable`, the reported-this-visit
+  set.
+- `src/features/ai/report.ts` (store, `POST /ai/reports`), `AiReportSheet.tsx` (`AiReportHost`), `ReportAiButton.tsx`
+  (`look` quiet or button); `features/settings/parts.tsx` `ChoiceList` gained `disabled`.
+- Triggers: `features/chat/MessageBubble.tsx` (+ `ReplyOptionsSheet`) and `app/(app)/ask.tsx`,
+  `features/recipes/RecipeResult.tsx` and `RecipeDetail.tsx`, `app/(app)/rebalance.tsx` and
+  `features/rebalance/PlanHistory.tsx`, `features/snap/ScanReview.tsx`, `features/meals/LoggedResult.tsx`.
+- `npm run test:report` (`scripts/tests/ai-report.test.ts`, 20): the server's lists, no consent for the path, the
+  body, the answer, the older-server check, where Report shows, the reported set, the copy.
+
+### 8.4 Device check (later, with the backend branch on a local server, 0 AI calls)
+
+1. Each of the five places shows Report as in §8.1, and not on a curated recipe, a built-in plan or a food-list meal.
+2. Long press on a reply: the options sheet, then Report opens the Report sheet (iPhone: no stuck modal); Copy reply
+   still copies.
+3. Send stays disabled until a reason; a send → 201, the toast, "Reported"; again → 200, one document.
+4. Offline: the network line, nothing sent later. A server on `main` (no endpoint): the "isn’t available yet" line.
+5. TalkBack: the bubble's actions, the trigger's names, the radio cards (checked state), the counter; focus after
+   the sheet closes (not handled in code: check where it lands). 360 dp with font 1.3: nothing cut in the sheet, the
+   flag rows and the action rows.
 
 ## 9. Open questions for the user
 
-1. The §5 copy and the proposed privacy-page line.
+1. The §5 copy (with the phone's lines) and the proposed privacy-page line.
 2. Pushing `ai-report-backend` live (adds the endpoint, the admin page and the website's Report action).

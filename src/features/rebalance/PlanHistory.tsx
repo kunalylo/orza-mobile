@@ -1,9 +1,11 @@
-/** Past rebalance plans — tap to expand and revisit, delete with a native confirm. */
+/** Past rebalance plans — tap to expand and revisit (Report on an AI one), delete with a native confirm. */
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
+import { ReportAiButton } from '@/features/ai/ReportAiButton';
 import { formatNumber } from '@/features/chat/format';
+import { canReportPlan } from '@/lib/aiReport';
 import { errorMessage } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
 import { colors, radii, spacing } from '@/theme';
@@ -86,6 +88,7 @@ function PlanRow({ plan, highlighted, onDelete, deleting }: { plan: RebalancePla
             </Text>
           ) : null}
           <PlanView plan={plan} />
+          {canReportPlan(plan) ? <ReportAiButton kind="rebalance" refId={plan.id} look="button" style={styles.report} /> : null}
         </Animated.View>
       ) : null}
     </Animated.View>
@@ -163,4 +166,5 @@ const styles = StyleSheet.create({
   sub: { marginTop: 4 },
   panel: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairlineStrong },
   ate: { marginBottom: spacing.lg },
+  report: { marginTop: spacing.lg },
 });

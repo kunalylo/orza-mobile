@@ -845,3 +845,11 @@ batch 1" log entry); 3 is still open.
   sha256 6f7088cd…), but the phone disconnected (charge-only / unplugged) before install — resume `wf_eb3e63db-9c4` after the user
   reconnects (data cable, File transfer, USB debugging, vivo "Install via USB"). `check-release-apk.sh` check 3 false positive fixed
   (`6f84958`).
+- 2026-11-11: **In-app AI report, phone side BUILT** (not pushed; `docs/notes/ai-report.md` §8). Report on every Ask ÖRZA
+  reply (a flag under the bubble; a long press offers Copy reply / Report this reply; both are TalkBack actions too), AI
+  recipes (new card + recipe screen), AI rebalance plans (new + past), the Snap result before Log and a typed / spoken AI
+  meal. One Report sheet (`AiReportHost`: four reasons, a 500-character note, Send report / Cancel), a toast, "Reported"
+  for the visit, the offline and server lines, and an older server without the endpoint (404 without `not_found`, 405,
+  501) → "Reporting isn’t available yet". No AI consent needed. `npm run test:report` 20; test:ai 32, test:steps 419,
+  test:alarms 69, typecheck, lint. Code only: the device check (§8.4) is open; web `ai-report-backend` still waits for
+  the user's OK to push, and the phone's new lines are in §5 for the user's review.

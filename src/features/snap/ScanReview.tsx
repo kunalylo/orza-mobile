@@ -1,6 +1,7 @@
 /**
  * Review an AI scan before logging: dish + confidence, ÖRZA's question/notes, live totals (recomputed as rows change),
  * an honest calorie range, editable items (name / qty / unit / kcal / P / C / F, add / remove), meal type, Log.
+ * Report (top right) reports the AI's result as it came (docs/notes/ai-report.md).
  */
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, LinearTransition, useReducedMotion } from 'react-native-reanimated';
@@ -8,6 +9,7 @@ import Animated, { FadeInDown, LinearTransition, useReducedMotion } from 'react-
 import { colors, radii, spacing } from '@/theme';
 import { Button, GlassCard, Icon, Segmented, Tag, Text } from '@/ui';
 
+import { ReportAiButton } from '@/features/ai/ReportAiButton';
 import { ItemEditor, draftTotals, type DraftItem } from '@/features/meals/ItemEditor';
 import type { MealType } from '@/features/meals/types';
 import { MEAL_SINGULAR, MEAL_TYPES, formatNumber, round } from '@/features/meals/utils';
@@ -56,9 +58,10 @@ export function ScanReview({
       <GlassCard tone="strong">
         <View style={styles.eyebrowRow}>
           <Icon name="star" size={12} color={colors.cyan600} />
-          <Text variant="eyebrow" tone="subtle">
+          <Text variant="eyebrow" tone="subtle" style={styles.flex}>
             ÖRZA analysis
           </Text>
+          <ReportAiButton kind="scan" refId={scan.id} style={styles.report} />
         </View>
         <Text variant="h2" tone="ink" style={styles.dish} accessibilityRole="header">
           {scan.dish_name}
@@ -139,6 +142,9 @@ export function ScanReview({
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // On the eyebrow's line without making it taller: its 36 dp (48 with slop) reach into the card's padding and the
+  // space above the dish name.
+  report: { marginVertical: -10, marginRight: -spacing.sm },
   dish: { marginTop: spacing.sm },
   confRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
   note: {

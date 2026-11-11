@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 
 import { AiConsentHost } from '@/features/ai/AiConsentHost';
+import { AiReportHost } from '@/features/ai/AiReportSheet';
 import { AlarmPermissionPrompt } from '@/features/alarms/AlarmPermissionPrompt';
 import { useAlarmSync } from '@/lib/alarms/useAlarmSync';
 import { useHealthAutoSync } from '@/lib/health/sync';
@@ -27,6 +28,8 @@ export default function AppLayout() {
       <AlarmPermissionPrompt />
       {/* "Allow ÖRZA's AI features?" — the first time a member starts an AI feature (docs/notes/ai-consent.md). */}
       <AiConsentHost />
+      {/* "Report this reply" — the sheet behind every Report on ÖRZA's AI output (docs/notes/ai-report.md). */}
+      <AiReportHost />
     </>
   );
 }

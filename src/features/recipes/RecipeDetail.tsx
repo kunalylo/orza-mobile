@@ -1,9 +1,11 @@
-/** Full recipe body: tags, nutrition, ingredient checklist and numbered method. */
+/** Full recipe body: tags, nutrition, ingredient checklist and numbered method; Report on an AI recipe. */
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
+import { ReportAiButton } from '@/features/ai/ReportAiButton';
+import { canReportRecipe } from '@/lib/aiReport';
 import { colors, diagonal, gradients, radii, spacing } from '@/theme';
 import { Icon, PressableScale, Tag, Text } from '@/ui';
 
@@ -39,6 +41,7 @@ export function RecipeDetail({ recipe }: { recipe: Recipe }) {
   const reduce = useReducedMotion();
   const [checked, setChecked] = useState<Set<number>>(() => new Set());
   const tags = displayTags(recipe.tags);
+  const reportable = canReportRecipe(recipe);
   const rise = (d: number) => (reduce ? undefined : FadeInDown.delay(d).springify().damping(18).stiffness(100).mass(1));
 
   const toggle = (i: number) =>
@@ -52,9 +55,12 @@ export function RecipeDetail({ recipe }: { recipe: Recipe }) {
   return (
     <View>
       <Animated.View entering={rise(0)}>
-        <Text variant="eyebrow" tone="energy">
-          {recipe.source === 'ai' ? 'Created by ÖRZA AI' : "From ÖRZA's recipe collection"}
-        </Text>
+        <View style={[styles.eyebrowRow, reportable && styles.eyebrowReport]}>
+          <Text variant="eyebrow" tone="energy" style={styles.flex}>
+            {recipe.source === 'ai' ? 'Created by ÖRZA AI' : "From ÖRZA's recipe collection"}
+          </Text>
+          {reportable ? <ReportAiButton kind="recipe" refId={recipe.id} style={styles.report} /> : null}
+        </View>
         <Text variant="h1" style={styles.title} accessibilityRole="header">
           {recipe.title}
         </Text>
@@ -120,6 +126,11 @@ export function RecipeDetail({ recipe }: { recipe: Recipe }) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // An AI recipe's line holds Report (36 dp): 4 dp down, so its slop stays inside the scroll view (48 dp); the title
+  // stays about as far from the line's text as before.
+  eyebrowReport: { marginTop: spacing.xs, marginBottom: -spacing.sm },
+  report: { marginRight: -spacing.sm },
   title: { marginTop: spacing.sm },
   desc: { marginTop: spacing.sm },
   prompt: { marginTop: spacing.sm, fontStyle: 'italic' },

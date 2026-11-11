@@ -1,4 +1,7 @@
-/** Conversation pieces: user / assistant bubbles, the inline "Logged" meal card, typing dots and day separators. */
+/**
+ * Conversation pieces: user / assistant bubbles, the inline "Logged" meal card, typing dots, day separators and the
+ * reply's long-press options (Copy reply, Report this reply).
+ */
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -15,9 +18,12 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 
+import { ReportAiButton } from '@/features/ai/ReportAiButton';
+import { openAiReport } from '@/features/ai/report';
+import { REPORT_COPY, canReportChat, reportTitle } from '@/lib/aiReport';
 import { haptics } from '@/lib/haptics';
 import { colors, diagonal, gradients, radii, spacing } from '@/theme';
-import { Icon, PressableScale, Tag, Text, toast } from '@/ui';
+import { Icon, PressableScale, Sheet, Tag, Text, toast, type IconName } from '@/ui';
 
 import { MEAL_TYPE_LABEL, clockTime, formatNumber, grams, itemLabel, mealDateLabel } from './format';
 import { RichText } from './RichText';
@@ -95,27 +101,45 @@ export function UserBubble({ message, onRetry, onGetCredits }: { message: UIMess
   );
 }
 
-export function AssistantBubble({ message }: { message: UIMessage }) {
+export async function copyReply(content: string) {
+  try {
+    await Clipboard.setStringAsync(content);
+    haptics.soft();
+    toast.info('Reply copied');
+  } catch {
+    // clipboard unavailable — nothing to do
+  }
+}
+
+const COPY_ACTION = { name: 'copy', label: REPORT_COPY.copyReply };
+const REPORT_ACTION = { name: 'report', label: reportTitle('chat') };
+
+/**
+ * An ÖRZA reply. Long press: `onOptions` (Copy reply, Report this reply); without it, a plain copy. Screen readers get
+ * both as actions, and "Report" under the reply is its own stop.
+ */
+export function AssistantBubble({ message, onOptions }: { message: UIMessage; onOptions?: (m: UIMessage) => void }) {
   const reduce = useReducedMotion();
   const remembered = message.meta?.remembered ?? [];
-
-  async function copy() {
-    try {
-      await Clipboard.setStringAsync(message.content);
-      haptics.soft();
-      toast.info('Reply copied');
-    } catch {
-      // clipboard unavailable — nothing to do
-    }
-  }
+  const reportable = canReportChat(message);
 
   return (
     <Animated.View entering={message.fresh && !reduce ? ENTER_ASSISTANT : undefined} style={styles.assistantRow}>
       <Pressable
-        onLongPress={copy}
+        onLongPress={() => {
+          if (reportable && onOptions) {
+            haptics.soft();
+            onOptions(message);
+          } else void copyReply(message.content);
+        }}
         delayLongPress={350}
         style={[styles.bubble, styles.assistant]}
-        accessibilityHint="Long press to copy the reply"
+        accessibilityHint={reportable ? 'Long press to copy or report the reply' : 'Long press to copy the reply'}
+        accessibilityActions={reportable ? [COPY_ACTION, REPORT_ACTION] : [COPY_ACTION]}
+        onAccessibilityAction={(e) => {
+          if (e.nativeEvent.actionName === 'copy') void copyReply(message.content);
+          else if (e.nativeEvent.actionName === 'report' && reportable) openAiReport('chat', message.id);
+        }}
       >
         <OrzaLabel time={clockTime(message.created_at)} />
         <RichText text={message.content} />
@@ -145,7 +169,44 @@ export function AssistantBubble({ message }: { message: UIMessage }) {
           </Text>
         </View>
       ) : null}
+      {/* On every ÖRZA reply, the built-in coach's too: they look the same (Google Play: report AI output in the app). */}
+      {reportable ? <ReportAiButton kind="chat" refId={message.id} style={styles.report} /> : null}
     </Animated.View>
+  );
+}
+
+function OptionRow({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  return (
+    <PressableScale onPress={onPress} haptic="select" scaleTo={0.98} style={styles.option} accessibilityLabel={label}>
+      <Icon name={icon} size={18} color={colors.ink} />
+      <Text variant="callout" weight="medium" style={styles.optionText}>
+        {label}
+      </Text>
+    </PressableScale>
+  );
+}
+
+/** A long press on an ÖRZA reply. The parent opens the Report sheet once this one has gone (`onClosed`). */
+export function ReplyOptionsSheet({
+  visible,
+  onClose,
+  onCopy,
+  onReport,
+  onClosed,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onCopy: () => void;
+  onReport: () => void;
+  onClosed?: () => void;
+}) {
+  return (
+    <Sheet visible={visible} onClose={onClose} onClosed={onClosed} accessibilityLabel={REPORT_COPY.replyOptions}>
+      <View style={styles.options}>
+        <OptionRow icon="copy" label={REPORT_COPY.copyReply} onPress={onCopy} />
+        <OptionRow icon="mci:flag-outline" label={reportTitle('chat')} onPress={onReport} />
+      </View>
+    </Sheet>
   );
 }
 
@@ -263,6 +324,22 @@ const styles = StyleSheet.create({
   underline: { textDecorationLine: 'underline' },
   notice: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 6 },
   noticeText: { flexShrink: 1 },
+  // The flag lines up with the bubble's text; 4 dp under the bubble, so its slop stays off the bubble's long press.
+  report: { marginTop: spacing.xs, marginLeft: 6 },
+  options: { gap: spacing.sm },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 56,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.glassSubtle,
+  },
+  optionText: { flex: 1 },
   mealCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
