@@ -153,3 +153,20 @@ switch card, `22ac1c5`), `v1-health-steps.png` (switch card ON + "both ways" lin
 - Follow-ups (not done, outside the new screens): the app's other native switches are 46 x 27 dp too; the shared sheet
   close button and header icon buttons are 44 dp.
 - The local QA password slip above: consider changing qa4's local test password; `typepw.mjs` now guards against it.
+
+## V2 real phone (vivo V2544, Android 16)
+
+Date: 2026-11-11 (IST). Plan: `docs/notes/steps-v2.md` §8.2 / §10 V2. Phone: the user's own vivo V2544 (serial
+`10MG4JF1U40003S`, Android 16 / API 36, SDK extension 21 → `stepTracking`, hardware step counter, Health Connect built
+in). Build: a RELEASE-TYPE TEST BUILD as run 3, but arm64-v8a and `EXPO_PUBLIC_API_URL=http://127.0.0.1:3100` (the phone
+reaches the LOCAL server `E:\aylo\orza-localtest`, port 3100, through `adb reverse tcp:3100 tcp:3100`); the TEST-ONLY
+network security config in the generated `android/` only allows cleartext for `127.0.0.1` and `localhost` (no
+subdomains) and pins `vercel.app` + subdomains to a bogus pin. No AI calls; production never contacted. Local QA accounts
+for the phone: qa7 (first, Health Connect counting) and qa8 (second: A-5 START, A-4 member switch) — created through the
+local API and onboarded there (`test-accounts.json`; passwords never printed). Never qa4 on this phone (its medicines
+would ring real alarms).
+
+| Case | Result | Evidence |
+|---|---|---|
+| R-V2. Release-type test build + safety | PASS | `main` HEAD `24addbb`. The build copy already held an arm64 build of `8cc5230` (12:05, `gradle-build-v2.log`: `prebuild --clean` 11:47 with `.env.local` = only `EXPO_PUBLIC_API_URL=http://127.0.0.1:3100`, the test network config wired on `<application>`, BUILD SUCCESSFUL in 19m 18s); `8cc5230..24addbb` is docs only (`docs/PROGRESS.md`, `docs/notes/ai-report.md`), package files unchanged since `3e86e25` → no `npm ci`, no second prebuild (as R6). Build copy `checkout -- .` + detached at `24addbb`; incremental `assembleRelease -PreactNativeArchitectures=arm64-v8a --max-workers=2` (14:13) BUILD SUCCESSFUL in 1m, `:app:createBundleReleaseJsAndAssets` and `:expo-background-task:compileReleaseKotlin` UP-TO-DATE (the module still built from source, not the prebuilt AAR); APK `lib/arm64-v8a/` only, sha256 `6f7088cd…a2adf3`. `scripts/e2e/check-release-apk.sh 127.0.0.1:3100` (now takes the expected origin; default `10.0.2.2:3100`) → ok 1 (`networkSecurityConfig` → `0x7f150002` = `xml/d1_test_network_security`, `res/Cy.xml`), ok 4 (not debuggable), ok 2 (`[127.0.0.1,localhost cleartext=true no-pin][vercel.app+sub cleartext=false bogus-pin]`, no base-config), ok 3 (bundle has `http://127.0.0.1:3100` as the inlined API URL) → **SAFE**. The same APK against the default origin → FAIL 2 + FAIL 3 → STOP, as it should. **Script fix on the way:** check 3 used to pass for `10.0.2.2:3100` on ANY bundle — the dev-only config-error help text in `src/app/_layout.tsx` ("EXPO_PUBLIC_API_URL=http://10.0.2.2:3100") is in every bundle; an occurrence right after `EXPO_PUBLIC_API_URL=` no longer counts (the emulator runs 3–6 were still safe: their check 2 and the bogus pin held). The bundle's other origins: `https://orza-nine.vercel.app` (`config.ts`'s release default, unused when the URL is inlined; blocked by the pin anyway), `http://localhost:8081` (dev tooling). |
+| Install on the phone | BLOCKED (phone not connected) | From 14:12 to 14:23 `adb devices` listed nothing; Windows lists the phone's USB devices (`USB\VID_2D95&PID_6002\10MG4JF1U40003S`, "ADB Interface") as known but NOT present — the phone is unplugged (or the cable / USB mode gives no data link). Waited and polled (3 min after the build was ready, then again while writing this). Nothing was installed or run on the phone; no system setting changed (`svc power stayon` not set). |
