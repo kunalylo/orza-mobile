@@ -13,7 +13,6 @@
     "description": "ÖRZA — AI wellness that evolves with you: snap meals, chat naturally, medicine alarms with photos, goals and reports.",
     "ios": {
       "bundleIdentifier": "in.co.ylo.orza",
-      "buildNumber": "1",
       "supportsTablet": false,
       "icon": "./assets/images/icon.png",
       "config": {
@@ -85,7 +84,12 @@
           "resizeMode": "contain"
         }
       ],
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
       "expo-font",
       "expo-image",
       "expo-localization",
@@ -144,7 +148,7 @@
         "@kingstinct/react-native-healthkit",
         {
           "NSHealthShareUsageDescription": "ÖRZA reads your steps, sleep, resting heart rate and weight from Apple Health to fill in Today and your Health trends. Only daily totals are saved to your ÖRZA account. If you allow AI features, steps and weight also go with your Ask ÖRZA chats.",
-          "NSHealthUpdateUsageDescription": false,
+          "NSHealthUpdateUsageDescription": "ÖRZA doesn't save anything to Apple Health. If that ever changes, it will ask you first.",
           "background": true
         }
       ]
