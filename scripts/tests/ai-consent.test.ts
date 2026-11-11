@@ -334,7 +334,7 @@ describe('A5: copy', () => {
     const chatAndroid = consentCopy('snap', 'android').points[1].text;
     assert.ok(chatAndroid.endsWith(' Steps can come from Health Connect or this phone, and weight from Health Connect.'));
     assert.ok(!chatAndroid.includes('Apple'));
-    assert.equal(ios.points[2].text, 'Recipes and rebalance plans — what you ask for, with your first name, diet, allergies, region, goal and targets.');
+    assert.equal(ios.points[2].text, 'Recipes and rebalance plans — what you ask for or ate, with your diet, allergies and foods you avoid (including those you told Ask ÖRZA), region, goal and targets; recipes add your household setting and recent recipe titles, rebalance plans your first name.');
     assert.equal(ios.points[3].text, 'Prescription scans — the prescription photo and the allergies you listed.');
     // "Account’s" and "saved": a photo or a message can show anything (the prescription photo shows its medicines).
     assert.equal(ios.points[4].text, 'Never your account’s email, password or phone number, your saved medicines and alarms, or your sleep and heart rate.');
@@ -378,12 +378,12 @@ describe('A5: copy', () => {
     assert.equal(AI_TURN_OFF.title, 'Turn off AI features?');
     assert.equal(
       AI_TURN_OFF.body,
-      'Ask ÖRZA, Snap & Know, typed and spoken meals, recipes, rebalance plans and prescription scans stop in the app until you allow them again. Your meals, chats and plans stay.'
+      'Ask ÖRZA, Snap & Know, typed and spoken meals, recipes, rebalance plans and prescription scans stop in the app and on the website until you allow them again. Your meals, chats and plans stay.'
     );
     assert.equal(AI_TURN_OFF.confirm, 'Turn off');
     assert.equal(AI_TURN_OFF.cancel, 'Keep on');
     // "In the app": the website doesn't ask yet (ai-consent.md §11 Q1).
-    assert.equal(AI_TOASTS.off, 'AI features are off in the app. ÖRZA will ask before using them again.');
+    assert.equal(AI_TOASTS.off, 'AI features are off. ÖRZA will ask before using them again.');
     assert.equal(AI_TOASTS.on, 'AI features are on.');
   });
 });

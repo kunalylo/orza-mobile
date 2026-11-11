@@ -981,3 +981,16 @@ A grep of `web:src` for the six paths finds exactly six call sites, all through 
   https://support.google.com/googleplay/android-developer/answer/13985936
 - OpenAI API data controls (no training on API data by default; abuse-monitoring logs up to 30 days):
   https://developers.openai.com/api/docs/guides/your-data
+
+### 12.8 After the website review (2026-11-11, coordinator)
+- **Supersedes** §0.2, §3.2, §3.8 and §5 where they say website (cookie) requests are never refused: since §12.4 / web
+  `5eb4f7e` the server refuses AI requests without consent from **every** client (the website's 403 text: "Please reload the
+  page to allow ÖRZA's AI features.").
+- **§5 additions (website only):** `PUT /api/settings/ai-consent` takes an optional `user_id` (the account the page shows);
+  a mismatch answers **409 `account_changed`** and records nothing, and the page reloads (§12.2's "reload if the PUT answers
+  for another account" is replaced by this). The phone sends no `user_id` and is unchanged. Web `e1d9a5e`, check 86/86.
+- **Copy fixes (both repos):** the "Recipes and rebalance plans" point now matches what is sent — "what you ask for or ate,
+  with your diet, allergies and foods you avoid (including those you told Ask ÖRZA), region, goal and targets; recipes add
+  your household setting and recent recipe titles, rebalance plans your first name." The phone's turn-off confirm says "stop
+  in the app and on the website", and its toast is "AI features are off. ÖRZA will ask before using them again." (turning off
+  in the app now stops the website too).

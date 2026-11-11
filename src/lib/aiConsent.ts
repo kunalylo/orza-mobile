@@ -231,7 +231,7 @@ export function consentCopy(context: ConsentContext, platform: 'ios' | 'android'
         icon: 'chat',
         text: `Ask ÖRZA — your message and the chat so far, your first name and everything in your profile (including age, sex, weight, diet, allergies and health notes), your targets, what ÖRZA remembers, and today’s meals, water and steps. ${HEALTH_SOURCES[platform]}`,
       },
-      { icon: 'recipes', text: 'Recipes and rebalance plans — what you ask for, with your first name, diet, allergies, region, goal and targets.' },
+      { icon: 'recipes', text: 'Recipes and rebalance plans — what you ask for or ate, with your diet, allergies and foods you avoid (including those you told Ask ÖRZA), region, goal and targets; recipes add your household setting and recent recipe titles, rebalance plans your first name.' },
       { icon: 'rx', text: 'Prescription scans — the prescription photo and the allergies you listed.' },
       // The account's and the saved ones: a photo or a message can show anything (a prescription shows its medicines).
       { icon: 'never', text: 'Never your account’s email, password or phone number, your saved medicines and alarms, or your sleep and heart rate.' },
@@ -297,14 +297,14 @@ export function aiStatusLine(user: AiConsentUser | null | undefined): string | n
 export const AI_TURN_OFF = {
   button: 'Turn off AI features',
   title: 'Turn off AI features?',
-  body: 'Ask ÖRZA, Snap & Know, typed and spoken meals, recipes, rebalance plans and prescription scans stop in the app until you allow them again. Your meals, chats and plans stay.',
+  body: 'Ask ÖRZA, Snap & Know, typed and spoken meals, recipes, rebalance plans and prescription scans stop in the app and on the website until you allow them again. Your meals, chats and plans stay.',
   confirm: 'Turn off',
   cancel: 'Keep on',
 } as const;
 
 export const AI_TOASTS = {
   /** "In the app": the website doesn't ask yet (`docs/notes/ai-consent.md` §11 Q1). */
-  off: 'AI features are off in the app. ÖRZA will ask before using them again.',
+  off: 'AI features are off. ÖRZA will ask before using them again.',
   /** Allow from Settings only (the sheet's Allow just carries on with the action). */
   on: 'AI features are on.',
 } as const;
