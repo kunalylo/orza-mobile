@@ -853,3 +853,17 @@ batch 1" log entry); 3 is still open.
   501) → "Reporting isn’t available yet". No AI consent needed. `npm run test:report` 20; test:ai 32, test:steps 419,
   test:alarms 69, typecheck, lint. Code only: the device check (§8.4) is open; web `ai-report-backend` still waits for
   the user's OK to push, and the phone's new lines are in §5 for the user's review.
+- 2026-11-11: **Review of the AI report (phone 278aaec + web `ai-report-backend` 00de068) and the a11y polish (45eb6b0).**
+  Web: auth / own items only (404 otherwise), validation, both limits, replace-on-second-report, admin-only list and
+  switch, the allow-listed admin row, the Mongo and JSON stores and the website's Report read clean; no change. Phone:
+  the contract, old-server / offline / error lines and no double send hold. Fixed: four touch targets under 48 dp
+  because a view laid out later wins the touches in its bounds (a text too): Report on the Snap result (38 dp: the
+  dish name under it) and on the recipe screen (40: the title), the recipe card's Another / Close (46: the title) and
+  the stock switch with stock on (41.5: the fields' empty top). The heading now sits in a `pointerEvents="none"` view,
+  the fields are `box-none`; nothing moves, and the Snap "ÖRZA analysis" line is 14 dp again (Report had made it
+  16). Checks below.
+- 2026-11-11: TestFlight upload 1.0.0 (1) FAILED Apple processing: **ITMS-90683** missing `NSHealthUpdateUsageDescription`
+  (P10 confirmed — the HealthKit library references write APIs). Fixed `b4f92a6` (the §6 honest string; also no Face ID purpose
+  string — secure-store never uses biometrics; no `ios.buildNumber`). Build 2 from the iOS worktree = `8cc5230` + that fix
+  (`9b64238`, so TestFlight carries only reviewed code; the a11y polish + AI report join after their review), `--non-interactive`
+  reusing the stored credentials + ASC API key.
