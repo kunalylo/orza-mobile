@@ -820,3 +820,7 @@ batch 1" log entry); 3 is still open.
   chat/send), Not now kept the text, Allow → PUT + exactly one chat/send 200 (built-in reply), 0 OpenAI; qa1 reset to no consent.
   WAITING: the user's OK to push `ai-consent-web` live (the earlier question was cut off by a usage limit) — it also changes the
   privacy "You choose." sentence and makes every current website member see the dialog once.
+- 2026-11-11: USER OK'd the website ask + "Not now pauses the whole AI feature (fallbacks too)". Web `ai-consent-web` pushed:
+  main `159d57e` (deploy check next). AI consent is then complete on phone + website (one record, server refuses every client
+  without consent). Open for the user: real Android phone (V2), Apple Developer account (D2), Play Console, a production demo
+  account for reviewers (the user creates it), rotate shared secrets, super-admin password; optional OpenAI data-sharing check.
