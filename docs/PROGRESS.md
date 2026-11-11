@@ -838,3 +838,10 @@ batch 1" log entry); 3 is still open.
   **D3 RISK:** the Apple team is "Kunal Patil (Individual)" — App Review 5.1.1(ix) expects apps in regulated fields (healthcare,
   sensitive data) to be submitted by a legal entity → likely an Organization account (D-U-N-S) before the App Store submission.
   TestFlight internal testing is fine. Also: remove `ios.buildNumber` from app.json (ignored with remote versions).
+- 2026-11-11: **D2: first iOS build SUCCEEDED and was uploaded to App Store Connect** (EAS build 9f7e1cc5…, app id 6833346228,
+  App Store Connect name "ÖRZA", TestFlight group "Team (Expo)" with the user's Apple ID; submit reused FatafatDecor's ASC API key
+  2FQ446HR76). Next: Apple processing email (watch for ITMS-90683 etc.), then §8.3 I-1…I-6 with the user on TestFlight (production
+  backend, the user's own account). V2: the arm64 test build is ready + SAFE (`E:\aylo\orza-mobile-build\...\app-release.apk`,
+  sha256 6f7088cd…), but the phone disconnected (charge-only / unplugged) before install — resume `wf_eb3e63db-9c4` after the user
+  reconnects (data cable, File transfer, USB debugging, vivo "Install via USB"). `check-release-apk.sh` check 3 false positive fixed
+  (`6f84958`).
