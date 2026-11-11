@@ -813,3 +813,10 @@ batch 1" log entry); 3 is still open.
   11 Nov pushed LIVE (main `3829653`, user OK'd 2026-11-10). Running: the WEBSITE ask (`wf_59b0d066-b01`, branch `ai-consent-web`
   in `E:\aylo\orza-backend`, plan §12): same consent at first AI use on the web, then the server refuses AI without consent for
   every client. Its push needs the user's OK (and their review of the privacy sentence).
+- 2026-11-11: WEBSITE ask built + reviewed (`wf_59b0d066-b01`): web branch `ai-consent-web` = `5eb4f7e` + `e1d9a5e` (review: wrong-
+  account Allow → 409 `account_changed`, Back / navigation = Not now, focus return) + `159d57e` (recipes point matches what is
+  sent); phone copy `3e0d81c` (turning off says it stops the website too; recipes point), plan §12 + §12.8; mobile pushed.
+  Coordinator check on the local server (`orza-localtest-noai`, now at `159d57e`, ai_enabled:false): chat send → dialog first (no
+  chat/send), Not now kept the text, Allow → PUT + exactly one chat/send 200 (built-in reply), 0 OpenAI; qa1 reset to no consent.
+  WAITING: the user's OK to push `ai-consent-web` live (the earlier question was cut off by a usage limit) — it also changes the
+  privacy "You choose." sentence and makes every current website member see the dialog once.
