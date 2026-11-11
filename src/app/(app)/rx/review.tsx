@@ -272,6 +272,8 @@ export default function PrescriptionReview() {
             <Button label="Start over" variant="ghost" onPress={startOver} disabled={applying} />
             <Button
               label={`Create alarms${included.length ? ` (${included.length})` : ''}`}
+              // Beside "Start over" the count goes first on a narrow phone, then "alarms" with large text (TalkBack: the whole).
+              shortLabel={included.length ? ['Create alarms', 'Create'] : 'Create'}
               icon="bell"
               variant="energy"
               size="lg"

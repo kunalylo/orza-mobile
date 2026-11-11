@@ -29,7 +29,7 @@ export function DateNavigator({ date, today, onChange }: { date: string; today: 
           onPress={() => setPicking(true)}
           accessibilityRole="button"
           accessibilityLabel={`Choose a date. Showing ${label}`}
-          hitSlop={4}
+          hitSlop={{ top: 4, bottom: 4 }}
           style={({ pressed }) => [styles.labelBtn, pressed && styles.pressed]}
         >
           <Icon name="calendar" size={14} color={colors.coral} />
@@ -48,6 +48,7 @@ export function DateNavigator({ date, today, onChange }: { date: string; today: 
           disabled={atToday}
           onPress={() => go(addDays(date, 1))}
           haptic="none"
+          hitSlop={{ left: 0 }}
         />
       </View>
       {!atToday ? (

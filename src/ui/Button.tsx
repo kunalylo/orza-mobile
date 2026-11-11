@@ -1,10 +1,11 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { HapticKind } from '@/lib/haptics';
 import { colors, diagonal, gradients, radii, shadows } from '@/theme';
 
+import { fitLabel } from './fitLabel';
 import { Icon, type IconName } from './Icon';
 import { PressableScale } from './PressableScale';
 import { Text } from './Text';
@@ -14,6 +15,13 @@ export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export interface ButtonProps {
   label: string;
+  /**
+   * Shorter labels, longest first, for where `label` can't fit on one line (large text on a narrow phone): the button
+   * shows the longest that fits (the last if none does) and screen readers still hear `label`. Measured, per screen
+   * width and font scale (AC-10, steps-v2-V1 F2). Only for a button whose row sets its width (`block`, or flex in a
+   * row) and that keeps its size's padding.
+   */
+  shortLabel?: string | readonly string[];
   onPress?: () => void;
   variant?: ButtonVariant;
   size?: ButtonSize;
@@ -34,6 +42,7 @@ export interface ButtonProps {
 
 const heights: Record<ButtonSize, number> = { sm: 38, md: 48, lg: 56 };
 const paddings: Record<ButtonSize, number> = { sm: 14, md: 20, lg: 26 };
+const borders: Partial<Record<ButtonVariant, number>> = { secondary: StyleSheet.hairlineWidth * 2, heroOutline: 1 };
 
 const fg: Record<ButtonVariant, string> = {
   primary: colors.white,
@@ -51,6 +60,7 @@ const fg: Record<ButtonVariant, string> = {
  */
 export function Button({
   label,
+  shortLabel,
   onPress,
   variant = 'primary',
   size = 'md',
@@ -68,6 +78,20 @@ export function Button({
   const inactive = disabled || loading;
   const color = fg[variant];
   const iconSize = size === 'sm' ? 15 : 17;
+  // shortLabel: each label's row at its natural width (an invisible copy) against the room inside the button.
+  const labels = shortLabel == null ? null : [label, ...(typeof shortLabel === 'string' ? [shortLabel] : shortLabel)];
+  const [natural, setNatural] = useState<Record<string, number>>({});
+  const [width, setWidth] = useState(0);
+  const shown = labels ? fitLabel(labels, natural, width - 2 * (paddings[size] + (borders[variant] ?? 0))) : label;
+  const content = (text: string) => (
+    <>
+      {icon ? <Icon name={icon} size={iconSize} color={color} /> : null}
+      <Text variant={size === 'sm' ? 'label' : 'title'} color={color} numberOfLines={1} style={size === 'lg' ? styles.lgLabel : undefined}>
+        {text}
+      </Text>
+      {iconRight ? <Icon name={iconRight} size={iconSize} color={color} /> : null}
+    </>
+  );
 
   return (
     <PressableScale
@@ -83,6 +107,7 @@ export function Button({
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: !!inactive, busy: !!loading }}
       hitSlop={size === 'sm' ? 6 : 0}
+      onLayout={labels ? (e) => setWidth(e.nativeEvent.layout.width) : undefined}
       style={[
         styles.base,
         { height: heights[size], paddingHorizontal: paddings[size] },
@@ -95,13 +120,23 @@ export function Button({
       {variant === 'energy' && (
         <LinearGradient colors={gradients.energy} start={diagonal.start} end={diagonal.end} style={[StyleSheet.absoluteFill, styles.gradient]} />
       )}
-      <View style={[styles.row, loading && styles.hidden]}>
-        {icon ? <Icon name={icon} size={iconSize} color={color} /> : null}
-        <Text variant={size === 'sm' ? 'label' : 'title'} color={color} numberOfLines={1} style={size === 'lg' ? styles.lgLabel : undefined}>
-          {label}
-        </Text>
-        {iconRight ? <Icon name={iconRight} size={iconSize} color={color} /> : null}
-      </View>
+      <View style={[styles.row, loading && styles.hidden]}>{content(shown)}</View>
+      {labels ? (
+        <View style={styles.measure} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {labels.map((l) => (
+            <View
+              key={l}
+              style={styles.row}
+              onLayout={(e) => {
+                const w = e.nativeEvent.layout.width;
+                setNatural((m) => (m[l] === w ? m : { ...m, [l]: w }));
+              }}
+            >
+              {content(l)}
+            </View>
+          ))}
+        </View>
+      ) : null}
       {loading ? <ActivityIndicator style={StyleSheet.absoluteFill} color={color} /> : null}
     </PressableScale>
   );
@@ -131,4 +166,6 @@ const styles = StyleSheet.create({
   hidden: { opacity: 0 },
   disabled: { opacity: 0.45 },
   lgLabel: { fontSize: 17.5 },
+  // Wide enough that no label is cut: its rows measure at their natural width (shortLabel).
+  measure: { position: 'absolute', top: 0, left: 0, width: 1000, alignItems: 'flex-start', opacity: 0 },
 });

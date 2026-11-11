@@ -3,7 +3,7 @@
  * is added), dose, schedule and alarm times, plus "Add pill photo". Back to Medicines / Notification settings / Scan another.
  */
 import { router, useLocalSearchParams } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 
 import { useLocalToday, useMedsTimezone } from '@/features/meds/api';
@@ -14,6 +14,10 @@ import type { MedicationClient } from '@/features/meds/types';
 import { useCreatedMedications, usePrescription } from '@/features/rx/api';
 import { colors, radii, spacing } from '@/theme';
 import { Button, EnergyRing, GlassCard, Icon, Screen, ScreenHeader, Skeleton, Text } from '@/ui';
+
+/** "Scan another" at font scale 1 (icon, label, padding), dp: below that "Notifications" and "Scan another" stack
+ * instead of cutting a label (a narrow phone or large text, D1's pattern). */
+const LINK_BUTTON_MIN_WIDTH = 168;
 
 function CreatedRow({ med, today, index }: { med: MedicationClient; today: string; index: number }) {
   const times = med.as_needed ? [] : med.schedule.times;
@@ -76,6 +80,8 @@ export default function PrescriptionDone() {
   const failed = !loading && !medications.length && (rxQ.isError || query.isError);
   const count = medications.length || rxQ.data?.applied_medication_ids?.length || 0;
   const alarms = medications.filter((m) => !m.as_needed).length;
+  const { fontScale } = useWindowDimensions();
+  const half = [styles.half, { minWidth: LINK_BUTTON_MIN_WIDTH * fontScale }];
 
   const toMedicines = () => router.dismissTo('/medicines');
 
@@ -124,8 +130,8 @@ export default function PrescriptionDone() {
       <Animated.View entering={FadeInDown.delay(320).springify().damping(18).stiffness(100).mass(1)} style={styles.actions}>
         <Button label="See today's doses" iconRight="chevron-right" variant="primary" size="lg" block onPress={toMedicines} />
         <View style={styles.row}>
-          <Button label="Notifications" icon="bell" variant="secondary" onPress={() => router.push('/reminders')} style={styles.flex} />
-          <Button label="Scan another" icon="mci:line-scan" variant="ghost" onPress={() => router.dismissTo('/rx')} style={styles.flex} />
+          <Button label="Notifications" icon="bell" variant="secondary" onPress={() => router.push('/reminders')} style={half} />
+          <Button label="Scan another" icon="mci:line-scan" variant="ghost" onPress={() => router.dismissTo('/rx')} style={half} />
         </View>
       </Animated.View>
     </Screen>
@@ -156,5 +162,6 @@ const styles = StyleSheet.create({
   sos: { backgroundColor: colors.cyan50, borderColor: 'rgba(11,143,166,0.22)' },
   photoBtn: { alignSelf: 'flex-start' },
   actions: { marginTop: spacing.xxl, gap: spacing.sm },
-  row: { flexDirection: 'row', gap: spacing.sm },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  half: { flexGrow: 1, flexShrink: 1, flexBasis: 0 },
 });

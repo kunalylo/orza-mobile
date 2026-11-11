@@ -480,6 +480,8 @@ export default function Snap() {
         />
         <Button
           label={scanning ? 'Analysing your plate…' : `Analyse photo · ${scanCost} credits`}
+          // Cut on a narrow phone with large text: "Analyse photo" there (TalkBack still hears the cost).
+          shortLabel={scanning ? undefined : 'Analyse photo'}
           icon="maximize"
           variant="energy"
           size="lg"

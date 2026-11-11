@@ -79,8 +79,8 @@ export function RecipeResultCard({
             <Text variant="eyebrow" tone="energy" style={styles.flex}>
               {recipe.source === 'ai' ? 'Created by ÖRZA AI' : "From ÖRZA's recipe collection"}
             </Text>
-            <IconButton icon="rotate-cw" accessibilityLabel="Generate another with the same request" size={36} iconSize={16} onPress={onAnother} disabled={generating} />
-            <IconButton icon="x" accessibilityLabel="Close recipe" size={36} iconSize={16} onPress={onClose} />
+            <IconButton icon="rotate-cw" accessibilityLabel="Generate another with the same request" size={36} iconSize={16} onPress={onAnother} disabled={generating} hitSlop={{ right: 2 }} />
+            <IconButton icon="x" accessibilityLabel="Close recipe" size={36} iconSize={16} onPress={onClose} hitSlop={{ left: 2 }} />
           </View>
           <Text variant="h2" style={styles.resultTitle} accessibilityRole="header">
             {recipe.title}
@@ -132,6 +132,8 @@ export function RecipeResultCard({
           <View style={styles.actions}>
             <Button
               label="View full recipe"
+              // Beside Save the label is cut on a narrow phone or with large text: a shorter one there (TalkBack: the whole).
+              shortLabel={['Full recipe', 'View']}
               iconRight="arrow-right"
               variant="primary"
               style={styles.flex}

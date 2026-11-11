@@ -168,6 +168,8 @@ export function Composer({ value, onChange, onSend, busy, error, defaultVoiceLan
           disabled={!canSend}
           haptic="firm"
           style={styles.sendWrap}
+          // 40 dp + 4 = 48, as the mic: the field's 5 dp padding and the 4 dp gap hold the slop.
+          hitSlop={4}
           accessibilityRole="button"
           accessibilityLabel="Send message"
           accessibilityState={{ disabled: !canSend, busy }}

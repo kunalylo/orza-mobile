@@ -1,12 +1,12 @@
 /** Building blocks shared by the Settings hub and its sub-pages (and the More tab's account header). */
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Switch, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 
 import { haptics } from '@/lib/haptics';
 import { colors, diagonal, gradients, gutter, isIOS, radii, spacing } from '@/theme';
-import { Button, GlassCard, Icon, Text, type IconName } from '@/ui';
+import { Button, GlassCard, Icon, Switch, Text, type IconName } from '@/ui';
 
 /* ───────────────────────────── Avatar ───────────────────────────── */
 

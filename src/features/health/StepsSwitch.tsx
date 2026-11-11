@@ -12,7 +12,7 @@
  */
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Switch, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
 import { TINTS } from '@/features/settings/parts';
@@ -22,7 +22,7 @@ import { bothWaysLine, offSheet, switchView, type OffSheetCopy } from '@/lib/ste
 import type { CardAction } from '@/lib/steps/todayCard';
 import { useTodaySteps } from '@/lib/steps/useSteps';
 import { colors, isIOS, radii, spacing } from '@/theme';
-import { Button, GlassCard, Icon, Sheet, Text, toast } from '@/ui';
+import { Button, GlassCard, Icon, Sheet, Switch, switchBoxStyle, Text, toast } from '@/ui';
 
 const TITLE = 'Count steps automatically';
 
@@ -121,14 +121,14 @@ function actionIcon(a: CardAction) {
 }
 
 /**
- * The switch itself (a spinner while an answer is on its way). Android's native switch measures about 46 × 27 dp and
- * takes touches only inside its own bounds (no hit slop for native views), so it is laid out at least 48 × 48 dp — the
- * track stays centred and the whole box toggles.
+ * The switch itself (a spinner while an answer is on its way): the app's switch with its whole 48 × 48 dp box laid out
+ * (`fit="box"`, `ui/Switch`) — the track stays centred and the whole box toggles.
  */
 function Toggle({ value, enabled, waiting, hint, onChange }: { value: boolean; enabled: boolean; waiting: boolean; hint: string; onChange: (v: boolean) => void }) {
-  if (waiting) return <ActivityIndicator size="small" color={colors.coral} accessibilityLabel="Working" style={isIOS ? undefined : styles.toggleBox} />;
+  if (waiting) return <ActivityIndicator size="small" color={colors.coral} accessibilityLabel="Working" style={switchBoxStyle} />;
   return (
     <Switch
+      fit="box"
       value={value}
       onValueChange={(v) => {
         haptics.select();
@@ -140,7 +140,6 @@ function Toggle({ value, enabled, waiting, hint, onChange }: { value: boolean; e
       trackColor={{ false: 'rgba(20,20,20,0.16)', true: colors.coral }}
       thumbColor={isIOS ? undefined : value ? colors.white : '#F4F1EC'}
       ios_backgroundColor="rgba(20,20,20,0.16)"
-      style={isIOS ? undefined : styles.toggleBox}
     />
   );
 }
@@ -328,7 +327,6 @@ const FOOTER_BUTTON_MIN_WIDTH = 156;
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
-  toggleBox: { minWidth: 48, minHeight: 48 },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   disc: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   discOn: { backgroundColor: colors.energyBg },

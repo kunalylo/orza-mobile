@@ -14,6 +14,7 @@ export function PromptChip({
   disabled,
   hint,
   compact,
+  slop = GRID_SLOP,
 }: {
   label: string;
   icon: IconName;
@@ -21,6 +22,8 @@ export function PromptChip({
   disabled?: boolean;
   hint?: string;
   compact?: boolean;
+  /** Vertical hit slop, dp. */
+  slop?: number;
 }) {
   return (
     <PressableScale
@@ -32,6 +35,7 @@ export function PromptChip({
       accessibilityLabel={label}
       accessibilityHint={hint}
       accessibilityState={{ disabled: !!disabled }}
+      hitSlop={{ top: slop, bottom: slop }}
       style={[styles.chip, compact && styles.chipCompact, disabled && styles.disabled]}
     >
       <Icon name={icon} size={compact ? 13 : 14} color={colors.cyan600} />
@@ -41,6 +45,13 @@ export function PromptChip({
     </PressableScale>
   );
 }
+
+/**
+ * Touch targets: in the welcome screen's wrapping rows (8 dp apart) a chip's slop stops at half the gap — 40 dp chips
+ * reach 48, compact ones (34) 42. The strip is one row: its chips reach 48 (the strip's padding holds the slop).
+ */
+const GRID_SLOP = spacing.sm / 2;
+const STRIP_SLOP = 7;
 
 /** Horizontal quick-action strip shown above the composer once a conversation has started. */
 export function QuickActionStrip({ onAction, busy }: { onAction: (a: QuickAction) => void; busy: boolean }) {
@@ -57,6 +68,7 @@ export function QuickActionStrip({ onAction, busy }: { onAction: (a: QuickAction
         <PromptChip
           key={a.label}
           compact
+          slop={STRIP_SLOP}
           label={a.label}
           icon={a.icon}
           disabled={busy && !!a.prompt}
@@ -176,6 +188,8 @@ const styles = StyleSheet.create({
   chipCompact: { minHeight: 34, paddingHorizontal: 12, paddingVertical: 6, gap: 6 },
   chipText: { flexShrink: 1 },
   disabled: { opacity: 0.5 },
-  stripWrap: { flexGrow: 0, marginHorizontal: -spacing.lg },
-  strip: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  // The scroll view clips touches at its edges: 7 dp of top padding (pulled back by the margin, into the footer's own
+  // padding) holds the chips' slop, so nothing moves.
+  stripWrap: { flexGrow: 0, marginHorizontal: -spacing.lg, marginTop: -STRIP_SLOP },
+  strip: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: STRIP_SLOP, paddingBottom: spacing.sm },
 });

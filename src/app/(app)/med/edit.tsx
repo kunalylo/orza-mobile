@@ -6,7 +6,7 @@
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Alert, StyleSheet, Switch, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 
 import { useLocalToday, useMedication, useMedicationPhotos, useMedications, useMedsTimezone, useSaveMedication } from '@/features/meds/api';
@@ -29,7 +29,7 @@ import { ApiError, errorMessage, validationField } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
 import type { PhotoSource } from '@/lib/image';
 import { colors, radii, spacing } from '@/theme';
-import { Button, Chip, EmptyState, GlassCard, Icon, Screen, ScreenHeader, Skeleton, Text, TextField, toast } from '@/ui';
+import { Button, Chip, EmptyState, GlassCard, Icon, Screen, ScreenHeader, Skeleton, Switch, switchRowSlack, Text, TextField, toast } from '@/ui';
 
 interface Draft {
   name: string;
@@ -391,7 +391,17 @@ export default function EditMedicine() {
       footer={
         <View style={styles.footer}>
           <Button label="Cancel" variant="ghost" onPress={() => navigation.goBack()} disabled={saving} />
-          <Button label={saveLabel} variant="primary" icon={editing ? 'check' : 'bell'} loading={saving} disabled={photoBusy} onPress={submit} style={styles.flex} />
+          {/* Beside Cancel the label is cut on a narrow phone with large text: "Save" / "Add" there (TalkBack: the whole). */}
+          <Button
+            label={saveLabel}
+            shortLabel={editing ? 'Save' : 'Add'}
+            variant="primary"
+            icon={editing ? 'check' : 'bell'}
+            loading={saving}
+            disabled={photoBusy}
+            onPress={submit}
+            style={styles.flex}
+          />
         </View>
       }
     >
@@ -644,7 +654,8 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   suggestions: { marginTop: spacing.sm },
   fieldError: { marginTop: spacing.sm },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xs },
+  // No padding around the switch: the slack holds its 48 dp box (`ui/Switch`).
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, ...switchRowSlack({ bottom: spacing.xs }) },
   row2: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   multiline: { minHeight: 88, paddingTop: 14 },
   skeletons: { gap: spacing.lg },

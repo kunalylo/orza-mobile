@@ -2,7 +2,7 @@
  * Medicine photos: "Take photo" / "Choose from gallery", a preview grid with remove + "show on alarm".
  * The first photo is the one alarms and notifications show.
  */
-import { ActivityIndicator, Alert, Linking, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 
 import { pickPhotos, PhotoError, PhotoPermissionError, toUploadDataUrl, type PhotoSource } from '@/lib/image';
@@ -10,6 +10,10 @@ import { colors, radii, spacing } from '@/theme';
 import { Button, IconButton, Text, toast, useLayoutTransition } from '@/ui';
 
 import { MedPhoto } from './MedPhoto';
+
+/** "From gallery" as an sm button at font scale 1 (icon, label, padding, border), dp: below that the two add buttons
+ * stack instead of cutting a label (a narrow phone or large text, D1's pattern). */
+const ADD_BUTTON_MIN_WIDTH = 131;
 
 export interface PhotoItem {
   id: string;
@@ -86,6 +90,8 @@ export function PhotoGrid({
 }) {
   const layoutTransition = useLayoutTransition();
   const full = items.length >= max;
+  const { fontScale } = useWindowDimensions();
+  const half = [styles.half, { minWidth: ADD_BUTTON_MIN_WIDTH * fontScale }];
 
   return (
     <View style={styles.wrap}>
@@ -137,8 +143,8 @@ export function PhotoGrid({
 
       {!full ? (
         <View style={styles.buttons}>
-          <Button label="Take photo" icon="camera" variant="secondary" size="sm" disabled={busy} onPress={() => onAdd('camera')} style={styles.flex} />
-          <Button label="From gallery" icon="image" variant="secondary" size="sm" disabled={busy} onPress={() => onAdd('library')} style={styles.flex} accessibilityLabel="Choose from gallery" />
+          <Button label="Take photo" icon="camera" variant="secondary" size="sm" disabled={busy} onPress={() => onAdd('camera')} style={half} />
+          <Button label="From gallery" icon="image" variant="secondary" size="sm" disabled={busy} onPress={() => onAdd('library')} style={half} accessibilityLabel="Choose from gallery" />
         </View>
       ) : null}
       <Text variant="caption" tone="subtle">
@@ -149,7 +155,6 @@ export function PhotoGrid({
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   wrap: { gap: spacing.md },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   tile: { width: '31.5%', aspectRatio: 1, borderRadius: radii.sm, overflow: 'hidden' },
@@ -166,5 +171,6 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 10, lineHeight: 14 },
   star: { position: 'absolute', left: 6, top: 6 },
   remove: { position: 'absolute', right: 6, top: 6 },
-  buttons: { flexDirection: 'row', gap: spacing.sm },
+  buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  half: { flexGrow: 1, flexShrink: 1, flexBasis: 0 },
 });

@@ -125,8 +125,8 @@ function MealCard({ meal, tz, onEdit, onDelete }: { meal: Meal; tz?: string; onE
           <Text variant="mono" tone="muted" style={[styles.flex, styles.footerText]} numberOfLines={2}>
             P {t.protein_g}g · C {t.carbs_g}g · F {t.fat_g}g · Fibre {t.fiber_g}g
           </Text>
-          <IconButton icon="edit-3" variant="plain" size={36} iconSize={16} color={colors.muted} accessibilityLabel="Edit meal" onPress={() => onEdit(meal)} />
-          <IconButton icon="trash-2" variant="plain" size={36} iconSize={16} color={colors.muted} accessibilityLabel="Delete meal" onPress={askDelete} haptic="none" />
+          <IconButton icon="edit-3" variant="plain" size={36} iconSize={16} color={colors.muted} accessibilityLabel="Edit meal" onPress={() => onEdit(meal)} hitSlop={{ right: 1 }} />
+          <IconButton icon="trash-2" variant="plain" size={36} iconSize={16} color={colors.muted} accessibilityLabel="Delete meal" onPress={askDelete} haptic="none" hitSlop={{ left: 1 }} />
         </View>
       </GlassCard>
     </ReanimatedSwipeable>

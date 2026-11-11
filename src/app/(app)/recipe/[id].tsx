@@ -1,7 +1,7 @@
 /** One recipe: ingredients checklist, method, nutrition — save / unsave, log a serving, delete. */
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, RefreshControl, StyleSheet, View } from 'react-native';
+import { Alert, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { useDeleteRecipe, useLogServing, useRecipe, useToggleSave } from '@/features/recipes/api';
 import { RecipeDetail } from '@/features/recipes/RecipeDetail';
@@ -9,6 +9,10 @@ import { ApiError, errorMessage } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
 import { colors, spacing } from '@/theme';
 import { Button, EmptyState, IconButton, Screen, Skeleton, Text, goBackOrHome, toast } from '@/ui';
+
+/** "Log 1 serving" at font scale 1 (icon, label, padding), dp: below that the footer's two buttons stack instead of
+ * cutting a label (a narrow phone or large text, D1's pattern). */
+const FOOTER_BUTTON_MIN_WIDTH = 167;
 
 function DetailSkeleton() {
   return (
@@ -32,6 +36,8 @@ export default function RecipeScreen() {
   const del = useDeleteRecipe();
   const [refreshing, setRefreshing] = useState(false);
   const recipe = q.data;
+  const { fontScale } = useWindowDimensions();
+  const half = [styles.half, { minWidth: FOOTER_BUTTON_MIN_WIDTH * fontScale }];
 
   async function refresh() {
     setRefreshing(true);
@@ -146,10 +152,10 @@ export default function RecipeScreen() {
             loading={save.isPending}
             haptic="soft"
             onPress={toggleSave}
-            style={styles.flex}
+            style={half}
             accessibilityLabel={recipe.saved ? 'Saved — tap to remove from saved' : 'Save recipe'}
           />
-          <Button label="Log 1 serving" icon="plus" variant="energy" loading={log.isPending} haptic="firm" onPress={logServing} style={styles.flex} />
+          <Button label="Log 1 serving" icon="plus" variant="energy" loading={log.isPending} haptic="firm" onPress={logServing} style={half} />
         </View>
       }
     >
@@ -163,13 +169,13 @@ export default function RecipeScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: spacing.sm, paddingBottom: spacing.md },
   center: { flex: 1, justifyContent: 'center' },
   skeleton: { gap: spacing.md, paddingTop: spacing.sm },
   gap: { marginTop: spacing.md },
   footer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     paddingHorizontal: 20,
     paddingTop: spacing.md,
@@ -178,6 +184,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.hairline,
     backgroundColor: 'rgba(251,247,241,0.94)',
   },
+  half: { flexGrow: 1, flexShrink: 1, flexBasis: 0 },
   delete: { alignSelf: 'center', marginTop: spacing.xxl },
   note: { marginTop: spacing.md, paddingHorizontal: spacing.lg },
 });

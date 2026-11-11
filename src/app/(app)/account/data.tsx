@@ -6,7 +6,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 
 import { exportMyData, formatBytes, useDeleteAccount, type ExportResult } from '@/features/settings/api';
@@ -18,6 +18,10 @@ import { haptics } from '@/lib/haptics';
 import { colors, radii, spacing } from '@/theme';
 import { Button, GlassCard, Icon, Screen, ScreenHeader, Sheet, Text, TextField, toast } from '@/ui';
 
+/** "Delete forever" at font scale 1 (icon, label, padding), dp: below that the sheet's two buttons stack instead of
+ * cutting a label (a narrow phone or large text, D1's pattern). */
+const SHEET_BUTTON_MIN_WIDTH = 178;
+
 function DeleteAccountSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { signOut } = useAuth();
   const del = useDeleteAccount();
@@ -25,6 +29,8 @@ function DeleteAccountSheet({ visible, onClose }: { visible: boolean; onClose: (
   const [error, setError] = useState<string | null>(null);
   const deleting = del.isPending || del.isSuccess;
   const ready = typed.trim() === DELETE_WORD;
+  const { fontScale } = useWindowDimensions();
+  const half = [styles.half, { minWidth: SHEET_BUTTON_MIN_WIDTH * fontScale }];
 
   const close = () => {
     if (deleting) return;
@@ -59,8 +65,8 @@ function DeleteAccountSheet({ visible, onClose }: { visible: boolean; onClose: (
       title="Delete your account?"
       footer={
         <View style={styles.sheetFooter}>
-          <Button label="Keep my account" variant="ghost" onPress={close} disabled={deleting} style={styles.flex} />
-          <Button label="Delete forever" variant="danger" icon="trash-2" onPress={submit} loading={deleting} disabled={!ready} style={styles.flex} />
+          <Button label="Keep my account" variant="ghost" onPress={close} disabled={deleting} style={half} />
+          <Button label="Delete forever" variant="danger" icon="trash-2" onPress={submit} loading={deleting} disabled={!ready} style={half} />
         </View>
       }
     >
@@ -266,7 +272,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(176,44,44,0.22)',
     backgroundColor: 'rgba(253,236,236,0.6)',
   },
-  sheetFooter: { flexDirection: 'row', gap: spacing.sm },
+  sheetFooter: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  half: { flexGrow: 1, flexShrink: 1, flexBasis: 0 },
   deleteList: {
     marginTop: spacing.lg,
     gap: spacing.sm,

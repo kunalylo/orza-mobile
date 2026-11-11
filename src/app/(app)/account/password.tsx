@@ -158,7 +158,8 @@ export default function PasswordSettings() {
                 />
               </Animated.View>
             ) : null}
-            <Button label="Update password" variant="energy" icon="key" block loading={saving} disabled={!dirty} onPress={submit} style={styles.flex} />
+            {/* Beside Clear the label is cut on a narrow phone with large text: "Update" there (TalkBack: the whole). */}
+            <Button label="Update password" shortLabel="Update" variant="energy" icon="key" block loading={saving} disabled={!dirty} onPress={submit} style={styles.flex} />
           </View>
         </View>
       }

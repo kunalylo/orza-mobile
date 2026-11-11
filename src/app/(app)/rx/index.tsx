@@ -7,7 +7,7 @@
 import { router, useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 
 import { ensureAiConsent, onAiRefusal, useAiDeclined } from '@/features/ai/consent';
@@ -35,6 +35,10 @@ const TIPS = [
   'One prescription per photo. Scan each page separately.',
 ];
 
+/** "Take photo" as an lg button at font scale 1 (icon, label, padding, border), dp: below that "Take photo" and "Upload"
+ * stack instead of cutting the label (a narrow phone or large text, D1's pattern). */
+const PHOTO_BUTTON_MIN_WIDTH = 168;
+
 export default function PrescriptionScan() {
   const layoutTransition = useLayoutTransition();
   const user = useSignedInUser();
@@ -47,6 +51,8 @@ export default function PrescriptionScan() {
   const history = usePrescriptions();
   const scan = useScanPrescription();
   const navigation = useNavigation();
+  const { fontScale } = useWindowDimensions();
+  const half = [styles.half, { minWidth: PHOTO_BUTTON_MIN_WIDTH * fontScale }];
 
   const [photo, setPhoto] = useState<RxPhoto | null>(null);
   const [preparing, setPreparing] = useState(false);
@@ -210,6 +216,7 @@ export default function PrescriptionScan() {
               <View style={styles.actions}>
                 <Button
                   label={`Read prescription · ${cost} credits`}
+                  shortLabel="Read prescription"
                   icon="mci:line-scan"
                   variant="energy"
                   size="lg"
@@ -228,7 +235,7 @@ export default function PrescriptionScan() {
                 </Text>
               </View>
             ) : (
-              <View style={styles.row}>
+              <View style={styles.pair}>
                 <Button
                   label="Take photo"
                   icon="camera"
@@ -237,21 +244,23 @@ export default function PrescriptionScan() {
                   loading={preparing}
                   disabled={busy}
                   onPress={() => void choose('camera')}
-                  style={styles.flex}
+                  style={half}
                 />
-                <Button label="Upload" icon="image" variant="secondary" size="lg" disabled={busy} onPress={() => void choose('library')} style={styles.flex} />
+                <Button label="Upload" icon="image" variant="secondary" size="lg" disabled={busy} onPress={() => void choose('library')} style={half} />
               </View>
             )}
 
             <Button
               label={aiOff ? (photo ? 'Type the medicines' : 'Type the medicines instead') : 'Prefer typing? Enter medicines manually'}
+              // Cut on a narrow phone with large text (AC-10): the shorter label there, TalkBack still hears the whole one.
+              // Block, so the row sets its width (the ghost pill has no background: it looks as when it hugged its label).
+              shortLabel={aiOff ? (photo ? undefined : 'Type the medicines') : 'Enter medicines manually'}
               icon="edit-3"
               variant={aiOff ? 'primary' : 'ghost'}
               size={aiOff ? 'lg' : 'sm'}
-              block={aiOff}
+              block
               onPress={typeInstead}
               disabled={scanning}
-              style={aiOff ? undefined : styles.manual}
             />
           </Animated.View>
         </GlassCard>
@@ -328,7 +337,8 @@ const styles = StyleSheet.create({
   },
   actions: { gap: spacing.sm },
   row: { flexDirection: 'row', gap: spacing.sm },
-  manual: { alignSelf: 'center' },
+  pair: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  half: { flexGrow: 1, flexShrink: 1, flexBasis: 0 },
   tipHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
   tip: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', marginBottom: spacing.sm },
   bullet: { width: 5, height: 5, borderRadius: 3, marginTop: 8, backgroundColor: colors.coral },

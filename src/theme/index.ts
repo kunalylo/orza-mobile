@@ -188,8 +188,8 @@ export const layout = {
   tabBarHeight: 64,
   tabBarGap: 10,
   snapSize: 62,
-  /** Comfortable touch target. */
-  hit: 44,
+  /** Minimum touch target (Android's 48 dp; Apple's is 44 pt): small controls reach it with hit slop. */
+  hit: 48,
   maxContentWidth: 560,
 } as const;
 

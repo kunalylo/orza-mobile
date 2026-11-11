@@ -144,6 +144,7 @@ export function ScheduleEditor({ value, onChange, today, error }: { value: Sched
                   accessibilityLabel={`Remove alarm time ${i + 1}`}
                   disabled={d.times.length <= 1}
                   onPress={() => set({ times: d.times.filter((_, j) => j !== i) })}
+                  hitSlop={{ left: 0 }}
                 />
               </Animated.View>
             ))}

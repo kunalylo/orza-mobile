@@ -110,8 +110,8 @@ export function ReviewRowCard({
           ) : null}
         </PressableScale>
         <View style={styles.side}>
-          <IconButton icon="edit-3" variant="plain" size={36} iconSize={16} accessibilityLabel={`Edit ${name}`} onPress={onEdit} />
-          <IconButton icon="trash-2" variant="plain" size={36} iconSize={16} color={colors.muted} accessibilityLabel={`Remove ${name} from the list`} onPress={onRemove} haptic="soft" />
+          <IconButton icon="edit-3" variant="plain" size={36} iconSize={16} accessibilityLabel={`Edit ${name}`} onPress={onEdit} hitSlop={{ bottom: 0 }} />
+          <IconButton icon="trash-2" variant="plain" size={36} iconSize={16} color={colors.muted} accessibilityLabel={`Remove ${name} from the list`} onPress={onRemove} haptic="soft" hitSlop={{ top: 0 }} />
         </View>
       </View>
 

@@ -3,7 +3,7 @@
  * balance server-side) and they top the account up. 429 `rate_limited` after 3 requests in 24 hours.
  */
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { formatNumber } from '@/features/goals/math';
 import { ApiError, errorMessage } from '@/lib/api';
@@ -14,12 +14,18 @@ import { Button, Icon, Sheet, Text, TextField, toast } from '@/ui';
 import { useRequestCredits } from './api';
 import { CREDIT_REQUEST_MESSAGE_MAX as MAX } from './options';
 
+/** "Cancel" and "Send request" at font scale 1 (icon, label, padding), dp: below that they stack instead of cutting a
+ * label (a narrow phone or large text, D1's pattern); otherwise one third / two thirds as before. */
+const CANCEL_MIN_WIDTH = 94;
+const SEND_MIN_WIDTH = 168;
+
 export function RequestCreditsSheet({ visible, onClose, email, credits }: { visible: boolean; onClose: () => void; email: string; credits: number }) {
   const send = useRequestCredits();
   const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [fieldErr, setFieldErr] = useState<string | null>(null);
   const [wasVisible, setWasVisible] = useState(visible);
+  const { fontScale } = useWindowDimensions();
   if (visible !== wasVisible) {
     setWasVisible(visible);
     if (visible) {
@@ -55,8 +61,16 @@ export function RequestCreditsSheet({ visible, onClose, email, credits }: { visi
       title="Request more credits"
       footer={
         <View style={styles.footer}>
-          <Button label="Cancel" variant="ghost" onPress={onClose} disabled={send.isPending} style={styles.flex} />
-          <Button label="Send request" icon="send" variant="primary" loading={send.isPending} onPress={submit} style={styles.send} haptic="none" />
+          <Button label="Cancel" variant="ghost" onPress={onClose} disabled={send.isPending} style={[styles.cancel, { minWidth: CANCEL_MIN_WIDTH * fontScale }]} />
+          <Button
+            label="Send request"
+            icon="send"
+            variant="primary"
+            loading={send.isPending}
+            onPress={submit}
+            style={[styles.send, { minWidth: SEND_MIN_WIDTH * fontScale }]}
+            haptic="none"
+          />
         </View>
       }
     >
@@ -121,8 +135,9 @@ export function RequestCreditsSheet({ visible, onClose, email, credits }: { visi
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  footer: { flexDirection: 'row', gap: spacing.sm },
-  send: { flex: 2 },
+  footer: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  cancel: { flexGrow: 1, flexShrink: 1, flexBasis: 0 },
+  send: { flexGrow: 2, flexShrink: 1, flexBasis: 0 },
   box: {
     flexDirection: 'row',
     alignItems: 'center',

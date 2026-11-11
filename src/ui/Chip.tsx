@@ -20,6 +20,12 @@ export interface ChipProps {
   style?: StyleProp<ViewStyle>;
 }
 
+/**
+ * Vertical hit slop: md (42 dp) reaches 48 dp; sm (32 dp) stops at 40 — chips wrap in rows 8 dp apart, so more would
+ * take the next row's edge (`docs/notes/a11y-polish.md`).
+ */
+const CHIP_SLOP = { md: { top: 3, bottom: 3 }, sm: { top: 4, bottom: 4 } };
+
 /** Selectable pill — quick replies, filters, multi-select. */
 export function Chip({ label, onPress, selected, icon, disabled, role = 'button', size = 'md', tone = 'light', accessibilityHint, style }: ChipProps) {
   const hero = tone === 'hero';
@@ -34,6 +40,7 @@ export function Chip({ label, onPress, selected, icon, disabled, role = 'button'
       accessibilityLabel={label}
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: !!disabled, selected: role === 'button' ? !!selected : undefined, checked: role !== 'button' ? !!selected : undefined }}
+      hitSlop={size === 'sm' ? CHIP_SLOP.sm : CHIP_SLOP.md}
       style={[
         styles.chip,
         size === 'sm' ? styles.sm : styles.md,

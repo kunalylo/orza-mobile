@@ -5,7 +5,7 @@
  * back all ask "Discard changes?" first.
  */
 import { useRef, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, View, type TextInput } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View, type TextInput } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { TimePickerSheet } from '@/features/meds/PickerSheets';
@@ -13,7 +13,7 @@ import { activeQuickPattern, nextTime, QUICK_PATTERNS } from '@/features/meds/sc
 import { formatTime12, isHHMM, TIMING_OPTIONS } from '@/features/meds/shared';
 import { haptics } from '@/lib/haptics';
 import { colors, fonts, radii, spacing } from '@/theme';
-import { Button, Chip, Icon, PressableScale, Sheet, Text, TextField, useLayoutTransition } from '@/ui';
+import { Button, Chip, Icon, PressableScale, Sheet, Switch, switchRowSlack, Text, TextField, useLayoutTransition } from '@/ui';
 
 import { MAX_ROW_TIMES, rowProblem } from './rows';
 import type { ReviewRow } from './types';
@@ -172,7 +172,8 @@ export function RowEditorSheet({
       footer={
         <View style={styles.footer}>
           <Button label="Cancel" variant="ghost" size="lg" onPress={cancel} />
-          <Button label={isNew ? 'Add medicine' : 'Save'} icon="check" variant="primary" size="lg" onPress={save} style={styles.flex} />
+          {/* "Add medicine" is cut beside Cancel on a narrow phone with large text: "Add" there (TalkBack: the whole). */}
+          <Button label={isNew ? 'Add medicine' : 'Save'} shortLabel={isNew ? 'Add' : undefined} icon="check" variant="primary" size="lg" onPress={save} style={styles.flex} />
         </View>
       }
     >
@@ -377,7 +378,8 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderColor: colors.hairlineStrong,
   },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg },
+  // No padding around the switch: the slack holds its 48 dp box (`ui/Switch`).
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, ...switchRowSlack({ top: spacing.lg }) },
   wrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   days: { marginTop: spacing.xl },
   error: { marginTop: spacing.md },

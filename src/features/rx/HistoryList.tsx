@@ -154,6 +154,8 @@ function DetailSheet({ p, year, tz, onClose }: { p: PrescriptionClient | null; y
           />
           <Button
             label={applied ? 'See medicines' : 'Review & create alarms'}
+            // Beside Delete the label is cut on a narrow phone or with large text: a shorter one there (TalkBack: the whole).
+            shortLabel={applied ? 'Medicines' : ['Create alarms', 'Review']}
             icon={applied ? 'mci:pill' : 'bell'}
             variant={applied ? 'secondary' : 'energy'}
             onPress={open}

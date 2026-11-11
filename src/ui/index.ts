@@ -16,6 +16,7 @@ export { Segmented, type SegmentedOption, type SegmentedProps } from './Segmente
 export { Sheet, useSheetScroll, type SheetProps, type SheetScroll } from './Sheet';
 export { useSheetOwnsKeyboard } from './sheetKeyboard';
 export { Skeleton, SkeletonText, type SkeletonProps } from './Skeleton';
+export { Switch, switchBoxStyle, switchRowSlack, type SwitchProps } from './Switch';
 export { Text, type TextProps, type TextTone } from './Text';
 export { TextField, type TextFieldProps } from './TextField';
 export { ToastHost, toast, type ToastKind } from './Toast';

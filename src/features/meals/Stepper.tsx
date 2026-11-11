@@ -94,7 +94,7 @@ export function Stepper({
         maxFontSizeMultiplier={1.3}
         style={[styles.input, compact && styles.inputCompact]}
       />
-      <IconButton icon="plus" variant="plain" size={size} iconSize={15} accessibilityLabel={`More ${label.toLowerCase()}`} disabled={value >= max} onPress={() => bump(1)} haptic="none" />
+      <IconButton icon="plus" variant="plain" size={size} iconSize={15} accessibilityLabel={`More ${label.toLowerCase()}`} disabled={value >= max} onPress={() => bump(1)} haptic="none" hitSlop={{ left: 0 }} />
     </View>
   );
 }

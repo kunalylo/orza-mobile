@@ -3,12 +3,12 @@
  * (icon + mono eyebrow + Playfair title + optional right slot), a labelled switch row and an inline confirm strip.
  */
 import type { ReactNode } from 'react';
-import { StyleSheet, Switch, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { haptics } from '@/lib/haptics';
 import { colors, radii, spacing } from '@/theme';
-import { Button, Icon, Text, type IconName } from '@/ui';
+import { Button, Icon, Switch, switchRowSlack, Text, type IconName } from '@/ui';
 
 export type TileTone = 'energy' | 'cyan' | 'violet' | 'amber' | 'success' | 'neutral';
 
@@ -48,8 +48,8 @@ export function CardHeader({
   style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <View style={style}>
-      <View style={styles.headRow}>
+    <View style={[styles.head, style]}>
+      <View style={[styles.headRow, styles.head]}>
         <IconTile icon={icon} tone={tone} />
         <View style={styles.flex}>
           {eyebrow ? (
@@ -165,6 +165,9 @@ export function ConfirmStrip({
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   tile: { alignItems: 'center', justifyContent: 'center' },
+  // The header row is 40 dp tall: a switch in `right` (Quiet hours) has a 48 dp box, which touches reach only inside
+  // the row's and the header's bounds. (A caller's `style` margin would replace the slack's; none passes one.)
+  head: switchRowSlack(),
   headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   body: { marginTop: spacing.sm },
   switchRow: {
