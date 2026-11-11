@@ -824,3 +824,7 @@ batch 1" log entry); 3 is still open.
   main `159d57e` (deploy check next). AI consent is then complete on phone + website (one record, server refuses every client
   without consent). Open for the user: real Android phone (V2), Apple Developer account (D2), Play Console, a production demo
   account for reviewers (the user creates it), rotate shared secrets, super-admin password; optional OpenAI data-sharing check.
+- 2026-11-11: website AI consent LIVE (main `159d57e`, Vercel ok; live /privacy "You choose." covers the website). Running
+  `wf_4aab3930-0bf` (pre-release polish): app-wide 48 dp touch targets + cut labels at large text (`docs/notes/a11y-polish.md`),
+  in-app "Report this AI reply" for Google Play's AI-content policy (contract `docs/notes/ai-report.md`; web branch
+  `ai-report-backend` incl. an admin list — its push needs the user's OK), then review. Device check + D3 store pack after.
