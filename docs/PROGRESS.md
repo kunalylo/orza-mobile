@@ -869,3 +869,9 @@ batch 1" log entry); 3 is still open.
   string — secure-store never uses biometrics; no `ios.buildNumber`). Build 2 from the iOS worktree = `8cc5230` + that fix
   (`9b64238`, so TestFlight carries only reviewed code; the a11y polish + AI report join after their review), `--non-interactive`
   reusing the stored credentials + ASC API key.
+- 2026-11-12: iOS build 2 (ITMS-90683 fix) submitted to App Store Connect 2026-11-11 21:03 (submission b68564de…, finished).
+  Pre-release polish DONE (`wf_4aab3930-0bf`): a11y `45eb6b0` (ui/Switch 48 dp, layout.hit 48, Button shortLabel + test:a11y),
+  AI report phone `278aaec` (test:report), review fixes `390c647`. USER OK'd (2026-11-12): short labels + stacking, the report
+  copy (ai-report.md §5) and long-press Copy/Report, the privacy line "Reports: …" → web `ai-report-backend` + privacy line/date
+  (`ee25fb9`) PUSHED to main (deploy check running). Phone re-authorized → V2 resumed (`wf_eb3e63db-9c4`). Device check of the
+  a11y polish + AI report still to do (a11y-polish.md checklist, ai-report.md §8.4).
