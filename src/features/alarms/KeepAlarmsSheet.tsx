@@ -2,10 +2,11 @@
  * "Keep medicine alarms working" (see `./keepAlive` and `lib/alarms/oem.ts`): on phones whose maker closes apps to save
  * battery, the settings that stop it, step by step, and a button to the best screen this phone has. Mounted once in
  * the member layout: it shows itself once per install, right after the member's first medicine alarm is set (never
- * over "Let your medicine alarms ring" — which also takes its place if it comes up meanwhile — or an alarm on screen),
- * and opens again from Reminders & alarms › Alarms on this phone. The sheet stays open when the member comes back from
- * Settings, so the next step is still there.
+ * over "Let your medicine alarms ring" or an alarm screen — either takes its place if it comes up meanwhile), and opens
+ * again from Reminders & alarms › Alarms on this phone. The sheet stays open when the member comes back from Settings,
+ * so the next step is still there.
  */
+import { usePathname } from 'expo-router';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 
@@ -41,15 +42,23 @@ export function KeepAlarmsSheet() {
   const guide = keepAliveGuideHere();
   const doseAlarms = engine.doseAlarms;
   const notificationsGranted = engine.status?.notifications === 'granted';
+  // The alarm screen in front: an alarm (or the test alarm) rang while this sheet was up. The sheet is a Modal window,
+  // so it would cover the alarm's Take / Snooze.
+  const alarmInFront = usePathname() === '/alarm';
 
   // "Let your medicine alarms ring" goes first: one sheet at a time.
   useEffect(() => {
     if (prompt.visible) yieldKeepAlive();
   }, [prompt.visible]);
 
+  // An alarm screen goes first too, also when the member opened the sheet.
+  useEffect(() => {
+    if (alarmInFront) yieldKeepAlive(true);
+  }, [alarmInFront]);
+
   // Once per install, after the first medicine alarm is set on this phone.
   useEffect(() => {
-    if (!guide || prompt.visible || doseAlarms <= 0 || !notificationsGranted || keepAliveSeen()) return undefined;
+    if (!guide || prompt.visible || alarmInFront || doseAlarms <= 0 || !notificationsGranted || keepAliveSeen()) return undefined;
     let alive = true;
     const timer = setTimeout(() => {
       void (async () => {
@@ -70,7 +79,7 @@ export function KeepAlarmsSheet() {
       alive = false;
       clearTimeout(timer);
     };
-  }, [guide, prompt.visible, doseAlarms, notificationsGranted]);
+  }, [guide, prompt.visible, alarmInFront, doseAlarms, notificationsGranted]);
 
   if (!guide) return null;
 
@@ -114,7 +123,8 @@ export function KeepAlarmsSheet() {
         {guide.steps.map((step, i) => (
           <View key={step} style={styles.step} accessible accessibilityLabel={`Step ${i + 1}: ${step}`}>
             <View style={styles.num}>
-              <Text variant="label" tone="energy">
+              {/* Stays inside its 28 dp circle at large text (the step itself scales; TalkBack reads "Step n: …"). */}
+              <Text variant="label" tone="energy" maxFontSizeMultiplier={1.4}>
                 {i + 1}
               </Text>
             </View>

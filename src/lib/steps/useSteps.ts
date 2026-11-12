@@ -6,9 +6,9 @@
  * - `useTodaySteps()` — the Today card: reads on focus, every minute while Today is visible and on return to the app;
  *   the live reading, what counts (`sources`), what Today asks (`ask`: "Continue" before a system prompt, "Turn on" when
  *   the permission is already there) and the member's answers — `requestAccess(kind)`, `turnOn()`, `notNow()`,
- *   `motionInstead()`, `setAutoSteps(on)`, `requestBackground()`. `useTodaySteps({live: false})`: the same without reads of its own — "Count
- *   steps automatically" on the Health screen and in Settings › Privacy & data (U3, U4: the app reads at launch and on
- *   every return, and an answer reads at once).
+ *   `motionInstead()`, `setAutoSteps(on)`, `requestBackground()`. `useTodaySteps({live: false})`: the same without
+ *   reads of its own — "Count steps automatically" on the Health screen and in Settings › Privacy & data (U3, U4: the
+ *   app reads at launch and on every return, and an answer reads at once).
  * - `refreshStepsNow(member, qc)` — a read right after a consent changed elsewhere (the Health screen's connect /
  *   disconnect), so Today follows at once.
  * Nothing is read or saved for a member without their consent on this install (P8) or with the switch off (P9): the

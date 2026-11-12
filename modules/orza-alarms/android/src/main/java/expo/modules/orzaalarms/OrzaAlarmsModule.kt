@@ -189,8 +189,9 @@ class OrzaAlarmsModule : Module() {
     /**
      * "Keep medicine alarms working" (`src/lib/alarms/oem.ts`): opens the first of `targetsJson` that starts — a phone
      * maker's own screen (`{type: "component", pkg, cls}`, with ÖRZA's package and label as extras for the per-app
-     * pages that read them), ÖRZA's App info (`app`) or Android's battery-optimisation list (`battery`). A maker screen
-     * that isn't there or isn't exported throws and is skipped. Never REQUEST_IGNORE_BATTERY_OPTIMIZATIONS. Resolves
+     * pages that read them), ÖRZA's App info (`app`) or Android's battery-optimisation list (`battery`). The makers'
+     * packages are in this module's `<queries>` (Android 11+ package visibility); a maker screen that isn't there or
+     * isn't exported throws and is skipped. Never REQUEST_IGNORE_BATTERY_OPTIMIZATIONS. Resolves
      * with what opened: "component", "app", "battery", or "" when nothing could.
      */
     AsyncFunction("openKeepAliveSettings") { targetsJson: String ->

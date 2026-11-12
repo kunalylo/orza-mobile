@@ -702,9 +702,10 @@ The Health screen's Android connect caption says the same for its totals. **The 
 **Android after an HC refusal (phone has a counter)**
 - Button: "Use this phone's motion sensor instead".
 - Physical activity refused for good (V2 B2): the button opens Settings, so it reads "Allow Physical activity" ↗ (iPhone:
-  "Allow Motion & Fitness"), short label "Open Settings", with the caption "To count with this phone, turn on Physical
-  activity: Settings › Apps › ÖRZA › Permissions › Physical activity › Allow." (iPhone: "To count with your iPhone, turn
-  on Motion & Fitness: Settings › ÖRZA › Motion & Fitness.").
+  "Allow Motion & Fitness"), short label "Allow activity" (iPhone: "Allow Motion" — words of the label, so voice control
+  still matches), with the caption "To count with this phone, turn on Physical activity: Settings › Apps › ÖRZA ›
+  Permissions › Physical activity › Allow." (iPhone: "To count with your iPhone, turn on Motion & Fitness: Settings ›
+  ÖRZA › Motion & Fitness.").
 
 **Android `phone` granted, HC available, not stepTracking**
 - Ghost button: "Include your watch or fitness app".

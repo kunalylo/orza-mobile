@@ -448,6 +448,29 @@ describe('the motion button (U2) once Physical activity is refused for good (V2 
     assert.equal(turnOn.label, 'Use iPhone motion instead');
     assert.equal(turnOn.hint, 'Explains counting with the motion sensor, then turns it on for your account');
   });
+
+  test('every short label is words of its label, in order (voice control matches what is seen to the full label)', () => {
+    const wordsInOrder = (short: string, label: string) => {
+      const words = label.split(' ');
+      let at = 0;
+      return short.split(' ').every((w) => (at = words.indexOf(w, at) + 1) > 0);
+    };
+    const settings = { type: 'settings' } as const;
+    const fallback = (variant: 'continue' | 'turn_on') => ({ type: 'sheet' as const, sheet: { kind: 'phone' as const, path: 'phone' as const, variant, fallback: true } });
+    const cases = [
+      motionButtonCopy('android', settings, 'Physical activity', ANDROID_PATH),
+      motionButtonCopy('ios', settings, 'Motion & Fitness', 'Settings › ÖRZA › Motion & Fitness'),
+      motionButtonCopy('android', fallback('continue'), 'Physical activity', ANDROID_PATH),
+      motionButtonCopy('ios', fallback('turn_on'), 'Motion & Fitness', ''),
+    ];
+    assert.deepEqual(
+      cases.map((c) => c.short),
+      ['Allow activity', 'Allow Motion', ['Use this phone’s motion sensor', 'Use this phone’s sensor', 'Use phone’s sensor'], 'Use iPhone motion']
+    );
+    for (const c of cases) {
+      for (const s of typeof c.short === 'string' ? [c.short] : c.short) assert.ok(wordsInOrder(s, c.label), `"${s}" in "${c.label}"`);
+    }
+  });
 });
 
 describe('"Counting since…" — why today counts from later than midnight (§6, V2 F3)', () => {

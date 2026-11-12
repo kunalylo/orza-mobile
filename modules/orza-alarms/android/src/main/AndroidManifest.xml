@@ -9,6 +9,20 @@
   <uses-permission android:name="android.permission.VIBRATE" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+  <!-- "Keep medicine alarms working" (src/lib/alarms/oem.ts): the phone makers' own autostart / app launch screens that
+       openKeepAliveSettings starts by explicit component. Android 11+ may not resolve a package ÖRZA hasn't declared
+       (package visibility), so each one is named here (the same list as oem.ts; test:alarms checks it). No
+       QUERY_ALL_PACKAGES. -->
+  <queries>
+    <package android:name="com.miui.securitycenter" />
+    <package android:name="com.miui.powerkeeper" />
+    <package android:name="com.coloros.safecenter" />
+    <package android:name="com.oppo.safe" />
+    <package android:name="com.oneplus.security" />
+    <package android:name="com.huawei.systemmanager" />
+    <package android:name="com.hihonor.systemmanager" />
+  </queries>
+
   <application>
     <!-- Fired by AlarmManager through our own PendingIntents only. -->
     <receiver

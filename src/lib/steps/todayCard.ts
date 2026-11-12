@@ -213,7 +213,10 @@ function watchButton(i: CardInputs, a: StepsAccess): CardAction | null {
 
 export interface MotionButtonCopy {
   label: string;
-  /** Shorter labels, longest first (large text on a narrow phone; screen readers keep `label`). */
+  /**
+   * Shorter labels, longest first (large text on a narrow phone; screen readers keep `label`). Words of `label`, in
+   * order, so what is seen is still what voice control matches.
+   */
   short: string | readonly string[];
   /** It leaves ÖRZA (Settings): the ↗ icon and a caption. */
   external: boolean;
@@ -232,7 +235,7 @@ export function motionButtonCopy(platform: CardInputs['platform'], action: CardA
   if (action.type !== 'sheet') {
     return {
       label: `Allow ${permissionName}`,
-      short: 'Open Settings',
+      short: ios ? 'Allow Motion' : 'Allow activity',
       external: true,
       caption: `To count with ${ios ? 'your iPhone' : 'this phone'}, turn on ${permissionName}: ${settingsPath}.`,
       hint: `Opens Settings to turn on ${permissionName} for ÖRZA`,

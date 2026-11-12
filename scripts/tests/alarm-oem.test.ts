@@ -11,6 +11,7 @@
  *   "Unrestricted".
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 
 import { keepAliveGuide, keepAliveRowShown, makerOf, shouldOfferKeepAlive, type KeepAliveOfferInputs } from '../../src/lib/alarms/oem';
@@ -73,6 +74,18 @@ describe('the guide: steps by maker, the screens the button tries', () => {
       'Sleeping apps: make sure ÖRZA isn’t listed in Settings › Battery › Background usage limits.',
     ]);
     assert.deepEqual(g.targets, [{ type: 'app' }, { type: 'battery' }]);
+  });
+
+  test('every maker screen’s package is in the alarms module’s <queries> (Android 11+ package visibility)', () => {
+    const manifest = readFileSync(new URL('../../modules/orza-alarms/android/src/main/AndroidManifest.xml', import.meta.url), 'utf8');
+    const queries = manifest.match(/<queries>([\s\S]*?)<\/queries>/)?.[1] ?? '';
+    const declared = new Set([...queries.matchAll(/<package android:name="([^"]+)"/g)].map((m) => m[1]));
+    const used = new Set<string>();
+    for (const maker of ['vivo', 'xiaomi', 'oppo', 'huawei', 'samsung'] as const) {
+      for (const t of keepAliveGuide({ maker, name: maker }).targets) if (t.type === 'component') used.add(t.pkg);
+    }
+    assert.deepEqual([...used].sort(), [...declared].sort());
+    assert.doesNotMatch(manifest, /<uses-permission android:name="android\.permission\.QUERY_ALL_PACKAGES"/);
   });
 
   test('never the "ignore battery optimisations" request (Google Play restricts it): only screens the member changes', () => {

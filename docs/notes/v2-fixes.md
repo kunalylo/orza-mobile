@@ -28,8 +28,8 @@ rebuild (not a JS-only update). An older build without it still works: the butto
 - Why: the refused-Health-Connect card's "Use this phone's motion sensor instead" opened App info (run 3, 4b), with no
   caption.
 - Fix: `todayCard.motionButtonCopy`. When the action opens Settings: "Allow Physical activity" ↗ (iPhone: "Allow Motion &
-  Fitness"), short label "Open Settings", and a caption with the Settings path. It is used on Today and on the Health /
-  Settings switch.
+  Fitness"), short label "Allow activity" / "Allow Motion" (review: was "Open Settings", see below), and a caption with
+  the Settings path. It is used on Today and on the Health / Settings switch.
 
 **F1 — Health Connect counts this phone only while an app holds `READ_STEPS`.** Added to steps-v2.md §2.9 Known limits.
 A re-grant on a later day misses the steps from before the re-grant: an undercount, never a double count. No code change.
@@ -93,7 +93,7 @@ Health screen › Count steps automatically (B1):
   ÖRZA.", "That didn't open — please try again in a moment." (that one already exists)
 
 Motion button, refused for good (B2):
-- "Allow Physical activity" / "Allow Motion & Fitness" (short label "Open Settings")
+- "Allow Physical activity" / "Allow Motion & Fitness" (short labels "Allow activity" / "Allow Motion")
 - "To count with this phone, turn on Physical activity: Settings › Apps › ÖRZA › Permissions › Physical activity › Allow."
 - "To count with your iPhone, turn on Motion & Fitness: Settings › ÖRZA › Motion & Fitness."
 
@@ -135,8 +135,8 @@ Keep medicine alarms working (OEM):
 
 | Suite | Result |
 |---|---|
-| `test:steps` | 434 (was 419). Added: the asks and `storeBackgroundOf`; the background offer; the F2 line; `motionButtonCopy`; `partialDayLine`. |
-| `test:alarms` | 79 (was 69; new `alarm-oem.test.ts`) |
+| `test:steps` | 434 (was 419; 435 after the review). Added: the asks and `storeBackgroundOf`; the background offer; the F2 line; `motionButtonCopy`; `partialDayLine`. |
+| `test:alarms` | 79 (was 69; new `alarm-oem.test.ts`; 80 after the review) |
 | `test:ai` | 32 |
 | `test:a11y` | 6 |
 | `test:report` | 20 |
@@ -170,3 +170,53 @@ Keep medicine alarms working (OEM):
    for maker screens that aren't there, then App info opens. Never the "ignore battery optimisation" system dialog.
 8. **The vivo setting itself (user):** App info › Battery usage › Background power control › "Allow background power
    usage". Then W3 / W4 of the walk plan: `exit-info` should show no `FORCE STOP`, and alarms still armed after the swipe.
+
+## Review (2026-11-12, of `30ea9a6` + `529f82b`)
+
+Adversarial read of the two commits; code and Node tests only, as above. Held up, no change:
+- **B1, every Health Connect on path asks for background reading:** the Health screen's Connect (`connectAsk`) and
+  Today's / the switch's ask (`stepsAsk`, also behind "Allow background access") add it where Health Connect offers it.
+  Members who have it see no offer (`storeBackground: 'granted'`), and Health Connect shows nothing for a permission
+  already granted. The offer needs Health Connect counting for the member (`sources` has `store`), Android only.
+  `healthFeatures()` never throws, so the Connect fails no more often than before.
+- **B2 / F2 / F3:** every state is in `steps-card` / `steps-switch` (the motion action is only a sheet or Settings;
+  `bothWaysLine` by source; `partialDayLine` with the M9 floor before / after the grant).
+- **OEM intents can't crash ÖRZA:** every start goes through `startSettings` (any exception, `ActivityNotFound` and
+  `SecurityException` included, is logged and the next target is tried); bad JSON is an empty list; a lost React
+  context rejects, and `openKeepAliveScreen` turns any rejection into "nothing opened" (the toast). Makers: Android
+  only, the listed brands only (`makerOf`), never iOS (`keepAliveGuideHere`).
+- **Re-plan on start / boot:** the native set is keyed by alarm (`scheduleAll` replaces it, cancels keys that left,
+  one PendingIntent per key), so a forced re-plan can't double an alarm. The plan holds future instants only. A
+  past, undelivered alarm is kept for ≤ 3 h, and the engine `dismiss`es those whose doses were handled before it
+  schedules. The boot re-arm rings only what was missed by ≤ 30 min while the phone was off (unchanged design).
+
+Fixed:
+- **The sheet covered an alarm screen.** It is a Modal window, so an alarm that rang while it was open (e.g. "Test
+  alarm" then "Show me how", or a dose while the member read it) opened under it, Take / Snooze hidden. It now steps
+  aside when the alarm screen is in front (`usePathname() === '/alarm'`, also when the member opened it), and it is
+  never offered while one is. Not marked seen: offered again after.
+- **The makers' screens might not open on Android 11+.** They are explicit activities in other packages, and
+  Android 11+ filters packages an app hasn't declared (package visibility), so they may not resolve and the button
+  would fall to App info every time (not checked on a device). The seven packages are now in
+  `modules/orza-alarms` `AndroidManifest.xml` `<queries>` (not `QUERY_ALL_PACKAGES`); `alarm-oem.test.ts` checks
+  the list matches `oem.ts`. **Native (manifest) change: part of the full rebuild already needed.**
+- **The B2 short label "Open Settings"** shared no word with "Allow Physical activity": at large text the button
+  showed words that voice control can't match to its name. Now "Allow activity" / "Allow Motion" (words of the
+  label, in order, as for the other short labels; a test checks every one).
+- The sheet's step numbers stay inside their 28 dp circle at large text (`maxFontSizeMultiplier` 1.4; each step
+  stays one TalkBack stop with its full text).
+
+Not changed, for the user:
+- Today's "Turn on" (Steps granted already, e.g. allowed in Health Connect's own settings) stays consent only, as
+  its disclosure says (no "Next…" caption). Such a member gets the background offer on the Health screen only.
+- Admin accounts (no automatic steps) are also asked for background reading by the Connect. Harmless.
+
+New copy: "Allow activity", "Allow Motion" (short labels, replacing "Open Settings"). Checks after the review:
+typecheck, lint clean; `test:steps` 435, `test:alarms` 80, `test:ai` 32, `test:a11y` 6, `test:report` 20.
+
+Device checks added (next test build):
+- With "Test alarm" set (rings in 10 s), open "Show me how": the alarm screen comes up with the sheet gone; after the
+  alarm closes, an auto sheet that wasn't closed yet comes back, an opened one doesn't.
+- On a Xiaomi / OPPO / Huawei phone (if one is at hand): "Open settings" opens the maker's own screen, not App info.
+- Font 1.3 on a 360 dp phone: "Allow background access" on the Health card isn't cut (a `sm` button that sets its
+  own width, so it has no short label).

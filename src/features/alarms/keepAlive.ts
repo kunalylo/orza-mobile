@@ -3,8 +3,8 @@
  * (`lib/alarms/oem.ts`: which phones, the steps, what the button opens). Shown once per install, right after the
  * member's first medicine alarm is set (`KeepAlarmsSheet` watches the alarm engine), and again whenever the member
  * opens it from Reminders & alarms › Alarms on this phone. It counts as seen once the member closes it ("Done", the
- * backdrop, back); "Let your medicine alarms ring" coming up meanwhile takes its place, and it is offered again later.
- * No React here.
+ * backdrop, back); "Let your medicine alarms ring" or an alarm screen coming up meanwhile takes its place, and it is
+ * offered again later. No React here.
  */
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
@@ -70,9 +70,12 @@ export function closeKeepAlive(): void {
   set({ ...state, visible: false });
 }
 
-/** "Let your medicine alarms ring" came up (it goes first): out of its way, not seen — offered again later. */
-export function yieldKeepAlive(): void {
-  if (state.visible && state.auto) set({ ...state, visible: false });
+/**
+ * "Let your medicine alarms ring" came up (it goes first): out of its way, not seen — offered again later. `always`:
+ * an alarm screen came up (the sheet's window would cover it), so also when the member opened it.
+ */
+export function yieldKeepAlive(always = false): void {
+  if (state.visible && (state.auto || always)) set({ ...state, visible: false });
 }
 
 /** The button: the maker's screen, else ÖRZA's App info, else Android's battery-optimisation list. */
