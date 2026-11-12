@@ -14,6 +14,8 @@ import type {
   AlarmActionRecordedEvent,
   AlarmShownEvent,
   DoseAction,
+  KeepAliveOpened,
+  KeepAliveTarget,
   NativeAlarmItem,
   NativeAlarmStatus,
   NativeRecordedAction,
@@ -36,6 +38,7 @@ declare class OrzaAlarmsNativeModule extends NativeModule<OrzaAlarmsEvents> {
   openNotificationSettings(): Promise<boolean>;
   openAppSettings(): Promise<boolean>;
   openBatterySettings?(): Promise<boolean>;
+  openKeepAliveSettings?(targetsJson: string): Promise<string>;
   releaseLockScreen(): Promise<boolean>;
   requestUnlock(): Promise<boolean>;
 }
@@ -134,6 +137,23 @@ export async function openBatterySettings(): Promise<boolean> {
   if (!native) return false;
   if (typeof native.openBatterySettings === 'function') return native.openBatterySettings();
   return native.openAppSettings();
+}
+
+const OPENED: readonly KeepAliveOpened[] = ['component', 'app', 'battery'];
+
+/**
+ * "Keep medicine alarms working": the first of `targets` that opens (a phone maker's own screen, ÖRZA's App info,
+ * Android's battery-optimisation list), else App info / the list. A build from before it: App info, then the list.
+ * Resolves with which kind opened ('' when none could). Never asks to be exempted from battery optimisation.
+ */
+export async function openKeepAliveSettings(targets: readonly KeepAliveTarget[]): Promise<KeepAliveOpened> {
+  if (!native) return '';
+  if (typeof native.openKeepAliveSettings === 'function') {
+    const opened = await native.openKeepAliveSettings(JSON.stringify(targets));
+    return OPENED.find((o) => o === opened) ?? '';
+  }
+  if (await native.openAppSettings()) return 'app';
+  return (await openBatterySettings()) ? 'battery' : '';
 }
 
 /**

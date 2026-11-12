@@ -70,7 +70,7 @@
     "icons": "node scripts/generate-icons.mjs",
     "typecheck": "node scripts/gen-routes.cjs && tsc --noEmit",
     "routes": "node scripts/gen-routes.cjs",
-    "test:alarms": "npx --yes tsx --test scripts/tests/alarm-plan.test.ts scripts/tests/alarm-doses.test.ts",
+    "test:alarms": "npx --yes tsx --test scripts/tests/alarm-plan.test.ts scripts/tests/alarm-doses.test.ts scripts/tests/alarm-oem.test.ts",
     "test:ai": "npx --yes tsx --test scripts/tests/ai-consent.test.ts",
     "test:report": "npx --yes tsx --test scripts/tests/ai-report.test.ts",
     "test:a11y": "npx --yes tsx --test scripts/tests/fit-label.test.ts",

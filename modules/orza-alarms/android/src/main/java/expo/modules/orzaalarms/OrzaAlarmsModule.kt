@@ -1,6 +1,7 @@
 package expo.modules.orzaalarms
 
 import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -185,6 +186,44 @@ class OrzaAlarmsModule : Module() {
         startSettings(appDetailsIntent(context.packageName))
     }
 
+    /**
+     * "Keep medicine alarms working" (`src/lib/alarms/oem.ts`): opens the first of `targetsJson` that starts — a phone
+     * maker's own screen (`{type: "component", pkg, cls}`, with ÖRZA's package and label as extras for the per-app
+     * pages that read them), ÖRZA's App info (`app`) or Android's battery-optimisation list (`battery`). A maker screen
+     * that isn't there or isn't exported throws and is skipped. Never REQUEST_IGNORE_BATTERY_OPTIMIZATIONS. Resolves
+     * with what opened: "component", "app", "battery", or "" when nothing could.
+     */
+    AsyncFunction("openKeepAliveSettings") { targetsJson: String ->
+      val ctx = context
+      val pkg = ctx.packageName
+      val targets = try {
+        JSONArray(targetsJson)
+      } catch (e: Exception) {
+        JSONArray()
+      }
+      for (i in 0 until targets.length()) {
+        val target = targets.optJSONObject(i) ?: continue
+        val opened = when (target.optString("type")) {
+          "component" -> {
+            val targetPkg = target.optString("pkg")
+            val cls = target.optString("cls")
+            targetPkg.isNotEmpty() && cls.isNotEmpty() && startSettings(
+              Intent()
+                .setComponent(ComponentName(targetPkg, cls))
+                .putExtra("package_name", pkg)
+                .putExtra("packageName", pkg)
+                .putExtra("package_label", appLabel(ctx))
+            )
+          }
+          "app" -> startSettings(appDetailsIntent(pkg))
+          "battery" -> startSettings(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+          else -> false
+        }
+        if (opened) return@AsyncFunction target.optString("type")
+      }
+      return@AsyncFunction ""
+    }
+
     /** Stop showing over the lock screen (the alarm screen closed). True when there was an activity to release. */
     AsyncFunction("releaseLockScreen") {
       return@AsyncFunction AlarmLockScreen.releaseFromAnyThread()
@@ -214,6 +253,13 @@ class OrzaAlarmsModule : Module() {
       false
     }
 
+  private fun appLabel(ctx: Context): String =
+    try {
+      ctx.applicationInfo.loadLabel(ctx.packageManager).toString()
+    } catch (e: Exception) {
+      "ÖRZA"
+    }
+
   private fun appDetailsIntent(pkg: String): Intent =
     Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$pkg"))
 
@@ -230,7 +276,7 @@ class OrzaAlarmsModule : Module() {
       }
       true
     } catch (e: Exception) {
-      Log.w(AlarmConst.TAG, "Couldn't open ${intent.action}", e)
+      Log.w(AlarmConst.TAG, "Couldn't open ${intent.action ?: intent.component?.flattenToShortString()}", e)
       false
     }
   }

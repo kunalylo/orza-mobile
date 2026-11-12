@@ -63,6 +63,15 @@ export interface NativeAlarmStatus {
   batteryUnrestricted?: boolean;
 }
 
+/**
+ * A settings screen `openKeepAliveSettings` may open ("Keep medicine alarms working"): a phone maker's own screen
+ * (an explicit activity), ÖRZA's App info, or Android's battery-optimisation list.
+ */
+export type KeepAliveTarget = { type: 'component'; pkg: string; cls: string } | { type: 'app' } | { type: 'battery' };
+
+/** Which kind of screen opened ('': none could). */
+export type KeepAliveOpened = 'component' | 'app' | 'battery' | '';
+
 export interface NativeScheduledAlarm {
   key: string;
   at: number;

@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { AiConsentHost } from '@/features/ai/AiConsentHost';
 import { AiReportHost } from '@/features/ai/AiReportSheet';
 import { AlarmPermissionPrompt } from '@/features/alarms/AlarmPermissionPrompt';
+import { KeepAlarmsSheet } from '@/features/alarms/KeepAlarmsSheet';
 import { useAlarmSync } from '@/lib/alarms/useAlarmSync';
 import { useHealthAutoSync } from '@/lib/health/sync';
 import { useStepsAutoSync } from '@/lib/steps/useSteps';
@@ -26,6 +27,8 @@ export default function AppLayout() {
       <MemberStack />
       {/* "Let your medicine alarms ring" — after the first alarm medicine / a prescription, when a permission is missing. */}
       <AlarmPermissionPrompt />
+      {/* "Keep medicine alarms working" — once, after the first medicine alarm, on phones whose maker closes apps. */}
+      <KeepAlarmsSheet />
       {/* "Allow ÖRZA's AI features?" — the first time a member starts an AI feature (docs/notes/ai-consent.md). */}
       <AiConsentHost />
       {/* "Report this reply" — the sheet behind every Report on ÖRZA's AI output (docs/notes/ai-report.md). */}

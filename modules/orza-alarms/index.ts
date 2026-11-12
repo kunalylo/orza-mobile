@@ -4,6 +4,8 @@ export type {
   AlarmActionRecordedEvent,
   AlarmShownEvent,
   DoseAction,
+  KeepAliveOpened,
+  KeepAliveTarget,
   NativeAlarmDose,
   NativeAlarmItem,
   NativeAlarmStatus,

@@ -1,7 +1,8 @@
 /**
  * "Alarms on this phone". Two sizes:
  * - `full` (Reminders screen): the state of every permission the alarms need with a one-tap fix (notifications;
- *   Android: exact alarm times, full-screen over the lock screen, battery "Unrestricted"; iOS: Time Sensitive hint),
+ *   Android: exact alarm times, full-screen over the lock screen, battery "Unrestricted", and on phones whose maker
+ *   closes apps the way back to "Keep medicine alarms working"; iOS: Time Sensitive hint),
  *   the next alarm with its medicine names, the doses inside quiet hours that won't ring, offline note, and
  *   "Test alarm" (rings in 10 s with a medicine photo, or the sample strip).
  * - `compact` (Medicines tab): one row — next alarm, or what needs fixing — plus the quiet-hours warning; tap → Reminders.
@@ -14,11 +15,13 @@ import Animated, { FadeIn, LinearTransition, useReducedMotion } from 'react-nati
 import { useMedications, useMedsTimezone } from '@/features/meds/api';
 import { MedPhoto } from '@/features/meds/MedPhoto';
 import { CardHeader } from '@/features/reminders/parts';
+import { keepAliveRowShown } from '@/lib/alarms/oem';
 import { scheduleTestAlarm, TEST_ALARM_DELAY_MS } from '@/lib/alarms/test';
 import { haptics } from '@/lib/haptics';
 import { colors, radii, spacing } from '@/theme';
 import { Button, GlassCard, Icon, PressableScale, Skeleton, Tag, Text, toast, type IconName } from '@/ui';
 
+import { keepAliveGuideHere, openKeepAlive } from './keepAlive';
 import { namesText, quietDosesText, usePhoneAlarmStatus, whenText, type PhoneAlarmStatus } from './status';
 
 const isAndroid = Platform.OS === 'android';
@@ -113,6 +116,9 @@ function FullCard({ browserCount = 0 }: { browserCount?: number }) {
   const { status, engine, native } = s;
   const nextDose = engine.next.find((n) => n.ring);
   const nextOther = engine.next.find((n) => !n.ring);
+  // Phones whose maker closes apps to save battery: the way back to "Keep medicine alarms working".
+  const keepAlive = keepAliveGuideHere();
+  const showKeepAlive = !!keepAlive && keepAliveRowShown(keepAlive.maker, native?.batteryUnrestricted);
   // What else is set besides medicine alarms — refill alerts are not reminders (a phone with no reminders on said
   // "27 medicine alarms and 2 reminders" because of two refill alerts).
   const reminders = Math.max(0, engine.reminderAlarms ?? 0);
@@ -266,6 +272,16 @@ function FullCard({ browserCount = 0 }: { browserCount?: number }) {
               title="Tip: set battery to Unrestricted"
               body="Some phones' battery savers hold alarms back or clear them. Set ÖRZA to Unrestricted (Battery › App battery usage)."
               action={<Button label="Battery settings" icon="battery-charging" variant="secondary" size="sm" onPress={() => void s.openSettings('battery')} />}
+            />
+          ) : null}
+
+          {/* Android: the phone maker's battery manager (vivo, Xiaomi, OPPO, Huawei, Samsung …) */}
+          {showKeepAlive && keepAlive ? (
+            <CheckRow
+              state="tip"
+              title={`Keep alarms working on this ${keepAlive.name} phone`}
+              body={`${keepAlive.name} phones can close ÖRZA to save battery, and then alarms can’t ring until you open it.`}
+              action={<Button label="Show me how" icon="battery-charging" variant="secondary" size="sm" onPress={openKeepAlive} />}
             />
           ) : null}
 
