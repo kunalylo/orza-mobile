@@ -192,6 +192,9 @@ export function StepsCard({
   const motion = isToday ? card.motion : null;
   const watch = isToday ? card.watch : null;
   const motionLabel = steps.platform === 'ios' ? 'Use iPhone motion instead' : 'Use this phone’s motion sensor instead';
+  // V2 real phone (384 dp wide, font 1.3): both labels were cut ("Use this phone’s motion …", "Count my steps
+  // automat…"); screen readers keep the full label.
+  const motionShort = steps.platform === 'ios' ? 'Use iPhone motion' : ['Use this phone’s motion sensor', 'Use this phone’s sensor', 'Use phone’s sensor'];
 
   let ctaView: ReactNode = null;
   if (cta?.type === 'sheet') {
@@ -199,6 +202,7 @@ export function StepsCard({
     ctaView = (
       <Button
         label={turnOn ? 'Turn on step counting' : 'Count my steps automatically'}
+        shortLabel={turnOn ? 'Turn on counting' : ['Count steps automatically', 'Count my steps']}
         variant="energy"
         icon="mci:shoe-print"
         block
@@ -281,6 +285,7 @@ export function StepsCard({
           {motion ? (
             <Button
               label={motionLabel}
+              shortLabel={motionShort}
               variant="secondary"
               icon="smartphone"
               block
