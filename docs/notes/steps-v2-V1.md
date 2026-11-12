@@ -350,3 +350,95 @@ as screenshots.
    and "Counting since 7:10 pm, on top of the 800 saved earlier today." Walk about 100 more: both numbers should rise by
    the same amount within a minute or two.
 2. **A-1 latency (W1) and A-2 / A-8 / W4:** the walk plan above, unchanged. W1 needs qa8 with Health Connect refused again.
+
+### V2 real phone, run 4 (resume, 2026-11-12 from 19:23 IST)
+
+Found at 19:23: `adb devices` lists `10MG4JF1U40003S device`; the local server answers (200); `adb reverse tcp:3100 tcp:3100`
+is in place; ÖRZA in front with qa7 signed in (Today "800", "Saved earlier today": Health Connect still has no steps);
+`stay_on_while_plugged_in` = 2, as in runs 2–3 (left as found). Screen reads use the run-2 guard. **This vivo prints nothing
+from ÖRZA's process to logcat** (`log.tag` = I, and not one line from ÖRZA's pid, not even WorkManager's INFO lines), so the
+evidence below comes from `dumpsys jobscheduler` (ÖRZA's uid is `u0a367`), `dumpsys activity exit-info in.co.ylo.orza`,
+the local server's request log (preview `orza-localtest-noai`) and `db-rows.mjs`. No AI calls; production never contacted.
+
+| Case | Result | Evidence |
+|---|---|---|
+| A-9 background, warm process, forced deep Doze | PASS | Home (19:27), `dumpsys battery unplug`, `dumpsys deviceidle force-idle` → "Now forced in to deep idle mode", `get deep` = IDLE, standby bucket 10. `cmd jobscheduler run -f in.co.ylo.orza 11` → "Running job [FORCED]", but the job stays `WAIT:DEV_NOT_DOZING` (CONNECTIVITY lost): **a forced run still waits for Doze**, as on stock Android. `dumpsys deviceidle step deep` → IDLE_MAINTENANCE (19:28:51) → `START #u0a367/11`, then `STOP … app called jobFinished` 0.7 s later; qa7's local `devices` row `last_seen` 19:28:55; the next job `#12` enqueued for +60 min (APPEND after a finished run). No steps saved: Health Connect has none (needs the walk, W0 below). |
+| A-9 cold process (`am kill`, job-started headless process) | PASS (2nd run) | `am kill` 19:30:00 (`pidof` empty, `stopped=false`), Doze forced again, `run -f … 12`, step to maintenance (19:30:15) → JobScheduler starts a NEW process (pid 3037) → **`STOP #12 cancelled while waiting for bind`** 0.2 s after START. Cause: `exit-info` records the `am kill` as `USER REQUESTED / KILL BACKGROUND`, which WorkManager's start-up check reads as a force stop → it reschedules all work, and the same-id `schedule()` replaces the job being bound. It was NOT the old REPLACE loop that the `expo-background-task` patch fixed: job `#12` kept its id and its original time (+58m14s at 19:30:41 = enqueued 19:28:55 + 60 min), whereas a REPLACE gives a new id and a new 60 min. Second forced run in that headless process (it never showed UI), Doze forced + step (19:31:29): `START #12`, `STOP … app called jobFinished` 5.7 s later, `devices.last_seen` **19:31:41** (the headless JS task read the session from secure storage and reached the LOCAL server), next job `#13` (+60 min). A real OS kill (`LOW_MEMORY`) is not `USER_REQUESTED`, so it doesn't lose that first run. Restored at 19:32: `deviceidle unforce` (mForceIdle=false, ACTIVE), `battery reset` (USB powered). |
+| A-9: vivo thermal restriction | FINDING | From 19:34 ÖRZA's job shows **`Restricted due to: vpt_thermal`** (vivo's own restriction; `dumpsys thermalservice` Thermal Status 1 = LIGHT, battery 32.6 °C, charging): `run -f … 13` → `STOP #13 vpt_thermal` after 3.3 s; job `#16` still restricted at 19:39. Stock Android doesn't restrict a DEFAULT-priority job at LIGHT. So on this vivo the hourly save and alarm re-plan can wait while the phone is warm (e.g. charging). AlarmManager alarms are not affected by this. |
+| ÖRZA's process history on this phone (`exit-info`) | FINDING | 11-11 22:32:54 `USER REQUESTED / REMOVE TASK` (by the launcher: a Recents swipe); then `LOW_MEMORY` kills at 23:29, 05:40, 08:52 and 10:08, and `SIGNALED 9` at 07:19. Each of these is a process the system had started again, most likely for the hourly job, so **the job did run overnight** (run 3 inferred the opposite from vivo's battery chart). Then **10:39:05 `USER REQUESTED / FORCE STOP` ("stop in.co.ylo.orza due to stop")**: this is the `stopped=true` found at 18:52. No job and no alarm ran after it until ÖRZA was opened. Who stopped it is unknown: vivo's background control, or the user (App info › Force stop). The user is asked below. |
+| A-10 zone, headless part | PASS (weak for steps) | Before: `auto_time_zone` 1, `persist.sys.timezone` Asia/Kolkata, qa7's profile zone Asia/Kolkata. Auto off with `cmd time_zone_detector set_auto_detection_enabled false` (the `set-auto-detection-enabled` spelling is refused), then `cmd alarm set-timezone Asia/Singapore` (accepted, 22:03 SGT). Singapore at this hour has the same date as IST (the C2 boundary needs SGT after 21:30 IST), so for the date boundary the zone was set to **Australia/Sydney** from 19:34:38 IST (01:04 Fri 13 Nov AEDT). Job `#15` ran at about 19:35:55 (`app called jobFinished` after 1 s) with the phone on 13 Nov. Its requests were `GET /api/meds/today?date=2026-11-12`, `/api/meds/doses?from=2026-11-12&to=2026-11-12`, `/api/meds`, `/api/reminders` and `/api/integrations`: the profile day, never 2026-11-13. `db-rows.mjs qa7`: no 2026-11-13 row (Health Connect has no steps, so no save would happen either way). The profile zone is still Asia/Kolkata (`GET /auth/me`). **Restored 19:39:00**: `set-timezone Asia/Kolkata`, `set_auto_detection_enabled true`; read back `auto_time_zone` 1, Asia/Kolkata, detector true, phone clock = PC clock. |
+| A-10 zone: Today on the next phone date + an evening walk | NEEDS-USER | Not seen: the phone had locked itself (next row). Needs the phone unlocked, the zone set again for a few minutes and a short walk. |
+| Phone locked itself | BLOCKER (caused by this run) | `dumpsys battery unplug` (A-9) makes the phone count as on battery, so stay-awake stops and the 30 s screen timeout applies: the screen went off between 19:28 and 19:33 and the secure lock screen came up (`isKeyguardShowing=true`, `secure=true`). An `am start` of ÖRZA at 19:33 stayed behind the lock screen. A swipe meant for ÖRZA opened the notification shade instead; the guard refused the read, so nothing was captured, and Back closed it. Polled 19:35:39–19:38:39 and again at 19:40:47: still locked. Per the run rules the phone work stops here. Never `battery unplug` again unless the user is there to unlock. |
+| AL-1…AL-4 medicine alarms on the real phone | NEEDS-USER (phone locked) | Not started: no test medicine created (qa7 `GET /meds` → `[]`); `dumpsys alarm`: 0 ÖRZA alarms. State read while locked: `POST_NOTIFICATIONS granted=false` (appop `POST_NOTIFICATION: ignore`), `USE_FULL_SCREEN_INTENT granted=true` (appop default). `SCHEDULE_EXACT_ALARM` is requested with appop **default**, which on Android 14+ means OFF for a targetSdk 36 app: ÖRZA then uses its inexact pair (setWindow 10 min + setAndAllowWhileIdle), and its card should say "Alarms may ring late" + Allow. `RECEIVE_BOOT_COMPLETED` granted; not on the Doze whitelist; vivo Background power = "smart control" (run 3). |
+
+**Restored at the end of run 4:** Doze unforced (ACTIVE), battery reset (USB powered), zone Asia/Kolkata with auto detection
+on, `stay_on_while_plugged_in` 2 as found. No medicine, no ÖRZA alarm. qa7 stays signed in (Health Connect Steps +
+background granted, typed 800). The phone is LOCKED, with ÖRZA's task in front behind the lock screen.
+
+**V2 walk plan, rev. 2** (replaces the "V2 walk plan" above where they differ). `A="adb -s 10MG4JF1U40003S"`; ÖRZA's uid
+is `u0a367`; run from `E:\aylo\orza-mobile`. Rules learned on this phone:
+- Never `dumpsys battery unplug` unless the user is there: it ends stay-awake and the phone locks.
+- `cmd jobscheduler run -f` still waits for Doze (then `dumpsys deviceidle step deep` to a maintenance window) and for
+  vivo's `vpt_thermal`.
+- Logcat shows nothing from ÖRZA, so use S.
+- Avoid `am kill` before a background check: WorkManager reads it as a force stop, and the first job after it is
+  cancelled. A real low-memory kill is not.
+
+0. **S (snapshot, before and after every walk).** Plugged in; `$A reverse tcp:3100 tcp:3100`; `curl -s -o /dev/null -w
+   "%{http_code}" http://127.0.0.1:3100/` = 200. Then:
+   - `$A shell dumpsys package in.co.ylo.orza | grep -E "READ_STEPS|READ_HEALTH_DATA_IN_BACKGROUND|ACTIVITY_RECOGNITION|POST_NOTIFICATIONS|stopped=|lastUpdateTime"`
+   - `$A shell dumpsys jobscheduler | grep -A45 "JOB #u0a367/" | grep -E "JOB #|Run time|Unsatisfied|Restricted due"`
+   - `$A shell dumpsys jobscheduler | grep -E "(START|STOP).*#u0a367/" | tail -6`
+   - `$A shell dumpsys activity exit-info in.co.ylo.orza | grep -E "timestamp=|reason=" | head -8`
+   - `$A shell dumpsys alarm | grep -c orzaalarms.FIRE`; `$A shell pidof in.co.ylo.orza`
+   - `node scripts/e2e/db-rows.mjs <qa> --since=<ISO>`; the server's request log (preview logs, last 20 lines); Today's
+     number (ÖRZA only, guarded).
+
+   Unplug only after S.
+1. **W0, A-5 + A-9 with real steps (qa7, Health Connect; about 15 min).** The user unlocks the phone. S. The user unplugs,
+   walks about 200 steps, comes back and replugs, **without opening ÖRZA**. Agent: `run -f in.co.ylo.orza <J>` (if
+   `WAIT:DEV_NOT_DOZING`: `deviceidle step deep`; if `vpt_thermal`: wait). The job's STOP must say "app called
+   jobFinished", and `db-rows qa7` today = 800 + H, **still without opening ÖRZA** (A-9's missing "website updates" part).
+   The user opens Health Connect › Data and access › Activity › Steps and says today's total H. Then open ÖRZA: Today =
+   800 + H, "From Health Connect", "Counting since 7:10 pm, on top of the 800 saved earlier today." (A-5, 1g, 2b). Walk
+   100 more: both numbers rise together within a minute or two.
+2. **AL, medicine alarms (qa7; about 20 min; the user stays with the phone).** Step 3 of this run, unchanged:
+   - Create one test medicine "QA phone alarm" about 4 min ahead with `api.mjs`.
+   - Open ÖRZA → "Let your medicine alarms ring" → the system notification prompt → Allow. On the card, allow "Alarms &
+     reminders" if it asks.
+   - `dumpsys alarm | grep -B1 -A3 in.co.ylo.orza` shows it armed. Screen off (`input keyevent 26`).
+   - At the dose time, a guarded screenshot shows the full-screen alarm over the lock screen with the name. Tap Take;
+     `GET /meds/today` shows it taken.
+   - For the second dose, **the user** swipes ÖRZA away from Recents (W4 below) instead of `am kill`.
+   - Delete the medicine, open ÖRZA: `grep -c orzaalarms.FIRE` = 0.
+
+   The user unlocks after each screen-off.
+3. **W1, A-1 Recording API latency (qa8, Health Connect refused).** As 1a–1g in the plan above:
+   - Sign out qa7 (0 alarms). Revoke Health Connect Steps + background and clear their flags, then `am force-stop` (there
+     are no medicines then).
+   - Sign in qa8 and refuse Health Connect. "Use this phone's sensor" → Allow Physical activity (T_sub).
+   - Stand still 5 min (N0). Unplug, walk **500 steps** and note the end time T1.
+   - Open Today every minute until it first shows ≥ N0 + 450 (T2). Latency = T2 − T1 (over 5 min → V3-c). S after.
+4. **W2, A-2 reboot + update (qa8).**
+   - S, N0. Walk about 300, replug, open ÖRZA: N1 ≈ N0 + 300. Press Home.
+   - The user reboots and enters the PIN. `adb wait-for-device`, `getprop sys.boot_completed` = 1, `reverse` again.
+     Don't open ÖRZA. After 3 min, S: the job is back in jobscheduler and `stopped=false`.
+   - Walk about 300 without opening ÖRZA, replug, open: N2 ≈ N1 + 300 means the subscription survived. N2 ≈ N1 means
+     it was lost: re-subscribe at launch / boot.
+   - Update: `bash scripts/e2e/check-release-apk.sh <apk> 127.0.0.1:3100` = SAFE, then `$A install -r <apk>`
+     (`lastUpdateTime` changes). Don't open ÖRZA. Walk about 300, replug, open: N3 ≈ N2 + 300, and the server's today = N3.
+5. **W3, A-8 app closed for about 3 h + walk (qa8).**
+   - S (N0, job J). Press Home only: **no `am kill`, no swipe.**
+   - Unplug. Normal use for about 3 h, with about 1,000 steps somewhere (note the times). Don't open ÖRZA.
+   - Replug, `reverse`, S **before opening**: `exit-info` should show only `LOW_MEMORY` kills, no `FORCE STOP`, and the
+     job history shows runs.
+   - `run -f … J` (step Doze if needed): the server's today = N0 + about 1,000 **without opening ÖRZA**. Then open:
+     Today = the server (no double count, no loss).
+   - If time allows, the same for qa7 on Health Connect (reference: Health Connect's own day total, read by the user).
+6. **W4, Recents swipe with one test alarm armed (user, about 5 min; part of AL).** The user swipes ÖRZA away from
+   Recents. S: `stopped=` and `grep -c orzaalarms.FIRE`. `stopped=true` with 0 alarms means vivo force-stops on a swipe, and
+   the alarms are gone until ÖRZA is opened. (The swipe on 11-11 at 22:32 was only `REMOVE TASK`, and the job still ran
+   afterwards; the 10:39 FORCE STOP came some other way.) Let the dose time pass: does it
+   ring? If not, ÖRZA must ask vivo users to choose Settings › Battery › Background power consumption › ÖRZA › "Allow
+   background power usage" (and to turn on Autostart, where the phone has it), and the card should say so. The agent
+   only reads ÖRZA's own pages there.
