@@ -875,3 +875,10 @@ batch 1" log entry); 3 is still open.
   copy (ai-report.md §5) and long-press Copy/Report, the privacy line "Reports: …" → web `ai-report-backend` + privacy line/date
   (`ee25fb9`) PUSHED to main (deploy check running). Phone re-authorized → V2 resumed (`wf_eb3e63db-9c4`). Device check of the
   a11y polish + AI report still to do (a11y-polish.md checklist, ai-report.md §8.4).
+- 2026-11-12: V2 real phone runs 3–4 (`cde78b5`, `2f7e1a5`; walk plan rev. 2 in steps-v2-V1.md run 4): PASS A-5 START (Recording
+  API), A-3, A-4, A-9 warm + cold in Doze (patch holds), A-10 headless. Needs the user: walks (A-1, A-2, A-5 HC, A-8), the medicine
+  alarm cases AL, W4 Recents swipe. Bugs: **B1** Health sync Connect never asks for HC background access (no background saves), B2
+  refused-for-good motion button copy; findings: vivo FORCE STOP at 10:39 (source unknown — asked the user), vivo `vpt_thermal`
+  delays the hourly job when warm, F1 HC counts the phone only while an app holds READ_STEPS. Fixing (`wf_43b1b1ca-5c8`: B1, B2,
+  F1–F3, an OEM "Keep medicine alarms working" guide, re-plan on start/boot if empty). Then a new phone test build (also carries the
+  a11y polish + AI report) and the walks/alarms with the user.
