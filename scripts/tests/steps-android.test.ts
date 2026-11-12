@@ -3,12 +3,14 @@
  * Android step sources (`docs/notes/steps-v2.md` §2.1 S-A1…S-A4, S-H1/S-H2, S-R3/S-R4, M5f, M9) — `npm run test:steps`
  * runs this file next to the other steps tests. Pure: `androidSources.ts` holds every decision of
  * `reader.android.ts` (which phone counter runs, what Health Connect and the Recording API are asked for each day,
- * and how their answers become a day's readings); the reader only does the native calls.
+ * and how their answers become a day's readings); the reader only does the native calls. Also what each Health
+ * Connect ask holds (`health/hcPermissions.ts`, V2 B1: the Health screen's Connect asks for background reading too).
  */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { addDays, zonedToUtc } from '../../src/lib/alarms/schedule';
+import { connectAsk, grantedMetrics, stepsAsk, stepsGrantOf } from '../../src/lib/health/hcPermissions';
 import {
   assembleDays,
   dayPlans,
@@ -25,6 +27,7 @@ import {
   samplerReadings,
   sinceRange,
   storeAccessOf,
+  storeBackgroundOf,
   withSince,
   type DayPlan,
   type HcAnswer,
@@ -120,6 +123,40 @@ describe('featuresOf / storeAccessOf — what this phone has (§2.2)', () => {
     assert.equal(storeAccessOf('needs_install', false), 'needs_install');
     assert.equal(storeAccessOf('needs_update', false), 'needs_install');
     assert.equal(storeAccessOf('unsupported', false), 'unavailable');
+  });
+
+  test('Health Connect’s background reading (B1): offered and granted, offered only, or not offered here', () => {
+    assert.equal(storeBackgroundOf({ backgroundRead: 'available', backgroundGranted: true }), 'granted');
+    assert.equal(storeBackgroundOf({ backgroundRead: 'available', backgroundGranted: false }), 'not_granted');
+    assert.equal(storeBackgroundOf({ backgroundRead: 'unavailable', backgroundGranted: false }), 'unavailable');
+  });
+});
+
+describe('what ÖRZA asks Health Connect for (P5; V2 B1)', () => {
+  const kinds = (ask: { recordType: string }[]) => ask.map((p) => p.recordType);
+
+  test('the Health screen’s Connect: the four types, plus background reading where Health Connect offers it', () => {
+    assert.deepEqual(kinds(connectAsk('available')), ['Steps', 'SleepSession', 'RestingHeartRate', 'Weight', 'BackgroundAccessPermission']);
+    assert.deepEqual(kinds(connectAsk('unavailable')), ['Steps', 'SleepSession', 'RestingHeartRate', 'Weight']);
+    assert.ok(connectAsk('available').every((p) => p.accessType === 'read'), 'reads only — ÖRZA never writes');
+  });
+
+  test('Today’s steps card (and the background ask once Steps is granted): Steps, plus background reading where offered', () => {
+    assert.deepEqual(kinds(stepsAsk('available')), ['Steps', 'BackgroundAccessPermission']);
+    assert.deepEqual(kinds(stepsAsk('unavailable')), ['Steps']);
+  });
+
+  test('the answer: Steps and background read from any grant list; the metrics leave the background permission out', () => {
+    const answer = [
+      { accessType: 'read', recordType: 'Steps' },
+      { accessType: 'read', recordType: 'Weight' },
+      { accessType: 'read', recordType: 'BackgroundAccessPermission' },
+    ];
+    assert.deepEqual(stepsGrantOf(answer), { granted: true, background: true });
+    assert.deepEqual(stepsGrantOf(answer.slice(0, 2)), { granted: true, background: false });
+    assert.deepEqual(stepsGrantOf([{ accessType: 'write', recordType: 'Steps' }]), { granted: false, background: false });
+    assert.deepEqual(grantedMetrics(answer), ['steps', 'weight_kg']);
+    assert.deepEqual(grantedMetrics([{ accessType: 'read', recordType: 'BackgroundAccessPermission' }]), []);
   });
 });
 

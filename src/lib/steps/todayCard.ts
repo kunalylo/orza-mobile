@@ -12,14 +12,16 @@
  *   separate "Use this phone's motion sensor instead" — never chained after the refusal; Android with the phone counting
  *   where Health Connect doesn't count it → "Include your watch or fitness app"; iPhone with Apple Health empty → "Use
  *   iPhone motion instead", once.
- * - §6: the disclosure's points and captions by path (`disclosureCopy`).
+ * - §6: the disclosure's points and captions by path (`disclosureCopy`); the motion button's label (`motionButtonCopy`:
+ *   "Allow Physical activity" ↗ with the Settings path once it opens Settings, V2 B2) and the "Counting since…" line
+ *   (`partialDayLine`).
  * - U5: where Health Connect's steps came from (`originLabel`: "From Samsung Health", "From this phone"); the hint when
  *   the phone's time zone has another offset than the profile's (`zoneHint`: steps count by the profile's days, R8d).
  */
 import { isValidTimeZone, safeTimeZone, tzOffsetMinutes } from '../alarms/schedule';
 
 import type { CountingSource, StepsAskState } from './plan';
-import type { StepsAccess, StepsAsk } from './types';
+import type { StepsAccess, StepsAsk, StepSource } from './types';
 
 /**
  * Which disclosure the sheet shows (§6 "Points by path"):
@@ -205,6 +207,81 @@ function watchButton(i: CardInputs, a: StepsAccess): CardAction | null {
   if (i.platform !== 'android' || !f || f.stepTracking || !f.counter || f.store === 'unavailable') return null;
   if (i.sources.includes('store') || !i.sources.some(isPhone)) return null;
   return hcAction(a, i.hcRefused, 'hc_add');
+}
+
+/* ───────────────────────────── The motion button (U2, V2 B2) ───────────────────────────── */
+
+export interface MotionButtonCopy {
+  label: string;
+  /** Shorter labels, longest first (large text on a narrow phone; screen readers keep `label`). */
+  short: string | readonly string[];
+  /** It leaves ÖRZA (Settings): the ↗ icon and a caption. */
+  external: boolean;
+  /** Under the buttons: where to turn the permission on (null for a sheet). */
+  caption: string | null;
+  hint: string;
+}
+
+/**
+ * The motion fallback's button ("Use this phone's motion sensor instead" / "Use iPhone motion instead"). Once the
+ * permission is refused for good it opens the app's Settings page instead of a sheet (V2 real phone, B2): then it says
+ * so — "Allow Physical activity" ↗ — and the caption names the Settings path.
+ */
+export function motionButtonCopy(platform: CardInputs['platform'], action: CardAction, permissionName: string, settingsPath: string): MotionButtonCopy {
+  const ios = platform === 'ios';
+  if (action.type !== 'sheet') {
+    return {
+      label: `Allow ${permissionName}`,
+      short: 'Open Settings',
+      external: true,
+      caption: `To count with ${ios ? 'your iPhone' : 'this phone'}, turn on ${permissionName}: ${settingsPath}.`,
+      hint: `Opens Settings to turn on ${permissionName} for ÖRZA`,
+    };
+  }
+  return {
+    label: ios ? 'Use iPhone motion instead' : 'Use this phone’s motion sensor instead',
+    // V2 real phone (384 dp wide, font 1.3): the full label was cut ("Use this phone’s motion …").
+    short: ios ? 'Use iPhone motion' : ['Use this phone’s motion sensor', 'Use this phone’s sensor', 'Use phone’s sensor'],
+    external: false,
+    caption: null,
+    hint:
+      action.sheet.variant === 'turn_on'
+        ? 'Explains counting with the motion sensor, then turns it on for your account'
+        : `Explains counting with the motion sensor, then asks for ${permissionName}`,
+  };
+}
+
+/* ───────────────────────────── "Counting since…" (§6, V2 F3) ───────────────────────────── */
+
+export interface PartialDayInputs {
+  /** When the counting source's coverage starts today, as shown ("7:10 pm"). */
+  since: string;
+  /** Today's START base (M5: steps saved before counting began), as shown ("800"); null without one. */
+  savedEarlier: string | null;
+  /** The source that counts today. */
+  winner: StepSource;
+  /** Its coverage start (epoch ms). */
+  coverFrom: number;
+  /** Health Connect counts this phone itself (Android 14+, extension 20). */
+  stepTracking: boolean;
+  /** S-H2: ÖRZA's first Health Connect grant on this install (prefs `hcGrantAt`). */
+  hcGrantAt: number | null;
+}
+
+/**
+ * Today's line when counting starts after midnight. A START base: "…, on top of the {n} saved earlier today." Health
+ * Connect from its first grant on this install (S-H2: it counts this phone only from then): that reason. Health
+ * Connect from any other instant — a member switch on a shared phone (the M9 floor), a later grant — a neutral line
+ * (V2 F3: the grant reason is true only on the first grant's day). The phone's own counter: earlier steps weren't seen.
+ */
+export function partialDayLine(i: PartialDayInputs): string {
+  if (i.savedEarlier != null) return `Counting since ${i.since}, on top of the ${i.savedEarlier} saved earlier today.`;
+  if (i.winner === 'health_connect') {
+    return i.stepTracking && i.hcGrantAt != null && i.coverFrom === i.hcGrantAt
+      ? `Counting since ${i.since} — Health Connect starts counting this phone’s steps when you turn this on.`
+      : `Counting since ${i.since} — steps before then aren’t included.`;
+  }
+  return `Counting since ${i.since} — earlier steps today weren’t seen by this phone.`;
 }
 
 /* ───────────────────────────── The disclosure (§6) ───────────────────────────── */

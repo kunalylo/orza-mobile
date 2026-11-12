@@ -12,6 +12,8 @@
  * - Turning it off: a confirmation sheet (`offSheet`) with the way to remove ÖRZA's access in the phone's own settings
  *   — the switch never revokes it (P9: Health Connect's revoke would take sleep, weight and resting heart rate too; the
  *   Health screen's Disconnect does that).
+ * - Counting from Health Connect without its background reading (V2 B1: a member who connected from the Health screen
+ *   before its Connect asked for it): the way to allow it (`background`).
  * - §2.8: the "both ways" line (`bothWaysLine`).
  */
 import type { CountingSource, StepsAskState } from './plan';
@@ -32,6 +34,8 @@ export interface SwitchInputs {
   ask: StepsAskState | null;
   /** Android: Health Connect's steps sheet was refused (prefs, per install). */
   hcRefused: boolean;
+  /** Android: the member refused Health Connect's background screen on this visit (it may not show again). */
+  backgroundRefused?: boolean;
 }
 
 /**
@@ -47,6 +51,14 @@ export type SwitchState = 'counting' | 'off' | 'setup' | 'checking' | 'stopped' 
 /** What switching on does: the member's consents count again, or one of Today's ask actions. */
 export type SwitchOn = { type: 'resume' } | CardAction;
 
+/**
+ * V2 B1: Health Connect counts for the member, but ÖRZA may not read it in the background, so steps are saved only
+ * while ÖRZA is open. `ask`: Health Connect's background screen (Steps is granted already, so only that one shows);
+ * `store_settings` after a refusal on this visit — Health Connect › App permissions › ÖRZA (its screen may not show
+ * again after two refusals).
+ */
+export type BackgroundOffer = 'ask' | 'store_settings';
+
 export interface StepsSwitchView {
   state: SwitchState;
   /** The switch's position. */
@@ -60,6 +72,8 @@ export interface StepsSwitchView {
   fix: CardAction | null;
   /** `setup` / `stopped` after a Health Connect refusal: "Use this phone's motion sensor instead" (U2). */
   motion: CardAction | null;
+  /** `counting` from Health Connect without its background reading: the way to allow it (B1). */
+  background: BackgroundOffer | null;
 }
 
 const RESUME: SwitchOn = { type: 'resume' };
@@ -99,9 +113,15 @@ function countingSubtitle(platform: SwitchInputs['platform'], sources: readonly 
   return f?.stepTracking || sources.some(isPhone) ? 'From Health Connect — this phone and your watch' : 'From Health Connect — your watch and fitness apps';
 }
 
+/** B1: Health Connect is ON for the member and offers background reading, but it isn't granted. */
+function backgroundOffer(i: SwitchInputs): BackgroundOffer | null {
+  if (i.platform !== 'android' || !i.sources.includes('store') || i.access?.storeBackground !== 'not_granted') return null;
+  return i.backgroundRefused ? 'store_settings' : 'ask';
+}
+
 /** The switch for the member's state (see the file header). */
 export function switchView(i: SwitchInputs): StepsSwitchView {
-  const base: StepsSwitchView = { state: 'off', checked: false, enabled: true, subtitle: '', turnOn: null, fix: null, motion: null };
+  const base: StepsSwitchView = { state: 'off', checked: false, enabled: true, subtitle: '', turnOn: null, fix: null, motion: null, background: null };
   if (i.platform === 'none') {
     return { ...base, state: 'unsupported', enabled: false, subtitle: 'Steps count by themselves in the ÖRZA phone app' };
   }
@@ -113,7 +133,13 @@ export function switchView(i: SwitchInputs): StepsSwitchView {
     return { ...base, state: 'off', subtitle: 'Off — you log steps yourself', turnOn: i.agreed ? RESUME : (ask.cta ?? RESUME) };
   }
   if (i.sources.length) {
-    return { ...base, state: 'counting', checked: true, subtitle: countingSubtitle(i.platform, i.sources, i.access?.features) };
+    return {
+      ...base,
+      state: 'counting',
+      checked: true,
+      subtitle: countingSubtitle(i.platform, i.sources, i.access?.features),
+      background: backgroundOffer(i),
+    };
   }
   if (!i.agreed) {
     return { ...base, state: 'setup', subtitle: 'Not on yet — you log steps yourself', turnOn: ask.cta ?? RESUME, motion: ask.motion };
@@ -174,16 +200,19 @@ export function offSheet(platform: SwitchInputs['platform'], sources: readonly C
 
 /**
  * §6's "both ways" line. Android 14+ only while Health Connect counts this phone for ÖRZA (its step counting starts
- * with a grant — before that the phone's steps aren't in Health Connect); Android otherwise: what ÖRZA reads there.
- * Null when not a phone.
+ * with a grant — before that the phone's steps aren't in Health Connect). The phone's own counter without Health
+ * Connect (V2 F2: e.g. Health Connect refused): ÖRZA's count stays in ÖRZA — not a claim that it reads Health
+ * Connect. Android otherwise: what ÖRZA reads there. Null when not a phone.
  */
 export function bothWaysLine(platform: SwitchInputs['platform'], f: StepFeatures | undefined, sources: readonly CountingSource[]): string | null {
   if (platform === 'ios') {
     return 'Your iPhone already saves its steps to Apple Health for every app you allow. ÖRZA reads them and never writes a second copy.';
   }
   if (platform !== 'android') return null;
-  if (f?.stepTracking && sources.includes('store')) {
+  const store = sources.includes('store');
+  if (f?.stepTracking && store) {
     return 'Your phone’s steps are in Health Connect, so other health apps you allow see them too. ÖRZA doesn’t add a second copy.';
   }
+  if (!store && sources.some(isPhone)) return 'ÖRZA counts this phone’s steps itself and doesn’t share them with other health apps.';
   return 'ÖRZA reads steps that Samsung Health, Fitbit and others share through Health Connect.';
 }

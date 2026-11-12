@@ -13,12 +13,23 @@
  *   app"; iPhone with Apple Health empty → "Use iPhone motion instead", once.
  * - §6: the disclosure's exact points and captions by path.
  * - U5: Health Connect origin labels ("From Samsung Health"), the time-zone mismatch hint.
+ * - V2 real phone: the motion button once it opens Settings (B2); the "Counting since…" line by why counting starts
+ *   late (F3).
  */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import type { CountingSource, StepsAskState } from '../../src/lib/steps/plan';
-import { disclosureCopy, originLabel, todayCard, zoneHint, type CardInputs } from '../../src/lib/steps/todayCard';
+import {
+  disclosureCopy,
+  motionButtonCopy,
+  originLabel,
+  partialDayLine,
+  todayCard,
+  zoneHint,
+  type CardInputs,
+  type PartialDayInputs,
+} from '../../src/lib/steps/todayCard';
 import type { StepFeatures, StepsAccess } from '../../src/lib/steps/types';
 
 const ANDROID_14: StepFeatures = { platform: 'android', store: 'available', stepTracking: true, counter: true };
@@ -405,5 +416,61 @@ describe('U5: where Health Connect\'s steps came from, the time-zone hint', () =
     assert.equal(zoneHint('Europe/London', 'Africa/Abidjan', AT), null);
     assert.equal(zoneHint('Asia/Kolkata', 'Not/AZone', AT), null);
     assert.equal(zoneHint('Asia/Kolkata', null, AT), null);
+  });
+});
+
+describe('the motion button (U2) once Physical activity is refused for good (V2 B2)', () => {
+  const ANDROID_PATH = 'Settings › Apps › ÖRZA › Permissions › Physical activity › Allow';
+
+  test('Android, refused for good: the button opens Settings — "Allow Physical activity" ↗ and the Settings path', () => {
+    const card = todayCard(inputs({ access: access(ANDROID_14, { phonePermission: 'blocked' }), ask: ask('hc'), hcRefused: true }));
+    assert.deepEqual(card.motion, { type: 'settings' });
+    const copy = motionButtonCopy('android', card.motion!, 'Physical activity', ANDROID_PATH);
+    assert.equal(copy.label, 'Allow Physical activity');
+    assert.equal(copy.external, true);
+    assert.equal(copy.caption, `To count with this phone, turn on Physical activity: ${ANDROID_PATH}.`);
+    assert.equal(copy.hint, 'Opens Settings to turn on Physical activity for ÖRZA');
+  });
+
+  test('iPhone, Motion & Fitness refused: "Allow Motion & Fitness" ↗ with its Settings path', () => {
+    const copy = motionButtonCopy('ios', { type: 'settings' }, 'Motion & Fitness', 'Settings › ÖRZA › Motion & Fitness');
+    assert.equal(copy.label, 'Allow Motion & Fitness');
+    assert.equal(copy.caption, 'To count with your iPhone, turn on Motion & Fitness: Settings › ÖRZA › Motion & Fitness.');
+  });
+
+  test('still askable: the fallback labels (with their short forms), no ↗, no caption', () => {
+    const cont = motionButtonCopy('android', { type: 'sheet', sheet: { kind: 'phone', path: 'phone', variant: 'continue', fallback: true } }, 'Physical activity', ANDROID_PATH);
+    assert.equal(cont.label, 'Use this phone’s motion sensor instead');
+    assert.deepEqual(cont.short, ['Use this phone’s motion sensor', 'Use this phone’s sensor', 'Use phone’s sensor']);
+    assert.deepEqual([cont.external, cont.caption], [false, null]);
+    assert.equal(cont.hint, 'Explains counting with the motion sensor, then asks for Physical activity');
+    const turnOn = motionButtonCopy('ios', { type: 'sheet', sheet: { kind: 'phone', path: 'motion', variant: 'turn_on', fallback: true } }, 'Motion & Fitness', '');
+    assert.equal(turnOn.label, 'Use iPhone motion instead');
+    assert.equal(turnOn.hint, 'Explains counting with the motion sensor, then turns it on for your account');
+  });
+});
+
+describe('"Counting since…" — why today counts from later than midnight (§6, V2 F3)', () => {
+  const GRANT = Date.UTC(2026, 10, 12, 13, 45);
+  const base: PartialDayInputs = { since: '7:15 pm', savedEarlier: null, winner: 'health_connect', coverFrom: GRANT, stepTracking: true, hcGrantAt: GRANT };
+
+  test('a START base: on top of what was saved earlier, whatever the source', () => {
+    assert.equal(partialDayLine({ ...base, savedEarlier: '800' }), 'Counting since 7:15 pm, on top of the 800 saved earlier today.');
+    assert.equal(partialDayLine({ ...base, winner: 'phone', savedEarlier: '1,000' }), 'Counting since 7:15 pm, on top of the 1,000 saved earlier today.');
+  });
+
+  test('Health Connect from its first grant on this install (S-H2): it starts counting this phone then', () => {
+    assert.equal(partialDayLine(base), 'Counting since 7:15 pm — Health Connect starts counting this phone’s steps when you turn this on.');
+  });
+
+  test('Health Connect from any other instant — a member switch (M9 floor), another grant — a neutral line', () => {
+    const neutral = 'Counting since 7:15 pm — steps before then aren’t included.';
+    assert.equal(partialDayLine({ ...base, coverFrom: GRANT + 25 * 60_000 }), neutral, 'the floor after the grant');
+    assert.equal(partialDayLine({ ...base, hcGrantAt: null }), neutral, 'no grant on record');
+    assert.equal(partialDayLine({ ...base, stepTracking: false }), neutral, 'Health Connect doesn’t count this phone');
+  });
+
+  test('the phone’s own counter: earlier steps weren’t seen by this phone', () => {
+    assert.equal(partialDayLine({ ...base, winner: 'phone' }), 'Counting since 7:15 pm — earlier steps today weren’t seen by this phone.');
   });
 });

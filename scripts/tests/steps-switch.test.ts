@@ -10,6 +10,7 @@
  *   Settings, Health Connect, Play), whatever "Not now" folded on Today (P19: the switch keeps the way back).
  * - On with nothing counting (a permission taken away since): what gets it counting again.
  * - The off sheet (§6) and its platform note; the "both ways" line by platform.
+ * - Counting from Health Connect without its background reading: the way to allow it (V2 B1).
  */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
@@ -59,7 +60,7 @@ describe('what counts: the switch on, the subtitle by source (§6)', () => {
     assert.equal(v.checked, true);
     assert.equal(v.enabled, true);
     assert.equal(v.subtitle, 'From Health Connect — this phone and your watch');
-    assert.deepEqual([v.fix, v.motion], [null, null]);
+    assert.deepEqual([v.fix, v.motion, v.background], [null, null, null]);
   });
 
   test('Android 9–13: Health Connect beside the phone\'s own count keeps §6\'s line; Health Connect alone names the watch and apps', () => {
@@ -231,6 +232,32 @@ describe('the off sheet (§6)', () => {
   });
 });
 
+describe('Health Connect counting without background reading (V2 B1: connected from the Health screen before it asked)', () => {
+  const granted = (storeBackground: StepsAccess['storeBackground']) => access(ANDROID_14, { store: 'granted', storeBackground });
+
+  test('READ_STEPS without background: "Allow background access" (Health Connect’s background screen)', () => {
+    const v = switchView(inputs({ access: granted('not_granted'), agreed: true, sources: on('store') }));
+    assert.equal(v.state, 'counting');
+    assert.equal(v.background, 'ask');
+  });
+
+  test('refused on this visit: Health Connect’s own page instead (its screen may not show again)', () => {
+    const v = switchView(inputs({ access: granted('not_granted'), agreed: true, sources: on('store'), backgroundRefused: true }));
+    assert.equal(v.background, 'store_settings');
+  });
+
+  test('nothing to offer: granted, not offered by this Health Connect, unknown (older reader), or Health Connect not counting', () => {
+    for (const b of ['granted', 'unavailable', undefined] as const) {
+      assert.equal(switchView(inputs({ access: granted(b), agreed: true, sources: on('store') })).background, null, String(b));
+    }
+    const phone = access(ANDROID_13, { store: 'granted', storeBackground: 'not_granted', phonePermission: 'granted' });
+    assert.equal(switchView(inputs({ access: phone, agreed: true, sources: on('recording') })).background, null, 'the phone counts');
+    assert.equal(switchView(inputs({ access: granted('not_granted'), on: false, agreed: true })).background, null, 'switched off');
+    const ios = access(IPHONE, { store: 'granted', storeBackground: 'not_granted' });
+    assert.equal(switchView(inputs({ access: ios, agreed: true, sources: on('store') })).background, null, 'iPhone');
+  });
+});
+
 describe('the "both ways" line (§6, §2.8)', () => {
   test('Android 14+ with Health Connect counting: the phone\'s steps are in Health Connect, no second copy', () => {
     assert.equal(
@@ -239,11 +266,18 @@ describe('the "both ways" line (§6, §2.8)', () => {
     );
   });
 
-  test('Android 9–13, or 14+ without Health Connect on: what ÖRZA reads through Health Connect', () => {
+  test('Android 9–13 with Health Connect on, or nothing counting yet: what ÖRZA reads through Health Connect', () => {
     const line = 'ÖRZA reads steps that Samsung Health, Fitbit and others share through Health Connect.';
     assert.equal(bothWaysLine('android', ANDROID_13, on('store', 'recording')), line);
-    assert.equal(bothWaysLine('android', ANDROID_14, on('recording')), line);
+    assert.equal(bothWaysLine('android', ANDROID_13, on('store')), line);
     assert.equal(bothWaysLine('android', undefined, []), line);
+  });
+
+  test('the phone’s own counter without Health Connect (V2 F2: 14+ with Health Connect refused): no Health Connect claim', () => {
+    const line = 'ÖRZA counts this phone’s steps itself and doesn’t share them with other health apps.';
+    assert.equal(bothWaysLine('android', ANDROID_14, on('recording')), line);
+    assert.equal(bothWaysLine('android', ANDROID_14, on('sampler')), line);
+    assert.equal(bothWaysLine('android', ANDROID_13, on('recording')), line);
   });
 
   test('iPhone: the iPhone already saves its steps to Apple Health; not a phone: none', () => {

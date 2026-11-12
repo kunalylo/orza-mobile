@@ -38,6 +38,7 @@ import {
   samplerReadings,
   sinceRange,
   storeAccessOf,
+  storeBackgroundOf,
   withSince,
   type DayPlan,
   type PhoneMode,
@@ -280,6 +281,7 @@ export const stepsReader: StepsReader = {
         recording: p.status,
         recordingReady: p.status === 'available' && p.subscribedAt != null,
         features: p.features,
+        storeBackground: storeBackgroundOf(p.health),
       };
     } catch {
       return { phoneAvailable: false, phonePermission: 'unavailable' };

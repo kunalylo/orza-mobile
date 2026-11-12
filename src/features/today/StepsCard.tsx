@@ -21,7 +21,7 @@
  * on return to the app, and saves the count through `POST /api/track/steps` so the website shows the same number.
  */
 import { router } from 'expo-router';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 
@@ -29,8 +29,8 @@ import { useSignedInUser } from '@/lib/auth';
 import { deviceTimeZone } from '@/lib/device';
 import { haptics } from '@/lib/haptics';
 import { shownSteps, type ShownSource } from '@/lib/steps/policy';
-import { useDayRecord } from '@/lib/steps/store';
-import { originLabel, todayCard, zoneHint } from '@/lib/steps/todayCard';
+import { hcGrantAt, subscribeStepsStore, useDayRecord } from '@/lib/steps/store';
+import { motionButtonCopy, originLabel, partialDayLine, todayCard, zoneHint } from '@/lib/steps/todayCard';
 import { useTodaySteps } from '@/lib/steps/useSteps';
 import { colors, radii, spacing } from '@/theme';
 import { Button, EnergyRing, GlassCard, Icon, Text, toast, type IconName } from '@/ui';
@@ -97,6 +97,7 @@ export function StepsCard({
   const user = useSignedInUser();
   const steps = useTodaySteps();
   const record = useDayRecord(user.id, date);
+  const grantAt = useSyncExternalStore(subscribeStepsStore, hcGrantAt);
   const target = targetIn > 0 ? targetIn : DEFAULT_STEP_TARGET;
   const isToday = date === today;
   // The disclosure sheet and what the card's buttons open (P6; shared with the switch outside Today).
@@ -155,14 +156,15 @@ export function StepsCard({
   let status: string;
   if (reached) status = isToday ? 'Step goal reached — lovely work.' : 'Step goal reached.';
   else if (isToday && shown.source === 'edited') status = autoOn ? `${toGo} · your number, plus steps counted since` : `${toGo} · your number`;
-  else if (isToday && partialFrom) {
-    const since = formatTime(new Date(partialFrom).toISOString(), tz);
-    status =
-      base?.kind === 'start' && base.steps > 0
-        ? `Counting since ${since}, on top of the ${formatNumber(base.steps)} saved earlier today.`
-        : winner?.source === 'health_connect' && steps.access?.features?.stepTracking
-          ? `Counting since ${since} — Health Connect starts counting this phone’s steps when you turn this on.`
-          : `Counting since ${since} — earlier steps today weren’t seen by this phone.`;
+  else if (isToday && partialFrom && winner) {
+    status = partialDayLine({
+      since: formatTime(new Date(partialFrom).toISOString(), tz),
+      savedEarlier: base?.kind === 'start' && base.steps > 0 ? formatNumber(base.steps) : null,
+      winner: winner.source,
+      coverFrom: partialFrom,
+      stepTracking: !!steps.access?.features?.stepTracking,
+      hcGrantAt: grantAt,
+    });
   } else if (isToday && estimated > 0 && shown.source === 'phone')
     status = `${toGo} · about ${formatNumber(estimated)} of these are estimated from hours the phone couldn’t check.`;
   else if (isToday && counting) status = `${toGo} · updates on its own`;
@@ -191,14 +193,13 @@ export function StepsCard({
   const cta = isToday ? card.cta : null;
   const motion = isToday ? card.motion : null;
   const watch = isToday ? card.watch : null;
-  const motionLabel = steps.platform === 'ios' ? 'Use iPhone motion instead' : 'Use this phone’s motion sensor instead';
-  // V2 real phone (384 dp wide, font 1.3): both labels were cut ("Use this phone’s motion …", "Count my steps
-  // automat…"); screen readers keep the full label.
-  const motionShort = steps.platform === 'ios' ? 'Use iPhone motion' : ['Use this phone’s motion sensor', 'Use this phone’s sensor', 'Use phone’s sensor'];
+  // "Use this phone’s motion sensor instead", or "Allow Physical activity" ↗ once it opens Settings (V2 B2).
+  const motionCopy = motion ? motionButtonCopy(steps.platform, motion, steps.permissionName, steps.settingsPath) : null;
 
   let ctaView: ReactNode = null;
   if (cta?.type === 'sheet') {
     const turnOn = cta.sheet.variant === 'turn_on';
+    // V2 real phone (384 dp wide, font 1.3): "Count my steps automat…" was cut; screen readers keep the full label.
     ctaView = (
       <Button
         label={turnOn ? 'Turn on step counting' : 'Count my steps automatically'}
@@ -282,23 +283,25 @@ export function StepsCard({
 
       {ctaView || motion ? (
         <View style={styles.cta}>
-          {motion ? (
-            <Button
-              label={motionLabel}
-              shortLabel={motionShort}
-              variant="secondary"
-              icon="smartphone"
-              block
-              loading={disclosure.askingFallback}
-              onPress={() => act(motion)}
-              accessibilityHint={
-                motion.type !== 'sheet'
-                  ? `Opens Settings to turn on ${steps.permissionName} for ÖRZA`
-                  : motion.sheet.variant === 'turn_on'
-                    ? 'Explains counting with the motion sensor, then turns it on for your account'
-                    : `Explains counting with the motion sensor, then asks for ${steps.permissionName}`
-              }
-            />
+          {motion && motionCopy ? (
+            <>
+              <Button
+                label={motionCopy.label}
+                shortLabel={motionCopy.short}
+                variant="secondary"
+                icon="smartphone"
+                iconRight={motionCopy.external ? 'arrow-up-right' : undefined}
+                block
+                loading={disclosure.askingFallback}
+                onPress={() => act(motion)}
+                accessibilityHint={motionCopy.hint}
+              />
+              {motionCopy.caption ? (
+                <Text variant="caption" tone="subtle" align="center">
+                  {motionCopy.caption}
+                </Text>
+              ) : null}
+            </>
           ) : null}
           {ctaView}
         </View>

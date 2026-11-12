@@ -19,7 +19,7 @@ import { coversWholeDay, dailyStepCounts, dayComplete, stepsInRange, type StepSa
 import { hcCoverFrom } from './merge';
 import { recordingDays, recordingRange, recordingWindow, type RecordingBucket, type RecordingRange } from './recording';
 import { sinceRange, withSince, type DayPlan } from './shared';
-import type { DayReading, RecordingStatus, SinceCount, SourceReading, StepFeatures, StoreAccess } from './types';
+import type { DayReading, RecordingStatus, SinceCount, SourceReading, StepFeatures, StoreAccess, StoreBackground } from './types';
 
 /** The member days to read and a base's count since (moved to `shared.ts` for the iPhone reader too). */
 export { dayPlans, sinceRange, withSince, type DayPlan } from './shared';
@@ -43,6 +43,12 @@ export function featuresOf(availability: HealthAvailability, stepTracking: boole
 export function storeAccessOf(availability: HealthAvailability, stepsGranted: boolean): StoreAccess {
   if (availability === 'available') return stepsGranted ? 'granted' : 'not_granted';
   return availability === 'unsupported' ? 'unavailable' : 'needs_install';
+}
+
+/** Health Connect's background reading (V2 B1), from `healthFeatures()`: `unavailable` where it isn't offered. */
+export function storeBackgroundOf(f: { backgroundRead: 'available' | 'unavailable'; backgroundGranted: boolean }): StoreBackground {
+  if (f.backgroundRead !== 'available') return 'unavailable';
+  return f.backgroundGranted ? 'granted' : 'not_granted';
 }
 
 /* ───────────────────────────── The phone's counter (S-A2, S-A4) ───────────────────────────── */

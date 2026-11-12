@@ -151,7 +151,16 @@ export interface StepsAccess {
   recordingReady?: boolean;
   /** Steps v2 (R2 / R4): what this phone can count with — the sync's gate (`plan.stepsGate`: the sources ON, lookback). */
   features?: StepFeatures;
+  /**
+   * Android (V2 B1): Health Connect's "Access data in the background" (`READ_HEALTH_DATA_IN_BACKGROUND`) — without it
+   * the hourly run can't read Health Connect while ÖRZA is closed (its days are unread, M5f), so steps are saved only
+   * while ÖRZA is open. `unavailable`: Health Connect doesn't offer it here.
+   */
+  storeBackground?: StoreBackground;
 }
+
+/** Health Connect's background reading for ÖRZA (Android). */
+export type StoreBackground = 'granted' | 'not_granted' | 'unavailable';
 
 /** What this phone can count steps with (§2.1, §2.2) — from the readers (R2 / R4); `plan.firstAsk` / `plan.sourcesOn`. */
 export interface StepFeatures {

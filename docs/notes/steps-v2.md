@@ -453,6 +453,12 @@ Target: `T = clamp(value − (isToday ? estimated : 0))`. Known floor: `K = max(
 - **Reconcile is conservative (R/U review).** A past day saved from one source and now led by another that doesn't stand
   for it stays at its higher number: e.g. Health Connect (a watch) made the live tail, its data was deleted since and
   the phone's own count now leads — the day isn't lowered to the phone's count.
+- **Health Connect counts this phone only while an app holds `READ_STEPS`** (V2 real phone, F1: seen on vivo, Android 16 —
+  `dumpsys sensorservice` shows Health Connect's step listener registered 1 s after ÖRZA's Steps grant and unregistered
+  1 s after it was turned off). S-H2 makes only the first grant's day partial (`hcGrantAt`). On a later day, after Steps
+  was turned off and granted again, Health Connect has nothing from before the re-grant while `coverFrom = s`: that day
+  shows and saves only the steps since the re-grant, with no "Counting since" line. An undercount of that one day, never
+  a double count.
 
 ---
 
@@ -695,6 +701,10 @@ The Health screen's Android connect caption says the same for its totals. **The 
 
 **Android after an HC refusal (phone has a counter)**
 - Button: "Use this phone's motion sensor instead".
+- Physical activity refused for good (V2 B2): the button opens Settings, so it reads "Allow Physical activity" ↗ (iPhone:
+  "Allow Motion & Fitness"), short label "Open Settings", with the caption "To count with this phone, turn on Physical
+  activity: Settings › Apps › ÖRZA › Permissions › Physical activity › Allow." (iPhone: "To count with your iPhone, turn
+  on Motion & Fitness: Settings › ÖRZA › Motion & Fitness.").
 
 **Android `phone` granted, HC available, not stepTracking**
 - Ghost button: "Include your watch or fitness app".
@@ -714,6 +724,10 @@ on-device).
 **Status lines**
 - First day of HC on-device: "Counting since {time} — Health Connect starts counting this phone's steps when you turn
   this on." If a START base applies: "Counting since {time}, on top of the {n} saved earlier today."
+- V2 F3: the Health Connect line above only when the coverage starts at ÖRZA's first grant (`coverFrom = hcGrantAt`).
+  Health Connect from any other instant (a member switch on a shared phone, the M9 floor; a later grant): "Counting
+  since {time} — steps before then aren't included." The phone's own counter keeps "Counting since {time} — earlier
+  steps today weren't seen by this phone."
 - Sampler estimate (today): unchanged.
 
 ### Health screen: the Steps switch card
@@ -736,7 +750,19 @@ on-device).
 |---|---|
 | Android 14+ | "Your phone's steps are in Health Connect, so other health apps you allow see them too. ÖRZA doesn't add a second copy." |
 | Android 9–13 | "ÖRZA reads steps that Samsung Health, Fitbit and others share through Health Connect." |
+| Android, the phone's own counter without Health Connect (V2 F2: e.g. 14+ with Health Connect refused) | "ÖRZA counts this phone's steps itself and doesn't share them with other health apps." |
 | iOS | "Your iPhone already saves its steps to Apple Health for every app you allow. ÖRZA reads them and never writes a second copy." |
+
+"See today's steps" opens ÖRZA's own Today: no ↗ (V2 F2).
+
+**Counting from Health Connect without "Access data in the background"** (V2 B1: a member who connected from the Health
+screen before its Connect asked for it; the Connect now asks for it too, where Health Connect offers it):
+- Line: "Steps are saved only while ÖRZA is open." Button: "Allow background access" (Health Connect's background
+  screen: Steps is granted already, so only that one shows).
+- Granted: toast "Done — your steps are saved even when ÖRZA is closed." Refused: "No problem — your steps are saved
+  whenever you open ÖRZA.", and for the rest of the visit the line reads "Steps are saved only while ÖRZA is open. To
+  save them when it's closed, allow background access in Health Connect › App permissions › ÖRZA." with "Open Health
+  Connect" ↗ (its screen may not show again after two refusals).
 
 **Off confirmation sheet**
 - **Title:** "Stop counting steps automatically?"
@@ -1428,6 +1454,10 @@ the sampler is unavailable too. Background HealthKit delivery doesn't run on the
   sheet close / header icon buttons 44 dp; copy: after a Health Disconnect the switch reads "Not on yet" for a member who
   had counting on.
 - [ ] **V2.** Ask the user to connect the Android phone(s). Run §8.2 A-1…A-11.
+  2026-11-12: vivo V2544 runs 1–4 (`docs/notes/steps-v2-V1.md`); walks and the alarm cases wait for the user. Fixed in
+  code from the findings (`docs/notes/v2-fixes.md`): B1 (Health sync's Connect asks for background reading; the Health
+  card offers it where Steps is granted without it), B2, F1 (§2.9), F2, F3, and the "Keep medicine alarms working"
+  sheet for phones whose maker closes apps. Seen on the phone only after the next test build (native change).
 - [ ] **V3-c** (only if A-1 latency > 5 min). Foreground live top-up: while Today is open, add the sampler's `sampleNow()`
   delta since the latest Recording bucket end, as a phone source compared under M1. Never an FGS.
 - [ ] **V4.** With the user's OK:

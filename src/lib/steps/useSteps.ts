@@ -6,7 +6,7 @@
  * - `useTodaySteps()` — the Today card: reads on focus, every minute while Today is visible and on return to the app;
  *   the live reading, what counts (`sources`), what Today asks (`ask`: "Continue" before a system prompt, "Turn on" when
  *   the permission is already there) and the member's answers — `requestAccess(kind)`, `turnOn()`, `notNow()`,
- *   `motionInstead()`, `setAutoSteps(on)`. `useTodaySteps({live: false})`: the same without reads of its own — "Count
+ *   `motionInstead()`, `setAutoSteps(on)`, `requestBackground()`. `useTodaySteps({live: false})`: the same without reads of its own — "Count
  *   steps automatically" on the Health screen and in Settings › Privacy & data (U3, U4: the app reads at launch and on
  *   every return, and an answer reads at once).
  * - `refreshStepsNow(member, qc)` — a read right after a consent changed elsewhere (the Health screen's connect /
@@ -216,6 +216,17 @@ export function useTodaySteps({ live = true }: TodayStepsOptions = {}) {
     return requestAccess('phone');
   }, [markMotionOffered, requestAccess]);
 
+  /**
+   * V2 B1: Health Connect's "Access data in the background" for a member it counts for — asked with Steps, which is
+   * granted already, so only the background screen shows (none after two refusals: it answers at once). True when
+   * granted. The phone's state is read again at once.
+   */
+  const requestBackground = useCallback(async (): Promise<boolean> => {
+    const grant = await healthBridge.requestSteps();
+    await afterAnswer();
+    return grant.background;
+  }, [afterAnswer]);
+
   /** Re-check after Settings / the Health screen (no prompt). */
   const recheck = useCallback(() => refresh(), [refresh]);
 
@@ -277,6 +288,7 @@ export function useTodaySteps({ live = true }: TodayStepsOptions = {}) {
     notNow,
     motionInstead,
     markMotionOffered,
+    requestBackground,
     recheck,
     /** The app's own Settings page (a blocked phone permission). */
     openSettings: openStepsSettings,

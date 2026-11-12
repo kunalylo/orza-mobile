@@ -9,6 +9,9 @@
  * - On → the member's consents count again, or — never agreed on this install — Today's ask: the same one-button
  *   disclosure as Today (`StepsDisclosure.tsx`), or Settings / Health Connect / Google Play. "Not now" on Today never
  *   hides this way back (P19).
+ * - Health card, counting from Health Connect without its background reading (V2 B1): "Steps are saved only while
+ *   ÖRZA is open." + "Allow background access" (Health Connect's background screen), or — refused on this visit —
+ *   "Open Health Connect" with where to allow it.
  */
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -19,7 +22,7 @@ import { TINTS } from '@/features/settings/parts';
 import { useStepsDisclosure } from '@/features/today/StepsDisclosure';
 import { haptics } from '@/lib/haptics';
 import { bothWaysLine, offSheet, switchView, type OffSheetCopy } from '@/lib/steps/switchCard';
-import type { CardAction } from '@/lib/steps/todayCard';
+import { motionButtonCopy, type CardAction } from '@/lib/steps/todayCard';
 import { useTodaySteps } from '@/lib/steps/useSteps';
 import { colors, isIOS, radii, spacing } from '@/theme';
 import { Button, GlassCard, Icon, Sheet, Switch, switchBoxStyle, Text, toast } from '@/ui';
@@ -32,6 +35,9 @@ function useStepsSwitchFlow() {
   const flow = useStepsDisclosure(steps, { againLabel: TITLE });
   const [offOpen, setOffOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // B1: Health Connect's background screen refused on this visit (it may not show again) → "Open Health Connect".
+  const [backgroundRefused, setBackgroundRefused] = useState(false);
+  const [askingBackground, setAskingBackground] = useState(false);
 
   const view = switchView({
     platform: steps.platform,
@@ -41,6 +47,7 @@ function useStepsSwitchFlow() {
     access: steps.access,
     ask: steps.ask,
     hcRefused: steps.hcRefused,
+    backgroundRefused,
   });
   const off = offSheet(steps.platform, steps.sources, steps.access);
 
@@ -68,6 +75,30 @@ function useStepsSwitchFlow() {
       toast.error('That didn’t work — please try again.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** B1: "Allow background access" (Health Connect's background screen), or Health Connect after a refusal. */
+  const allowBackground = async () => {
+    if (view.background === 'store_settings') {
+      flow.act({ type: 'store_settings' });
+      return;
+    }
+    if (askingBackground) return;
+    setAskingBackground(true);
+    try {
+      if (await steps.requestBackground()) {
+        haptics.success();
+        toast.success('Done — your steps are saved even when ÖRZA is closed.');
+      } else {
+        haptics.warning();
+        setBackgroundRefused(true);
+        toast.info('No problem — your steps are saved whenever you open ÖRZA.');
+      }
+    } catch {
+      toast.info('That didn’t open — please try again in a moment.');
+    } finally {
+      setAskingBackground(false);
     }
   };
 
@@ -101,15 +132,14 @@ function useStepsSwitchFlow() {
     </>
   );
 
-  return { steps, view, flow, toggle, waiting: busy || flow.asking || flow.askingFallback, sheets };
+  return { steps, view, flow, toggle, waiting: busy || flow.asking || flow.askingFallback, sheets, allowBackground, askingBackground };
 }
 
-/** What a "get it counting again" button says. */
-function actionLabel(a: CardAction, platform: 'android' | 'ios' | 'none'): string {
+/** What a "get it counting again" button says (the motion fallback's: `motionButtonCopy`). */
+function actionLabel(a: CardAction): string {
   if (a.type === 'settings') return 'Open Settings';
   if (a.type === 'store_settings') return 'Open Health Connect';
   if (a.type === 'store_install') return 'Get Health Connect';
-  if (a.sheet.fallback) return platform === 'ios' ? 'Use iPhone motion instead' : 'Use this phone’s motion sensor instead';
   return a.sheet.variant === 'turn_on' ? 'Turn on' : 'Allow access';
 }
 
@@ -117,7 +147,7 @@ function actionIcon(a: CardAction) {
   if (a.type === 'settings') return 'settings' as const;
   if (a.type === 'store_settings') return 'mci:heart-pulse' as const;
   if (a.type === 'store_install') return 'mci:google-play' as const;
-  return a.sheet.fallback ? ('smartphone' as const) : ('mci:shoe-print' as const);
+  return 'mci:shoe-print' as const;
 }
 
 /**
@@ -145,19 +175,22 @@ function Toggle({ value, enabled, waiting, hint, onChange }: { value: boolean; e
 }
 
 /** "Get it counting again" (on, nothing counts) and the motion sensor after a Health Connect refusal. */
-function FixActions({ flow, fix, motion, platform, small }: {
+function FixActions({ flow, steps, fix, motion, small }: {
   flow: ReturnType<typeof useStepsSwitchFlow>['flow'];
+  steps: ReturnType<typeof useStepsSwitchFlow>['steps'];
   fix: CardAction | null;
   motion: CardAction | null;
-  platform: 'android' | 'ios' | 'none';
   small?: boolean;
 }) {
+  const { platform } = steps;
+  // "Use this phone’s motion sensor instead", or "Allow Physical activity" ↗ once it opens Settings (V2 B2).
+  const motionCopy = motion ? motionButtonCopy(platform, motion, steps.permissionName, steps.settingsPath) : null;
   if (!fix && !motion) return null;
   return (
     <Animated.View entering={FadeIn} style={[styles.fixes, small && styles.fixesRow]}>
       {fix ? (
         <Button
-          label={actionLabel(fix, platform)}
+          label={actionLabel(fix)}
           size="sm"
           variant="secondary"
           icon={actionIcon(fix)}
@@ -167,17 +200,25 @@ function FixActions({ flow, fix, motion, platform, small }: {
           style={styles.fixButton}
         />
       ) : null}
-      {motion ? (
-        <Button
-          label={actionLabel(motion, platform)}
-          size="sm"
-          variant={fix ? 'ghost' : 'secondary'}
-          icon={actionIcon(motion)}
-          iconRight={motion.type === 'sheet' ? undefined : 'arrow-up-right'}
-          loading={flow.askingFallback}
-          onPress={() => flow.act(motion)}
-          style={styles.fixButton}
-        />
+      {motion && motionCopy ? (
+        <>
+          <Button
+            label={motionCopy.label}
+            size="sm"
+            variant={fix ? 'ghost' : 'secondary'}
+            icon="smartphone"
+            iconRight={motionCopy.external ? 'arrow-up-right' : undefined}
+            loading={flow.askingFallback}
+            onPress={() => flow.act(motion)}
+            accessibilityHint={motionCopy.hint}
+            style={styles.fixButton}
+          />
+          {motionCopy.caption ? (
+            <Text variant="caption" tone="subtle">
+              {motionCopy.caption}
+            </Text>
+          ) : null}
+        </>
       ) : null}
     </Animated.View>
   );
@@ -188,7 +229,7 @@ function FixActions({ flow, fix, motion, platform, small }: {
 /** The Health screen's Steps card: the switch, what counts, the "both ways" line (§6, §2.8). */
 export function StepsSwitchCard() {
   const reduce = useReducedMotion();
-  const { steps, view, flow, toggle, waiting, sheets } = useStepsSwitchFlow();
+  const { steps, view, flow, toggle, waiting, sheets, allowBackground, askingBackground } = useStepsSwitchFlow();
   const both = bothWaysLine(steps.platform, steps.access?.features, steps.sources);
   const lit = view.checked;
 
@@ -213,7 +254,35 @@ export function StepsSwitchCard() {
           {view.state !== 'unsupported' ? <Toggle value={view.checked} enabled={view.enabled} waiting={waiting} hint={view.subtitle} onChange={toggle} /> : null}
         </View>
 
-        <FixActions flow={flow} fix={view.fix} motion={view.motion} platform={steps.platform} />
+        <FixActions flow={flow} steps={steps} fix={view.fix} motion={view.motion} />
+
+        {view.background ? (
+          <Animated.View entering={reduce ? undefined : FadeIn} style={styles.background}>
+            <View style={styles.backgroundLine}>
+              <Icon name="info" size={14} color={colors.cyan700} />
+              <Text variant="caption" tone="text" style={styles.flex}>
+                {view.background === 'ask'
+                  ? 'Steps are saved only while ÖRZA is open.'
+                  : 'Steps are saved only while ÖRZA is open. To save them when it’s closed, allow background access in Health Connect › App permissions › ÖRZA.'}
+              </Text>
+            </View>
+            <Button
+              label={view.background === 'ask' ? 'Allow background access' : 'Open Health Connect'}
+              size="sm"
+              variant="secondary"
+              icon={view.background === 'ask' ? 'refresh-cw' : 'mci:heart-pulse'}
+              iconRight={view.background === 'ask' ? undefined : 'arrow-up-right'}
+              loading={askingBackground}
+              onPress={() => void allowBackground()}
+              accessibilityHint={
+                view.background === 'ask'
+                  ? 'Asks Health Connect to let ÖRZA read your steps while it’s closed'
+                  : 'Opens Health Connect, where you can allow ÖRZA to read in the background'
+              }
+              style={styles.fixButton}
+            />
+          </Animated.View>
+        ) : null}
 
         {both ? (
           <View style={styles.both}>
@@ -225,7 +294,7 @@ export function StepsSwitchCard() {
         ) : null}
 
         {view.state === 'counting' ? (
-          <Button label="See today’s steps" variant="ghost" size="sm" iconRight="arrow-up-right" onPress={() => router.navigate('/')} style={styles.link} />
+          <Button label="See today’s steps" variant="ghost" size="sm" onPress={() => router.navigate('/')} style={styles.link} />
         ) : null}
       </GlassCard>
       {sheets}
@@ -251,7 +320,7 @@ export function StepsSwitchRow({ last }: { last?: boolean }) {
         <Text variant="caption" tone="muted" numberOfLines={3}>
           {view.subtitle}
         </Text>
-        <FixActions flow={flow} fix={view.fix} motion={view.motion} platform={steps.platform} small />
+        <FixActions flow={flow} steps={steps} fix={view.fix} motion={view.motion} small />
       </View>
       <Toggle value={view.checked} enabled={view.enabled} waiting={waiting} hint={view.subtitle} onChange={toggle} />
       {sheets}
@@ -345,6 +414,16 @@ const styles = StyleSheet.create({
     borderTopColor: colors.divider,
   },
   link: { alignSelf: 'flex-start', marginTop: spacing.sm },
+  background: {
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(11,143,166,0.18)',
+    backgroundColor: colors.infoBg,
+  },
+  backgroundLine: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 14, minHeight: 64 },
   rowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairlineStrong },
   rowIcon: { width: 40, height: 40, borderRadius: radii.sm, alignItems: 'center', justifyContent: 'center' },

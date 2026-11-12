@@ -5,25 +5,18 @@
  * the library's config plugin is not used).
  *
  * Steps v2 (`docs/notes/steps-v2.md`): ÖRZA reads only Steps, Sleep, Resting heart rate and Weight (P5) — the Health
- * screen asks for those four (`requestAccess`), Today's steps card for Steps alone plus background reading
- * (`requestSteps`). The Health import (`readDays`) reads the other three; automatic steps read `stepsBetween` (an
- * aggregate per instant range, with the apps it came from).
+ * screen asks for those four (`requestAccess`), Today's steps card for Steps alone (`requestSteps`), each with
+ * background reading where Health Connect offers it (`hcPermissions.ts`). The Health import (`readDays`) reads the
+ * other three; automatic steps read `stepsBetween` (an aggregate per instant range, with the apps it came from).
  */
 import Constants from 'expo-constants';
 import { Linking, Platform } from 'react-native';
-import type {
-  AggregateResult,
-  AggregateResultRecordType,
-  BackgroundAccessPermission,
-  Permission,
-  ReadRecordsOptions,
-  RecordResult,
-  RecordType,
-} from 'react-native-health-connect';
+import type { AggregateResult, AggregateResultRecordType, ReadRecordsOptions, RecordResult, RecordType } from 'react-native-health-connect';
 
 import { healthFeatures } from '../../../modules/orza-steps';
 
 import { DayCollector, datesSince, localDate, rangeStart, sleepMinutesByWakeDate, type SleepInterval } from './aggregate';
+import { connectAsk, grantedMetrics, RECORDS, stepsAsk, stepsGrantOf, type ReadType } from './hcPermissions';
 import { HealthNotAuthorizedError, type HealthBridge, type HealthMetric, type StepsGrant, type StepsTotal } from './types';
 
 const PROVIDER = 'com.google.android.apps.healthdata';
@@ -33,30 +26,7 @@ const STORE_WEB_URL = `https://play.google.com/store/apps/details?id=${PROVIDER}
 const MANAGE_ACTION_APK = 'androidx.health.ACTION_MANAGE_HEALTH_PERMISSIONS';
 const APP_PACKAGE = Constants.expoConfig?.android?.package ?? 'in.co.ylo.orza';
 
-/**
- * Health Connect record type → the ÖRZA metric it feeds: the four types app.json declares (P5). Active calories,
- * distance, heart rate and hydration are no longer read (nor declared: Health Connect couldn't grant them).
- */
-const RECORDS = {
-  Steps: 'steps',
-  SleepSession: 'sleep_minutes',
-  RestingHeartRate: 'resting_hr',
-  Weight: 'weight_kg',
-} as const satisfies Partial<Record<RecordType, HealthMetric>>;
-
-type ReadType = keyof typeof RECORDS;
-const READ_TYPES = Object.keys(RECORDS) as ReadType[];
-const PERMISSIONS: Permission[] = READ_TYPES.map((recordType) => ({ accessType: 'read', recordType }));
-
-const STEPS_PERMISSION: Permission = { accessType: 'read', recordType: 'Steps' };
-const BACKGROUND_PERMISSION: BackgroundAccessPermission = { accessType: 'read', recordType: 'BackgroundAccessPermission' };
 const NOTHING_GRANTED: StepsGrant = { granted: false, background: false };
-
-/** Health Connect's grants (any permission list it answers with) → the steps-only request's outcome. */
-function stepsGrantOf(list: readonly { accessType: string; recordType: string }[]): StepsGrant {
-  const has = (recordType: string) => list.some((p) => p.accessType === 'read' && p.recordType === recordType);
-  return { granted: has('Steps'), background: has('BackgroundAccessPermission') };
-}
 
 const SLEEP_LOOKBACK_MS = 18 * 60 * 60 * 1000;
 /**
@@ -180,14 +150,15 @@ export const healthBridge: HealthBridge = {
     }
   },
 
+  /**
+   * The Health screen's Connect: the four types, plus "Access data in the background" where Health Connect offers it
+   * (V2 B1: without it the hourly run reads nothing while ÖRZA is closed, and Today never asks once it counts).
+   */
   async requestAccess() {
     const hc = await client();
-    const granted = await hc.requestPermission(PERMISSIONS);
-    const metrics = new Set<HealthMetric>();
-    for (const p of granted) {
-      if (p.accessType === 'read' && p.recordType in RECORDS) metrics.add(RECORDS[p.recordType as ReadType]);
-    }
-    return { granted: metrics.size > 0, metrics: [...metrics] };
+    const features = await healthFeatures();
+    const metrics = grantedMetrics(await hc.requestPermission(connectAsk(features.backgroundRead)));
+    return { granted: metrics.length > 0, metrics };
   },
 
   async readDays(days) {
@@ -275,15 +246,15 @@ export const healthBridge: HealthBridge = {
 
   /**
    * Today's steps card (§2.2 `hc`): Steps only, plus "Access data in the background" where Health Connect offers it
-   * (the background run keeps the day current with ÖRZA closed). Health Connect stops showing its sheet after two
+   * (the background run keeps the day current with ÖRZA closed). With Steps granted already only the background screen
+   * shows (the Health screen's "Allow background access", B1). Health Connect stops showing its sheet after two
    * refusals and then answers at once with what is granted. Never throws.
    */
   async requestSteps() {
     try {
       const hc = await client();
       const features = await healthFeatures();
-      const ask = features.backgroundRead === 'available' ? [STEPS_PERMISSION, BACKGROUND_PERMISSION] : [STEPS_PERMISSION];
-      return stepsGrantOf(await hc.requestPermission(ask));
+      return stepsGrantOf(await hc.requestPermission(stepsAsk(features.backgroundRead)));
     } catch {
       return NOTHING_GRANTED; // Health Connect missing / not ready, or the sheet couldn't open
     }
