@@ -882,3 +882,7 @@ batch 1" log entry); 3 is still open.
   delays the hourly job when warm, F1 HC counts the phone only while an app holds READ_STEPS. Fixing (`wf_43b1b1ca-5c8`: B1, B2,
   F1–F3, an OEM "Keep medicine alarms working" guide, re-plan on start/boot if empty). Then a new phone test build (also carries the
   a11y polish + AI report) and the walks/alarms with the user.
+- 2026-11-12: V2 fixes DONE + reviewed (`30ea9a6`, `529f82b`, `01cb72c`; notes `docs/notes/v2-fixes.md`; NATIVE changes in
+  orza-alarms → full rebuild). New copy listed in v2-fixes.md for the user. Local server moved to web main `ee25fb9` (live: steps
+  modes, AI consent, AI reports), AI blocked. Running `wf_a108d343-324`: full arm64 rebuild, install -r on the vivo (A-2 update),
+  device checks of the a11y polish, AI report, B1/B2/F2 and the OEM sheet. Then the interactive part with the user (AL alarms, walks).
