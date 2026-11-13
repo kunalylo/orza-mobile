@@ -943,3 +943,8 @@ batch 1" log entry); 3 is still open.
   `4e399e6`; E:\aylo\store-shots\play). Local server moved to web main `16b542e` (AI blocked). Running `wf_c1d4ad9e-5ce`: 8 Play phone
   screenshots from the emulator with a sample "Asha" account (framed 1080×1920 → E:\aylo\store-shots\play\phone). iPhone shots: the 4
   framed ones suffice to submit; more (Medicines, alarm, Health) only from the user's iPhone on the demo account.
+- 2026-11-14: iPhone calendar FIXED in code (`045e420` + review `45f1bb3`: iCloud first, On My iPhone only when iCloud is off, the
+  default calendar as fallback tracked by the sync map, "Add Events Only" handled, events found by listing, no doubles after
+  sign-out; test:calendar 52) + purpose string "…to your iPhone's calendar…" (`2bdd8ef`). **iOS build 4** started from `2bdd8ef`
+  (auto-submit to TestFlight). The App Store submission uses build 4 after the user's check (Calendar › Add to my calendar on a
+  Gmail-default iPhone → events in iCloud "ÖRZA" or the Gmail calendar).
