@@ -118,7 +118,7 @@
       [
         "expo-calendar",
         {
-          "calendarPermission": "ÖRZA adds your medicine times and the reminders you choose to an ÖRZA calendar on your iPhone, each with an alert. It only reads and changes the events it added.",
+          "calendarPermission": "ÖRZA adds your medicine times and the reminders you choose to your iPhone's calendar, each with an alert. It only reads and changes the events it added.",
           "remindersPermission": "ÖRZA doesn't use the Reminders app. If that ever changes, it will ask you first."
         }
       ],
