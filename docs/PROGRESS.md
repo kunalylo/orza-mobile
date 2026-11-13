@@ -919,3 +919,8 @@ batch 1" log entry); 3 is still open.
   `6d801f6` (terminal tab, `--auto-submit` with ascAppId). Open: the calendar subscription feed (webcal) still names medicines
   (opt-in, Apple's servers fetch it if added to iCloud — low risk, decide later); past calendar events from builds 1–2 keep names
   until Remove + Add on the Calendar card; the Play developer name vs "Kunal Patil".
+- 2026-11-13: web D3 LIVE (main `3fb24cc`, Vercel ok; live /privacy has the provider + location lines, "Kunal Patil", 13 Nov;
+  /privacy?from=app shows no visible Pricing/home links). **iOS build 3 FINISHED + uploaded to App Store Connect** (EAS build
+  670e5732…, submission 73a2000d…, from mobile `6d801f6`). Next for the user: TestFlight → update to build 3, check it; App Store
+  Connect forms from docs/store/app-store.md; screenshots; submit for review. Android: Play Console app + first AAB (EAS production
+  build) when the user is ready; the vivo tests resume when the phone is back.
