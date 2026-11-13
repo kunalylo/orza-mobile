@@ -15,9 +15,10 @@ import { StepsSwitchRow } from '@/features/health/StepsSwitch';
 import { useAccountSync } from '@/features/settings/api';
 import { DIET_OPTIONS, formatNumber, labelOf } from '@/features/settings/options';
 import { Avatar, Note, SettingsGroup, SettingsRow, TINTS, initialOf } from '@/features/settings/parts';
+import { contactSupport } from '@/features/settings/support';
 import { ApiError, errorMessage } from '@/lib/api';
 import { useAuth, useSignedInUser } from '@/lib/auth';
-import { APP_VERSION, WEB_URL } from '@/lib/config';
+import { APP_VERSION, SUPPORT_EMAIL, WEB_URL } from '@/lib/config';
 import { haptics } from '@/lib/haptics';
 import type { PublicUser } from '@/lib/types';
 import { colors, radii, spacing } from '@/theme';
@@ -225,6 +226,20 @@ export default function Settings() {
           subtitle="Permanently delete your account and all of your data"
           destructive
           onPress={() => router.push({ pathname: '/account/data', params: { confirm: 'delete' } })}
+          last
+        />
+      </SettingsGroup>
+
+      {/* App Review 1.5: an easy way to reach the team from the app; the terms the member agreed to at sign-up. */}
+      <SettingsGroup title="Help" delay={280}>
+        <SettingsRow icon="mail" tint={TINTS.cyan} title="Contact support" subtitle={SUPPORT_EMAIL} chevron={false} accessibilityHint="Opens your mail app" onPress={() => void contactSupport()} />
+        <SettingsRow
+          icon="file-text"
+          tint={TINTS.cyan}
+          title="Terms of service"
+          chevron={false}
+          trailing={<Icon name="arrow-up-right" size={16} color={colors.subtle} />}
+          onPress={() => openWeb('/terms')}
           last
         />
       </SettingsGroup>

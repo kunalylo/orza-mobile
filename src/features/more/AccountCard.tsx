@@ -48,7 +48,7 @@ export function AccountCard({ user }: { user: PublicUser }) {
           {formatNumber(credits)} AI credits
         </Text>
         <Text variant="caption" tone="muted" style={styles.creditsHint} numberOfLines={2}>
-          {low ? 'Running low — top up' : 'Balance & history'}
+          {low ? 'Running low — request more' : 'Balance & history'}
         </Text>
         <Icon name="arrow-up-right" size={14} color={colors.muted} />
       </Pressable>

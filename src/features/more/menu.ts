@@ -45,7 +45,7 @@ export const MENU: MenuSection[] = [
   {
     title: 'Account',
     items: [
-      { key: 'credits', href: '/credits', title: 'AI credits', subtitle: 'Balance, history and top-ups', icon: 'mci:lightning-bolt-outline', tint: TINTS.energy },
+      { key: 'credits', href: '/credits', title: 'AI credits', subtitle: 'Balance, history and requests', icon: 'mci:lightning-bolt-outline', tint: TINTS.energy },
       { key: 'settings', href: '/settings', title: 'Settings', subtitle: 'Profile, targets, privacy and your data', icon: 'mci:cog-outline', tint: TINTS.ink },
     ],
   },

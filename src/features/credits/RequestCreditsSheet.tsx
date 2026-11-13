@@ -75,7 +75,7 @@ export function RequestCreditsSheet({ visible, onClose, email, credits }: { visi
       }
     >
       <Text variant="small" tone="muted">
-        Need more credits? Tell us a little about how you use ÖRZA and we&apos;ll top up your account.
+        Need more credits? Tell us a little about how you use ÖRZA and we&apos;ll add more to your account.
       </Text>
 
       <View style={styles.box}>

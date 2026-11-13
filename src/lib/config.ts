@@ -47,3 +47,11 @@ export const WEB_URL = API_ORIGIN;
 export const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
 export const PLATFORM: 'ios' | 'android' | 'web' = Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
+
+/**
+ * Where members reach the team (App Review 1.5: the app must offer an easy way to contact you). The same address as
+ * the website's legal pages (`NEXT_PUBLIC_SUPPORT_EMAIL`, default support@orza.app); a build can set
+ * `EXPO_PUBLIC_SUPPORT_EMAIL` (eas.json) when the team's address differs.
+ */
+const RAW_SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL;
+export const SUPPORT_EMAIL = RAW_SUPPORT_EMAIL && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(RAW_SUPPORT_EMAIL.trim()) ? RAW_SUPPORT_EMAIL.trim() : 'support@orza.app';

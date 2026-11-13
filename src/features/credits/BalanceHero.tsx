@@ -76,7 +76,7 @@ export function BalanceHero({
         <View style={styles.pill}>
           <Icon name="zap" size={12} color={colors.amber} />
           <Text variant="eyebrow" tone="heroMuted" style={styles.pillText}>
-            AI credits · Free plan
+            AI credits · Free
           </Text>
         </View>
         <View style={[styles.pill, aiEnabled ? styles.pillOn : null]}>
@@ -118,8 +118,8 @@ export function BalanceHero({
       <Text variant="small" tone="heroMuted" style={styles.copy}>
         {aiEnabled
           ? credits > 0
-            ? `Enough for about ${formatNumber(scans)} meal scans or ${formatNumber(chats)} chat messages.${low ? " You're running low — request more below and we'll top you up." : ''}`
-            : "You've used all your AI credits. Manual logging keeps working for free — request more and we'll top you up."
+            ? `Enough for about ${formatNumber(scans)} meal scans or ${formatNumber(chats)} chat messages.${low ? " You're running low — request more below." : ''}`
+            : "You've used all your AI credits. Manual logging keeps working for free — request more below."
           : "ÖRZA's built-in engine is handling meal logging, chat, recipes and plans for free right now. Your credits stay untouched."}
       </Text>
 

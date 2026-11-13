@@ -4,8 +4,10 @@ import { Pressable, StyleSheet, View, type TextInput } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { FormBanner } from '@/components/auth/FormBanner';
+import { contactSupport } from '@/features/settings/support';
 import { ApiError, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { SUPPORT_EMAIL } from '@/lib/config';
 import { haptics } from '@/lib/haptics';
 import { validateEmail, validatePassword } from '@/lib/validation';
 import { spacing } from '@/theme';
@@ -109,7 +111,11 @@ export default function SignIn() {
         </Pressable>
       </View>
       <Text variant="caption" tone="subtle" align="center" style={styles.help}>
-        Forgot your password? Contact ÖRZA support and we&apos;ll help you reset it.
+        Forgot your password? Email{' '}
+        <Text variant="caption" tone="cyan" accessibilityRole="link" accessibilityHint="Opens your mail app" onPress={() => void contactSupport('Password reset')}>
+          {SUPPORT_EMAIL}
+        </Text>{' '}
+        and we&apos;ll help you reset it.
       </Text>
     </Screen>
   );

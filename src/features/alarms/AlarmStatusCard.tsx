@@ -207,7 +207,8 @@ function FullCard({ browserCount = 0 }: { browserCount?: number }) {
               body="Alarms can't ring on this phone until ÖRZA may show notifications."
               action={
                 <Button
-                  label={status.canAskNotifications ? 'Allow notifications' : 'Open Settings'}
+                  label={status.canAskNotifications ? 'Turn on notifications' : 'Open Settings'}
+                  shortLabel={status.canAskNotifications ? 'Turn on' : undefined}
                   icon={status.canAskNotifications ? 'bell' : 'settings'}
                   variant="energy"
                   size="sm"
@@ -368,7 +369,7 @@ function CompactCard({ hideWhenIdle, style }: { hideWhenIdle?: boolean; style?: 
       body = 'Allow notifications so every dose rings here — even offline or locked.';
       action = (
         <Button
-          label={status.canAskNotifications ? 'Allow' : 'Settings'}
+          label={status.canAskNotifications ? 'Turn on' : 'Settings'}
           variant="energy"
           size="sm"
           onPress={() => {

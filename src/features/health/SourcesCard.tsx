@@ -1,5 +1,5 @@
 /** Where the numbers came from (per-source summary) and the privacy note — same wording as the web Health page. */
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 import { colors, radii, spacing } from '@/theme';
@@ -50,7 +50,11 @@ export function SourcesCard({ data, range }: { data: HealthDaysResponse; range: 
   );
 }
 
-/** What ÖRZA stores, plus a pointer to the web importers (Apple Health export, CSV, automation apps). */
+/**
+ * What ÖRZA stores, plus (Android) a pointer to the web importers (Apple Health export, CSV, automation apps). The
+ * iPhone reads Apple Health itself and leaves the website out (App Review 2.1 / 3.1.1: no web-only detours, and the
+ * website shows plans that aren't sold in the app).
+ */
 export function PrivacyNote() {
   return (
     <View style={styles.note}>
@@ -62,18 +66,20 @@ export function PrivacyNote() {
           overwritten.
         </Text>
       </View>
-      <Pressable
-        accessibilityRole="link"
-        accessibilityHint="Opens the ÖRZA website"
-        onPress={openWebHealth}
-        hitSlop={8}
-        style={({ pressed }) => [styles.noteRow, pressed && styles.pressed]}
-      >
-        <Icon name="external-link" size={16} color={colors.cyan700} />
-        <Text variant="caption" tone="cyan" weight="semibold" style={styles.flex}>
-          Older history, a CSV file or an automation app? Use the importers on the ÖRZA website.
-        </Text>
-      </Pressable>
+      {Platform.OS === 'ios' ? null : (
+        <Pressable
+          accessibilityRole="link"
+          accessibilityHint="Opens the ÖRZA website"
+          onPress={openWebHealth}
+          hitSlop={8}
+          style={({ pressed }) => [styles.noteRow, pressed && styles.pressed]}
+        >
+          <Icon name="external-link" size={16} color={colors.cyan700} />
+          <Text variant="caption" tone="cyan" weight="semibold" style={styles.flex}>
+            Older history, a CSV file or an automation app? Use the importers on the ÖRZA website.
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }

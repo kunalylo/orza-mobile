@@ -26,7 +26,11 @@ type TodaySteps = ReturnType<typeof useTodaySteps>;
 /** iPhone: the system sheet waits this long after the disclosure's own sheet has gone (one modal at a time). */
 const PROMPT_AFTER_SHEET_MS = Platform.OS === 'ios' ? 300 : 0;
 
-const STORE_ICON: IconName = Platform.OS === 'ios' ? 'mci:apple' : 'mci:heart-pulse';
+/**
+ * Apple Health and Health Connect: a plain heart, never the Apple logo (Apple's HealthKit guidelines: only the
+ * Apple-provided Apple Health icon, never as a button, and no look-alike).
+ */
+const STORE_ICON: IconName = 'mci:heart-pulse';
 
 const POINT_ICON: Record<PointIcon, IconName> = {
   store: STORE_ICON,

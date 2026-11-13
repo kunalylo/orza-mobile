@@ -266,6 +266,10 @@ export default function HealthSync() {
         <Animated.View entering={reduce ? undefined : FadeIn.delay(200)}>
           <PrivacyNote />
         </Animated.View>
+        {/* App Review 1.4.1: health numbers, so the reminder to check with a doctor (the app-wide line). */}
+        <Text variant="caption" tone="subtle" align="center">
+          Wellness guidance, not medical advice. For medical concerns, please consult your doctor.
+        </Text>
       </View>
     </Screen>
   );

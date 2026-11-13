@@ -34,6 +34,10 @@ export function AlarmPermissionPrompt() {
   const status = prompt.status;
   const needsNotifications = !!status && status.notifications !== 'granted';
   const needsExact = !needsNotifications && status?.exact === false;
+  // iPhone, before the system prompt (Apple's pre-alert rules, HIG Privacy; App Review 5.1.1(iv)): one button that
+  // says it opens the prompt ("Continue", not "Allow"), and no way to leave without seeing it — the prompt's own
+  // "Don't Allow" is the "no". Whatever the answer, the sheet then closes. Settings (blocked) keeps "Not now".
+  const preAlert = Platform.OS === 'ios' && needsNotifications && !!status?.canAskNotifications;
 
   // Back from Settings: read again; everything allowed → done.
   useEffect(() => {
@@ -67,6 +71,9 @@ export function AlarmPermissionPrompt() {
           if (next.exact === false) return; // next step: exact alarm times (Android)
           toast.success('Done — your medicine alarms will ring on this phone.');
           closeAlarmPrompt(false);
+        } else if (preAlert) {
+          // The member answered the iPhone's prompt: no second ask here (Alarms on this phone still offers Settings).
+          closeAlarmPrompt(true);
         }
         return;
       }
@@ -79,11 +86,13 @@ export function AlarmPermissionPrompt() {
   const title = needsExact ? 'Ring each dose on time' : 'Let your medicine alarms ring';
   const cta = needsExact
     ? 'Allow exact alarm times'
-    : status?.canAskNotifications
-      ? 'Allow notifications'
-      : Platform.OS === 'ios'
-        ? 'Open Settings'
-        : 'Open notification settings';
+    : preAlert
+      ? 'Continue'
+      : status?.canAskNotifications
+        ? 'Allow notifications'
+        : Platform.OS === 'ios'
+          ? 'Open Settings'
+          : 'Open notification settings';
 
   return (
     <Sheet
@@ -91,10 +100,22 @@ export function AlarmPermissionPrompt() {
       onClose={() => closeAlarmPrompt(true)}
       eyebrow="Medicine alarms"
       title={title}
+      dismissible={!preAlert}
+      closeButton={!preAlert}
       footer={
         <View style={styles.footer}>
-          <Button label={cta} icon={needsExact ? 'clock' : 'bell'} variant="energy" size="lg" block loading={busy} onPress={() => void allow()} />
-          <Button label="Not now" variant="ghost" onPress={() => closeAlarmPrompt(true)} />
+          <Button
+            label={cta}
+            icon={preAlert ? undefined : needsExact ? 'clock' : 'bell'}
+            iconRight={preAlert ? 'arrow-right' : undefined}
+            variant="energy"
+            size="lg"
+            block
+            loading={busy}
+            onPress={() => void allow()}
+            accessibilityHint={preAlert ? 'Shows the iPhone’s notification prompt' : undefined}
+          />
+          {preAlert ? null : <Button label="Not now" variant="ghost" onPress={() => closeAlarmPrompt(true)} />}
         </View>
       }
     >

@@ -7,7 +7,7 @@
  */
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { RefreshControl, StyleSheet, View } from 'react-native';
+import { Platform, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { useAccountSync, useSaveProfile, useSavePreference } from '@/features/settings/api';
@@ -39,6 +39,16 @@ function ChoiceRow({ title, description, children, last }: { title: string; desc
     </Animated.View>
   );
 }
+
+/**
+ * "Help improve ÖRZA’s AI". On an iPhone the sources are named without Health Connect, an Android service (App Review
+ * 2.3.10: no other mobile platforms in the app); Android keeps the approved sentence.
+ */
+const AI_TRAINING_DESCRIPTION = `Lets your conversations and logs, anonymized first, help make ÖRZA’s AI better. ${
+  Platform.OS === 'ios'
+    ? 'Steps and anything read from Apple Health or your iPhone’s motion sensor are never used for this.'
+    : 'Steps and anything read from Apple Health, Health Connect or your phone’s motion sensor are never used for this.'
+} Turning this off doesn’t change how AI features work for you.`;
 
 export default function PreferencesSettings() {
   const user = useSignedInUser();
@@ -177,7 +187,7 @@ export default function PreferencesSettings() {
       <SettingsGroup title="Privacy" delay={140}>
         <ToggleRow
           title="Help improve ÖRZA’s AI"
-          description="Lets your conversations and logs, anonymized first, help make ÖRZA’s AI better. Steps and anything read from Apple Health, Health Connect or your phone’s motion sensor are never used for this. Turning this off doesn’t change how AI features work for you."
+          description={AI_TRAINING_DESCRIPTION}
           value={!prefs.ai_training_opt_out}
           pending={isPending('ai_training_opt_out')}
           onChange={(v) => update('ai_training_opt_out', !v)}

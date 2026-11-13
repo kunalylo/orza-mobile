@@ -90,11 +90,20 @@ function UnsupportedState({ health }: { health: Health }) {
       <Text variant="h3" tone="ink">
         {title}
       </Text>
-      <Text variant="small" tone="muted">
-        You can still bring your data in from the website — import an Apple Health export, a CSV file, or connect an automation
-        app that posts to ÖRZA.
-      </Text>
-      <Button label="More ways to connect" variant="secondary" icon="external-link" onPress={openWebHealth} block />
+      {health.platform === 'ios' ? (
+        // No website detour on an iPhone (App Review 2.1 / 3.1.1; see SourcesCard's PrivacyNote).
+        <Text variant="small" tone="muted">
+          You can still log your steps and weight in ÖRZA yourself.
+        </Text>
+      ) : (
+        <>
+          <Text variant="small" tone="muted">
+            You can still bring your data in from the website — import an Apple Health export, a CSV file, or connect an
+            automation app that posts to ÖRZA.
+          </Text>
+          <Button label="More ways to connect" variant="secondary" icon="external-link" onPress={openWebHealth} block />
+        </>
+      )}
     </View>
   );
 }
@@ -205,7 +214,7 @@ function ConnectState({ health }: { health: Health }) {
         accessibilityLabel={`Connect ${health.name}`}
         variant="energy"
         size="lg"
-        icon={health.platform === 'ios' ? 'mci:apple' : 'mci:heart-pulse'}
+        icon="mci:heart-pulse"
         block
         loading={health.connecting}
         onPress={() => void connect()}
@@ -300,7 +309,7 @@ function ConnectedState({ health }: { health: Health }) {
   return (
     <View style={styles.gap}>
       <View style={styles.statusRow}>
-        <IconDisc icon={platform === 'ios' ? 'mci:apple' : 'mci:heart-pulse'} tone="success" small />
+        <IconDisc icon="mci:heart-pulse" tone="success" small />
         <View style={styles.flex}>
           <Text variant="label" tone="ink">
             {`Connected to ${name}`}

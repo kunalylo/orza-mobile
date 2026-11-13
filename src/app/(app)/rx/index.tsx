@@ -171,7 +171,7 @@ export default function PrescriptionScan() {
         large={false}
         eyebrow="Care · Prescriptions"
         title="Scan a prescription"
-        subtitle="Take a photo of your doctor's prescription. ÖRZA reads every medicine — brand names, 1-0-1, BD, TDS, SOS, after food, x 5 days — and sets the alarms for you to review."
+        subtitle="Take a photo of your doctor's prescription. ÖRZA reads the medicines — brand names, 1-0-1, BD, TDS, SOS, after food, x 5 days — and you check each one before any alarm is set."
       />
 
       <Animated.View entering={FadeInDown.delay(40).springify().damping(18).stiffness(100).mass(1)}>
