@@ -45,6 +45,7 @@ export interface Preferences {
   reminders: boolean;
   weekly_report: boolean;
   tone: 'gentle' | 'direct';
+  /** "Help improve ÖRZA’s AI", opt-in: `false` = the member turned it on; `true` or missing = off (`aiImprovementOn`). */
   ai_training_opt_out?: boolean;
 }
 

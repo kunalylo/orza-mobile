@@ -4,8 +4,9 @@
  * object API (`createCalendar`, `ExpoCalendar`, `ExpoCalendarEvent`).
  *
  * - iOS: needs full calendar access (write-only can't create calendars); the calendar lives in the default source
- *   (iCloud / On My iPhone), falling back to the local source.
- * - Android: a calendar under a LOCAL account (not synced anywhere), owned by "ÖRZA".
+ *   (iCloud / On My iPhone), falling back to the local source. iCloud syncs it, so medicine events name no medicine
+ *   ("💊 Medicine time · ÖRZA", `./phoneEvents`).
+ * - Android: a calendar under a LOCAL account (not synced anywhere), owned by "ÖRZA"; events keep the medicine's name.
  * - Re-sync is a diff against a map of server event id → phone event id (+ a signature), kept in a JSON file in the
  *   app's documents folder; the calendar id lives in SecureStore. If the map is lost but the calendar still exists, the
  *   calendar's upcoming events are wiped first, so a re-sync never duplicates events.
@@ -25,6 +26,7 @@ import { onDoseEvent } from '@/features/meds/events';
 import { ApiError, errorMessage } from '@/lib/api';
 import { WEB_URL } from '@/lib/config';
 
+import { medicineEventText } from './phoneEvents';
 import type { CalendarEvent } from './types';
 import { addDays, parseDoseEventId, parseReminderEventId } from './utils';
 
@@ -375,18 +377,11 @@ function desiredEvents({ events, calendarReminders, tz }: PhoneEventSource, now:
 
     if (e.kind === 'medication') {
       const dose = parseDoseEventId(e.id);
-      const [doseText, ...rest] = (e.subtitle || '').split(' · ');
-      title = `💊 ${e.title}${doseText ? ` — ${doseText}` : ''}`;
       ring = e.status !== 'taken' && e.status !== 'skipped';
       const alarmPath = dose ? `/dashboard/alarm?med=${encodeURIComponent(dose.medicationId)}&at=${encodeURIComponent(dose.at)}` : '/dashboard/medicines';
-      notes = [
-        [doseText, ...rest].filter(Boolean).join(' · '),
-        e.status === 'taken' ? 'Marked as taken in ÖRZA.' : e.status === 'skipped' ? 'Marked as skipped in ÖRZA.' : '',
-        "Open ÖRZA to see the medicine's photos and mark the dose.",
-        `${WEB_URL}${alarmPath}`,
-      ]
-        .filter(Boolean)
-        .join('\n');
+      // iPhone: no medicine name or details (the calendar can sync to iCloud). The new text changes the signature, so
+      // the next sync rewrites the upcoming events an older build wrote with names.
+      ({ title, notes } = medicineEventText(e, Platform.OS === 'ios' ? 'ios' : 'android', `${WEB_URL}${alarmPath}`));
       if (dose && Platform.OS === 'ios') url = `orza://alarm?med=${encodeURIComponent(dose.medicationId)}&at=${encodeURIComponent(dose.at)}`;
     } else if (e.kind === 'reminder') {
       const reminderId = parseReminderEventId(e.id);
@@ -581,10 +576,10 @@ export function removePhoneCalendar(): Promise<void> {
 const CLEAR_WAIT_MS = 4000;
 
 /**
- * Deliberate sign-out: delete the ÖRZA calendar this phone was given — its medicine names must not stay in the
- * Calendar app, or keep ringing, for whoever uses the phone next — and forget the link and the map. Best effort:
- * never throws; without calendar access only the link and map are forgotten (the calendar can still be deleted in the
- * Calendar app). Not for a 401 session expiry — there the link simply stays with its account (see `readLink`).
+ * Deliberate sign-out: delete the ÖRZA calendar this phone was given — its medicine names (Android) and dose times must
+ * not stay in the Calendar app, or keep ringing, for whoever uses the phone next — and forget the link and the map.
+ * Best effort: never throws; without calendar access only the link and map are forgotten (the calendar can still be
+ * deleted in the Calendar app). Not for a 401 session expiry — there the link simply stays with its account (see `readLink`).
  */
 export async function clearPhoneCalendar(): Promise<void> {
   if (!phoneCalendarSupported) return;

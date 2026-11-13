@@ -4,7 +4,6 @@
  * DELETE /api/account → sign this phone out). `?confirm=delete` opens the delete sheet straight away.
  */
 import { useLocalSearchParams } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
@@ -13,8 +12,8 @@ import { exportMyData, formatBytes, useDeleteAccount, type ExportResult } from '
 import { DELETE_WORD, WHAT_GETS_DELETED } from '@/features/settings/options';
 import { Note, SettingsGroup, SettingsRow, TINTS } from '@/features/settings/parts';
 import { useAuth } from '@/lib/auth';
-import { WEB_URL } from '@/lib/config';
 import { haptics } from '@/lib/haptics';
+import { openWebsite } from '@/lib/web';
 import { colors, radii, spacing } from '@/theme';
 import { Button, GlassCard, Icon, Screen, ScreenHeader, Sheet, Text, TextField, toast } from '@/ui';
 
@@ -143,7 +142,7 @@ export default function DataSettings() {
   };
 
   const openWeb = (path: string) => {
-    void WebBrowser.openBrowserAsync(`${WEB_URL}${path}`, { toolbarColor: colors.canvas, controlsColor: colors.energyInk }).catch(() =>
+    void openWebsite(path, { toolbarColor: colors.canvas, controlsColor: colors.energyInk }).catch(() =>
       toast.error("Couldn't open the page. Please try again.")
     );
   };

@@ -7,14 +7,13 @@
  * heart rate and weight. Disconnect stops both at once and, on Android, revokes every ÖRZA permission in Health
  * Connect (P9); on iPhone HealthKit has no such call, so the member is shown where to remove ÖRZA in Settings.
  */
-import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, AppState, StyleSheet, useWindowDimensions, View, type AppStateStatus } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
-import { WEB_URL } from '@/lib/config';
 import { haptics } from '@/lib/haptics';
 import type { useHealthSync } from '@/lib/health/sync';
+import { openWebsite } from '@/lib/web';
 import { colors, radii, spacing } from '@/theme';
 import { Button, GlassCard, Icon, Orb, Skeleton, SkeletonText, Tag, Text, toast, type IconName } from '@/ui';
 
@@ -37,7 +36,7 @@ const REMOVE_PATH = {
 } as const;
 
 export function openWebHealth() {
-  void WebBrowser.openBrowserAsync(`${WEB_URL}/dashboard/health`, { toolbarColor: colors.canvas, controlsColor: colors.ink }).catch(() => {});
+  void openWebsite('/dashboard/health', { toolbarColor: colors.canvas, controlsColor: colors.ink }).catch(() => {});
 }
 
 export function ConnectCard({ health }: { health: Health }) {

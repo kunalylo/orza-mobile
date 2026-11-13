@@ -33,7 +33,9 @@ import androidx.core.view.WindowInsetsCompat
  * (Android 14+), both in this module's manifest. Google requires it to show the same policy as the Play Console's
  * privacy URL — keep PRIVACY_URL equal to that page. No sign-in and no React: a WebView on the policy (JavaScript on),
  * links off its host open in the browser, a load error shows a short note with "Open in browser", Back closes it.
- * Nothing is read from the intent that started it.
+ * Nothing is read from the intent that started it. The WebView loads the page with `from=app` (like every website page
+ * the app opens, `src/lib/webLink.ts`), so the website hides its menu and pricing links here too; "Open in browser"
+ * leaves the app and opens the plain address.
  */
 class HealthPrivacyActivity : Activity() {
   private var web: WebView? = null
@@ -67,7 +69,7 @@ class HealthPrivacyActivity : Activity() {
     }
     web = webView
     error = errorView
-    webView.loadUrl(PRIVACY_URL)
+    webView.loadUrl(IN_APP_URL)
   }
 
   override fun onDestroy() {
@@ -165,6 +167,8 @@ class HealthPrivacyActivity : Activity() {
   private companion object {
     /** Must equal the privacy policy URL in the Play Console (Health Connect's requirement). */
     const val PRIVACY_URL = "https://orza-nine.vercel.app/privacy#phone-app"
+    /** The same page as opened in the app: `from=app` hides the website's menu and pricing links (D5). */
+    const val IN_APP_URL = "https://orza-nine.vercel.app/privacy?from=app#phone-app"
     const val POLICY_HOST = "orza-nine.vercel.app"
     const val ERROR_TEXT = "Couldn't load the privacy policy. Open it at orza-nine.vercel.app/privacy."
     const val OPEN_TEXT = "Open in browser"

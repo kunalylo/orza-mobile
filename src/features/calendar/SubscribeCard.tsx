@@ -3,7 +3,6 @@
  * with copy / share, provider steps, replace and turn off. POST/DELETE /api/calendar/token.
  */
 import * as Clipboard from 'expo-clipboard';
-import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import { Linking, Platform, Share, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
@@ -11,6 +10,7 @@ import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 import { CardHeader, ConfirmStrip } from '@/features/reminders/parts';
 import { errorMessage } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
+import { openWebsite } from '@/lib/web';
 import { colors, fonts, radii, spacing } from '@/theme';
 import { Button, GlassCard, Icon, IconButton, Segmented, Skeleton, Text, toast } from '@/ui';
 
@@ -38,7 +38,8 @@ const hostOf = (url: string) => {
 
 async function open(url: string) {
   try {
-    if (/^https:/i.test(url)) await WebBrowser.openBrowserAsync(url);
+    // Google Calendar / Outlook on the web: other sites, so `openWebsite` opens them unchanged.
+    if (/^https:/i.test(url)) await openWebsite(url);
     else await Linking.openURL(url);
   } catch {
     toast.error("Couldn't open that calendar app. Copy the link and add it by hand.");

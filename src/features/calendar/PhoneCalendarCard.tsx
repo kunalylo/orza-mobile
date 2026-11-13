@@ -1,9 +1,10 @@
 /**
  * "Add ÖRZA to my phone calendar" — creates a dedicated ÖRZA calendar on the phone with the next 14 days of medicine
- * doses (and reminders with Calendar on), each with an alert. Re-syncs on demand and quietly when it's stale.
+ * doses (and reminders with Calendar on), each with an alert. Re-syncs on demand and quietly when it's stale. On an
+ * iPhone it also says that medicine events leave out the medicine's name (`./phoneEvents`).
  */
 import { useEffect, useState } from 'react';
-import { AppState, Linking, StyleSheet, View } from 'react-native';
+import { AppState, Linking, Platform, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 import { useIsMutating, useQueryClient } from '@tanstack/react-query';
 
@@ -15,6 +16,7 @@ import { Button, GlassCard, Icon, Skeleton, Tag, Text, toast } from '@/ui';
 
 import { calendarKeys, usePhoneCalendarState, usePhoneCalendarSync, useRemovePhoneCalendar } from './api';
 import { AUTO_SYNC_AFTER_MS, isPhoneCalendarStale, PhoneCalendarError, phoneCalendarMessage, SYNC_DAYS, type PhoneSyncResult } from './deviceCalendar';
+import { PHONE_EVENT_COPY } from './phoneEvents';
 
 function syncSummary(r: PhoneSyncResult): string {
   if (r.created) return `Added ÖRZA to your calendar with ${r.total} event${r.total === 1 ? '' : 's'}.`;
@@ -108,7 +110,7 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
       />
       <Text variant="small" tone="muted" style={styles.body}>
         A calendar called “ÖRZA” with your medicine doses — and reminders with Calendar switched on — for the next {SYNC_DAYS} days. Each event
-        rings at its time, even when ÖRZA isn&apos;t open.
+        rings at its time, even when ÖRZA isn&apos;t open.{Platform.OS === 'ios' ? ` ${PHONE_EVENT_COPY.iosCardNote}` : ''}
       </Text>
 
       {state.isPending ? (

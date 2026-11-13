@@ -1,13 +1,13 @@
 /**
  * Tiny, safe renderer for ÖRZA's replies — React Native <Text> nodes only, never HTML.
  * Paragraphs, line breaks, "- " / "• " bullets, "1. " lists, "# headings" (as bold), **bold**, *italic*, `code`
- * and [links](https://…) (https opens in the in-app browser; the website's app paths like /dashboard/compensation open
- * the matching screen — see ./links; anything else shows as plain text).
+ * and [links](https://…) (https opens in the in-app browser, a website link with `from=app` — lib/web; the website's app
+ * paths like /dashboard/compensation open the matching screen — see ./links; anything else shows as plain text).
  */
-import * as WebBrowser from 'expo-web-browser';
 import { Fragment, useMemo, type ReactNode } from 'react';
 import { Text as RNText, StyleSheet, View } from 'react-native';
 
+import { openWebsite } from '@/lib/web';
 import { colors, fonts } from '@/theme';
 import { Text } from '@/ui';
 
@@ -91,7 +91,7 @@ function renderInline(text: string, keyPrefix: string, allowLinks = true): React
             style={styles.link}
             accessibilityRole="link"
             onPress={() => {
-              WebBrowser.openBrowserAsync(url).catch(() => {});
+              openWebsite(url).catch(() => {});
             }}
           >
             {label}

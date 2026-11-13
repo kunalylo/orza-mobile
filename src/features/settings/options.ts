@@ -127,9 +127,13 @@ export const ALL_REGIONS: string[] = [...INDIAN_REGIONS, OUTSIDE_INDIA];
 export const labelOf = <T extends string>(options: Option<T>[], value?: T | null | '') =>
   options.find((o) => o.value === value)?.label ?? '';
 
-/** Server-side validation ranges for profile numbers (metric). */
+/**
+ * Server-side validation ranges for profile numbers (metric). ÖRZA is for adults: 18 is the minimum age everywhere (the
+ * Terms, onboarding, Settings and goal planning; D3 decision D1). A member already saved under 18 keeps that age until
+ * they change it — only a new or changed age is checked.
+ */
 export const PROFILE_LIMITS = {
-  age: { min: 13, max: 100 },
+  age: { min: 18, max: 100 },
   height_cm: { min: 100, max: 250 },
   weight_kg: { min: 25, max: 350 },
   allergies: { maxItems: 20, maxLength: 40 },
@@ -164,13 +168,34 @@ export const DEFAULT_TARGETS: Targets = {
 
 /* ───────────────────────────── Preferences ───────────────────────────── */
 
+/** What a preference missing from the account means. `ai_training_opt_out: true`: see `aiImprovementOn`. */
 export const DEFAULT_PREFERENCES: Preferences = {
   units: 'metric',
   reminders: true,
   weekly_report: true,
   tone: 'gentle',
-  ai_training_opt_out: false,
+  ai_training_opt_out: true,
 };
+
+/**
+ * "Help improve ÖRZA’s AI" is opt-in (D3 decision D2): on only when the account stores `ai_training_opt_out: false`,
+ * which only the member's own switch writes (PUT /api/settings/preferences, here or on the website). Missing means the
+ * member never chose, so it is off: sign-up and onboarding never store the field, and the old "on by default" was only a
+ * display default (nothing ever used it). The same rule on every server, old or new; `true` is off.
+ */
+export const aiImprovementOn = (prefs?: Partial<Preferences> | null): boolean => prefs?.ai_training_opt_out === false;
+
+/**
+ * The switch's description. An iPhone names its sources without Health Connect, an Android service (App Review 2.3.10:
+ * no other mobile platforms in the app); Android uses the website's words.
+ */
+export function aiImprovementDescription(platform: 'ios' | 'android'): string {
+  const sources =
+    platform === 'ios'
+      ? 'Steps and anything read from Apple Health or your iPhone’s motion sensor are never used for this.'
+      : 'Steps and anything read from Apple Health, Health Connect or your phone’s motion sensor are never used for this.';
+  return `Lets your conversations and logs, anonymized first, help make ÖRZA’s AI better. It’s off unless you turn it on. ${sources} AI features work the same whether it’s on or off.`;
+}
 
 export const TONE_COPY: Record<Preferences['tone'], string> = {
   gentle: 'Warm encouragement and no pressure — ÖRZA celebrates small wins.',

@@ -1,24 +1,24 @@
 /**
- * Settings → Preferences ("How ÖRZA works for you"): units, coach tone, reminders, weekly report, AI-training opt-out
- * and time zone. Each control saves on change — optimistic, reverted (with a toast) if the save fails.
+ * Settings → Preferences ("How ÖRZA works for you"): units, coach tone, reminders, weekly report, "Help improve ÖRZA’s
+ * AI" (opt-in: off unless the member turns it on) and time zone. Each control saves on change — optimistic, reverted
+ * (with a toast) if the save fails.
  *
  * Saves run one after another (each answer carries the whole user, so an older answer can never land last and undo a
  * newer change), and a value being saved is shown over the server copy until its own save settles.
  */
-import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { useAccountSync, useSaveProfile, useSavePreference } from '@/features/settings/api';
-import { DEFAULT_PREFERENCES, TONE_COPY } from '@/features/settings/options';
+import { DEFAULT_PREFERENCES, TONE_COPY, aiImprovementDescription, aiImprovementOn } from '@/features/settings/options';
 import { SavedPill, SettingsGroup, ToggleRow } from '@/features/settings/parts';
 import { errorMessage } from '@/lib/api';
 import { useSignedInUser } from '@/lib/auth';
-import { WEB_URL } from '@/lib/config';
 import { deviceTimeZone } from '@/lib/device';
 import { haptics } from '@/lib/haptics';
 import type { Preferences } from '@/lib/types';
+import { openWebsite } from '@/lib/web';
 import { colors, spacing } from '@/theme';
 import { Button, Icon, Screen, ScreenHeader, Segmented, Text, toast, useLayoutTransition } from '@/ui';
 
@@ -40,15 +40,8 @@ function ChoiceRow({ title, description, children, last }: { title: string; desc
   );
 }
 
-/**
- * "Help improve ÖRZA’s AI". On an iPhone the sources are named without Health Connect, an Android service (App Review
- * 2.3.10: no other mobile platforms in the app); Android keeps the approved sentence.
- */
-const AI_TRAINING_DESCRIPTION = `Lets your conversations and logs, anonymized first, help make ÖRZA’s AI better. ${
-  Platform.OS === 'ios'
-    ? 'Steps and anything read from Apple Health or your iPhone’s motion sensor are never used for this.'
-    : 'Steps and anything read from Apple Health, Health Connect or your phone’s motion sensor are never used for this.'
-} Turning this off doesn’t change how AI features work for you.`;
+/** "Help improve ÖRZA’s AI" (opt-in): the sources named per platform (`aiImprovementDescription`). */
+const AI_TRAINING_DESCRIPTION = aiImprovementDescription(Platform.OS === 'ios' ? 'ios' : 'android');
 
 export default function PreferencesSettings() {
   const user = useSignedInUser();
@@ -188,7 +181,7 @@ export default function PreferencesSettings() {
         <ToggleRow
           title="Help improve ÖRZA’s AI"
           description={AI_TRAINING_DESCRIPTION}
-          value={!prefs.ai_training_opt_out}
+          value={aiImprovementOn(prefs)}
           pending={isPending('ai_training_opt_out')}
           onChange={(v) => update('ai_training_opt_out', !v)}
           last
@@ -200,7 +193,7 @@ export default function PreferencesSettings() {
             accessibilityRole="link"
             onPress={() => {
               haptics.tap();
-              void WebBrowser.openBrowserAsync(`${WEB_URL}/privacy#ai-processing`, { toolbarColor: colors.canvas, controlsColor: colors.energyInk }).catch(() =>
+              void openWebsite('/privacy#ai-processing', { toolbarColor: colors.canvas, controlsColor: colors.energyInk }).catch(() =>
                 toast.error("Couldn't open the page. Please try again.")
               );
             }}

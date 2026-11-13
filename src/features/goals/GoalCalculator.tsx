@@ -6,6 +6,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View, type TextInput } from 'react-native';
 
+import { PROFILE_LIMITS } from '@/features/settings/options';
 import { errorMessage, validationField } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
 import type { ActivityLevel, GoalType, Profile, Sex, Targets } from '@/lib/types';
@@ -135,14 +136,14 @@ export function GoalCalculator({
   const tgtOk = valid(tgt, MIN_WEIGHT_KG, MAX_WEIGHT_KG);
   const hOk = valid(h, MIN_HEIGHT_CM, MAX_HEIGHT_CM);
   const heightTyped = imperial ? heightFt.trim() !== '' || heightIn.trim() !== '' : height.trim() !== '';
-  const aOk = valid(a, 13, 100) && Number.isInteger(a);
+  const aOk = valid(a, PROFILE_LIMITS.age.min, PROFILE_LIMITS.age.max) && Number.isInteger(a);
   const rate = signedRate(goal, pace);
 
   const fieldErrors: Record<FieldKey, string | null> = {
     current: serverErrors.current ?? (current && !curOk ? `Enter a weight between ${range.min} and ${range.max} ${unit}.` : null),
     target: serverErrors.target ?? (goal !== 'maintain' && target && !tgtOk ? `Enter a target between ${range.min} and ${range.max} ${unit}.` : null),
     height: serverErrors.height ?? (heightTyped && !hOk ? (imperial ? 'Enter a height between 3 ft 4 in and 8 ft 2 in.' : 'Height between 100 and 250 cm.') : null),
-    age: serverErrors.age ?? (age && !aOk ? 'ÖRZA goal planning is for ages 13–100.' : null),
+    age: serverErrors.age ?? (age && !aOk ? `ÖRZA goal planning is for ages ${PROFILE_LIMITS.age.min}–${PROFILE_LIMITS.age.max}.` : null),
   };
 
   const ready = curOk && tgtOk && hOk && aOk;

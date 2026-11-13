@@ -1,4 +1,3 @@
-import * as WebBrowser from 'expo-web-browser';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -6,6 +5,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { useSignedInUser, useAuth } from '@/lib/auth';
 import { WEB_URL } from '@/lib/config';
+import { openWebsite } from '@/lib/web';
 import { colors, spacing } from '@/theme';
 import { Button, GlassCard, Orb, Screen, Tag, Text, toast } from '@/ui';
 
@@ -17,7 +17,7 @@ export default function AdminNotice() {
   const [busy, setBusy] = useState(false);
 
   const openConsole = () => {
-    WebBrowser.openBrowserAsync(`${WEB_URL}/dashboard/admin`, { toolbarColor: colors.hero, controlsColor: colors.heroText }).catch(() =>
+    openWebsite('/dashboard/admin', { toolbarColor: colors.hero, controlsColor: colors.heroText }).catch(() =>
       toast.error("Couldn't open the browser. Visit the ÖRZA website on a computer.")
     );
   };

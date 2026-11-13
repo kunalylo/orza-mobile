@@ -5,7 +5,6 @@
  * "AI features", the account's AI consent (`features/ai/AiFeaturesRow.tsx`, docs/notes/ai-consent.md §3.5).
  */
 import { router } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import { Alert, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
@@ -18,9 +17,10 @@ import { Avatar, Note, SettingsGroup, SettingsRow, TINTS, initialOf } from '@/fe
 import { contactSupport } from '@/features/settings/support';
 import { ApiError, errorMessage } from '@/lib/api';
 import { useAuth, useSignedInUser } from '@/lib/auth';
-import { APP_VERSION, SUPPORT_EMAIL, WEB_URL } from '@/lib/config';
+import { APP_VERSION, SUPPORT_EMAIL } from '@/lib/config';
 import { haptics } from '@/lib/haptics';
 import type { PublicUser } from '@/lib/types';
+import { openWebsite } from '@/lib/web';
 import { colors, radii, spacing } from '@/theme';
 import { GlassCard, Icon, Screen, ScreenHeader, Text, toast } from '@/ui';
 
@@ -165,7 +165,7 @@ export default function Settings() {
 
   const openWeb = (path: string) => {
     haptics.tap();
-    void WebBrowser.openBrowserAsync(`${WEB_URL}${path}`, { toolbarColor: colors.canvas, controlsColor: colors.energyInk }).catch(() =>
+    void openWebsite(path, { toolbarColor: colors.canvas, controlsColor: colors.energyInk }).catch(() =>
       toast.error("Couldn't open the page. Please try again.")
     );
   };

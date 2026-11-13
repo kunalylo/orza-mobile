@@ -1,5 +1,4 @@
 import { router } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, View, type TextInput } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -7,9 +6,9 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { FormBanner } from '@/components/auth/FormBanner';
 import { ApiError, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { WEB_URL } from '@/lib/config';
 import { haptics } from '@/lib/haptics';
 import { passwordStrength, validateEmail, validateName, validateNewPassword } from '@/lib/validation';
+import { openWebsite } from '@/lib/web';
 import { colors, spacing } from '@/theme';
 import { Button, Screen, ScreenHeader, Text, TextField } from '@/ui';
 
@@ -77,7 +76,7 @@ export default function SignUp() {
   }
 
   const openLegal = (path: string) => {
-    void WebBrowser.openBrowserAsync(`${WEB_URL}${path}`, { toolbarColor: colors.canvas, controlsColor: colors.ink }).catch(() => {});
+    void openWebsite(path, { toolbarColor: colors.canvas, controlsColor: colors.ink }).catch(() => {});
   };
 
   return (

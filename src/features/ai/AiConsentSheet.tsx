@@ -4,13 +4,12 @@
  * and Android back all mean "no" (Google Play: navigating away is not consent); while Allow saves, nothing dismisses it.
  * `ConsentPoints` is shared with Settings › Privacy & data › AI features.
  */
-import * as WebBrowser from 'expo-web-browser';
 import { Platform, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 
 import { AI_PRIVACY_PATH, consentCopy, type ConsentContext, type ConsentCopy, type ConsentPointIcon } from '@/lib/aiConsent';
-import { WEB_URL } from '@/lib/config';
 import { haptics } from '@/lib/haptics';
+import { openWebsite } from '@/lib/web';
 import { colors, radii, spacing } from '@/theme';
 import { Button, Icon, Orb, Sheet, Text, toast, type IconName } from '@/ui';
 
@@ -38,7 +37,7 @@ export const CONSENT_PLATFORM: 'ios' | 'android' = Platform.OS === 'ios' ? 'ios'
 /** The website's privacy policy, AI section, in the in-app browser. */
 export function openAiPrivacy() {
   haptics.tap();
-  void WebBrowser.openBrowserAsync(`${WEB_URL}${AI_PRIVACY_PATH}`, { toolbarColor: colors.canvas, controlsColor: colors.energyInk }).catch(() =>
+  void openWebsite(AI_PRIVACY_PATH, { toolbarColor: colors.canvas, controlsColor: colors.energyInk }).catch(() =>
     toast.error("Couldn't open the page. Please try again.")
   );
 }
