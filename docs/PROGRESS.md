@@ -924,3 +924,11 @@ batch 1" log entry); 3 is still open.
   670e5732…, submission 73a2000d…, from mobile `6d801f6`). Next for the user: TestFlight → update to build 3, check it; App Store
   Connect forms from docs/store/app-store.md; screenshots; submit for review. Android: Play Console app + first AAB (EAS production
   build) when the user is ready; the vivo tests resume when the phone is back.
+- 2026-11-13: Android store AAB built (EAS 34459e0e…, versionCode 2, new EAS-managed upload keystore):
+  https://expo.dev/artifacts/eas/RzhGZLMELkFAZPiO6uKrU8MbRax42z2yewTWAhxW8zQ.aab — the user uploads it by hand to Play internal
+  testing. Web `/delete-account` (user OK'd) pushed (main `16b542e`). Store guide page `docs/store/guide.html` (`ebd1dc3`) sent to
+  the user. App Store screenshots: 4 framed shots (Today, Snap, Ask, Reports) from the user's own iPhone 1170×2532 originals in
+  `E:\aylo\store-shots\framed\appstore-{large-1290x2796,medium-1179x2556}` via `scripts/store/frame-shots.mjs`; Medicines + Health
+  sync left out (family names / real prescription; "no sleep data" note) → retake on the demo account. Android screenshots +
+  feature graphic still to make (emulator; no iPhone imagery on Play). Open: App Store name "ÖRZA" vs listing "ÖRZA: Meals, Meds &
+  AI Coach" (user sets it in App Information); Play developer name vs "Kunal Patil".
