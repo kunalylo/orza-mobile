@@ -907,3 +907,8 @@ batch 1" log entry); 3 is still open.
   Waiting: the user's OK on the recommendation list (18+, AI-improve opt-in default off, 3 privacy edits, iPhone calendar without
   medicine names, full-screen intent option B, location/product-interaction declarations, category, website menu hidden from the app,
   new copy). Then build 3.
+- 2026-11-13: USER "OK to all" → applying (`wf_6270aed9-f33`, web branch `d3-web` in E:\aylo\orza-backend): D1 18+ everywhere,
+  D2 "Help improve ÖRZA's AI" opt-in (off by default), D3 privacy edits (service providers, "never reads your phone's location",
+  controller + grievance contact via constants — name/contact to CONFIRM with the user before the web push), D4 iPhone calendar
+  events without medicine names, D5 from=app hides the website menu for app-opened pages, D6 store docs updated. Then: web push
+  (after the user confirms the name), iOS TestFlight build 3 from main.
