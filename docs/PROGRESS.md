@@ -886,3 +886,8 @@ batch 1" log entry); 3 is still open.
   orza-alarms → full rebuild). New copy listed in v2-fixes.md for the user. Local server moved to web main `ee25fb9` (live: steps
   modes, AI consent, AI reports), AI blocked. Running `wf_a108d343-324`: full arm64 rebuild, install -r on the vivo (A-2 update),
   device checks of the a11y polish, AI report, B1/B2/F2 and the OEM sheet. Then the interactive part with the user (AL alarms, walks).
+- 2026-11-13: `wf_a108d343-324` built the arm64 test build of `16e8cf8` (all V2 fixes, OEM guide, a11y polish, AI report; SAFE,
+  sha256 ef7ec116…) then died on an expired sign-in before installing; the phone is unplugged. USER: doesn't remember force-stopping
+  ÖRZA at 10:39 on 11-12 (→ treat as a possible vivo kill; the OEM guide covers it). **ÖRZA shows in TestFlight on the user's
+  iPhone** (build 2 passed Apple processing). Next, coordinator-led with the user: install the vivo build (install -r = A-2 update),
+  AL medicine alarms + W0 walk; iPhone I-2…I-6 on TestFlight (production, the user's own account).
