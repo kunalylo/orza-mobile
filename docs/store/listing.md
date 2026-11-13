@@ -35,8 +35,8 @@ The user's answers of 2026-11-13 are in `app-store.md` §0 and `google-play.md` 
 1. **Web push.** Confirm with the user the name and the grievance contact the privacy policy will show ("Kunal Patil",
    support@orza.app: `PRIVACY_CONTROLLER_NAME`, `PRIVACY_GRIEVANCE_EMAIL`), then push the web branch `d3-web` (privacy
    edits and date, 18+, "Help improve ÖRZA's AI" opt-in, the website menu hidden for `from=app`). Check live: the new
-   policy sentences; `/privacy?from=app` shows no menu or pricing links, also after following a link in it; a normal
-   visit to the site still has its menu.
+   policy sentences; `/privacy?from=app` shows no menu or pricing links, also after following a link in it; Sign out on
+   a page the app opened lands on the sign-in page; a normal visit to the site still has its menu.
 2. **Account-deletion page** for Play (`/delete-account`, draft in `google-play.md` §4): the user's OK, then deploy.
 3. **iPhone build 3** from `main`, after the web push, and its TestFlight check (`app-store.md` §3 step 8).
 4. **Android app bundle** from `main` (`google-play.md` §5 step 3) and its device checks (`google-play.md` §6).

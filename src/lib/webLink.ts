@@ -32,6 +32,20 @@ export function isWebsiteUrl(url: string, origin: string): boolean {
 }
 
 /**
+ * True for the website pages the app never opens (web `src/lib/from-app.ts` `blockedFromApp`): the home page, which is
+ * marketing with a way to Pricing, and Pricing itself (App Review 3.1.1 / 3.1.3). `target` is a site path or a full URL;
+ * other sites are never blocked. A link to one in an ÖRZA reply shows as plain text (`features/chat/RichText.tsx`).
+ */
+export function websitePageBlocked(target: string, origin: string): boolean {
+  let rest: string;
+  if (target.startsWith('/')) rest = target;
+  else if (isWebsiteUrl(target, origin)) rest = target.slice(origin.replace(/\/+$/, '').length);
+  else return false;
+  const path = rest.split(/[?#]/)[0].replace(/\/+$/, '').toLowerCase();
+  return path === '' || path === '/pricing' || path.startsWith('/pricing/');
+}
+
+/**
  * The address the app opens for `target`: a site path ("/privacy#ai-processing") becomes `origin + path`; a full URL on
  * the website stays as it is. Both get `from=app`. A full URL on any other site is returned unchanged.
  */

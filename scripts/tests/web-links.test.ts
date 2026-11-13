@@ -9,13 +9,15 @@
  * - L3 one helper: no screen opens the in-app browser itself (only `lib/web.ts` imports expo-web-browser), and every
  *   place that used to build `${WEB_URL}…` for the browser now goes through `openWebsite`.
  * - L4 Health Connect's privacy page (Android, native WebView) loads the same page with `from=app`.
+ * - L5 the website's home page and Pricing never open from the app (web `blockedFromApp`): `websitePageBlocked`,
+ *   `openWebsite` refuses them and a link to one in an ÖRZA reply is plain text.
  */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, test } from 'node:test';
 
-import { FROM_APP_KEY, FROM_APP_VALUE, appWebUrl, isWebsiteUrl, withFromApp } from '../../src/lib/webLink';
+import { FROM_APP_KEY, FROM_APP_VALUE, appWebUrl, isWebsiteUrl, websitePageBlocked, withFromApp } from '../../src/lib/webLink';
 
 const ORIGIN = 'https://orza-nine.vercel.app';
 const ROOT = join(__dirname, '..', '..');
@@ -131,5 +133,57 @@ describe('L4 Health Connect privacy page (Android)', () => {
     assert.equal(consoleUrl, 'https://orza-nine.vercel.app/privacy#phone-app');
     assert.equal(inApp, withFromApp(consoleUrl!));
     assert.match(kt, /webView\.loadUrl\(IN_APP_URL\)/);
+  });
+});
+
+describe('L5 the home page and Pricing never open from the app', () => {
+  test('blocked: the home page and Pricing, as site paths or full URLs', () => {
+    for (const target of [
+      '/',
+      '/#features',
+      '/?x=1',
+      '/pricing',
+      '/pricing/',
+      '/pricing?plan=family#faq',
+      '/pricing/family',
+      ORIGIN,
+      `${ORIGIN}/`,
+      `${ORIGIN}#top`,
+      `${ORIGIN}?ref=chat`,
+      `${ORIGIN}/pricing`,
+      `${ORIGIN}/Pricing`,
+      `${ORIGIN}/pricing/?from=app`,
+      'https://ORZA-NINE.vercel.app/pricing',
+    ]) {
+      assert.equal(websitePageBlocked(target, ORIGIN), true, target);
+    }
+  });
+  test('not blocked: every other page, and other sites', () => {
+    for (const target of [
+      '/privacy',
+      '/privacy#ai-processing',
+      '/terms',
+      '/trust',
+      '/faq',
+      '/dashboard/health',
+      '/dashboard/admin',
+      '/pricing-faq',
+      `${ORIGIN}/terms`,
+      `${ORIGIN}/dashboard/credits`,
+      'https://example.com/pricing',
+      'https://example.com/',
+      'https://orza-nine.vercel.app.example.com/pricing',
+    ]) {
+      assert.equal(websitePageBlocked(target, ORIGIN), false, target);
+    }
+  });
+  const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8');
+  test('openWebsite refuses them before opening anything', () => {
+    const web = read('src/lib/web.ts');
+    assert.match(web, /if \(websiteBlocked\(target\)\) return Promise\.reject\(/);
+    assert.ok(web.indexOf('websiteBlocked(target)') < web.indexOf('openBrowserAsync('), 'checked before the browser opens');
+  });
+  test("a link to one in an ÖRZA reply is plain text", () => {
+    assert.match(read('src/features/chat/RichText.tsx'), /const url = https && websiteBlocked\(https\) \? null : https;/);
   });
 });
