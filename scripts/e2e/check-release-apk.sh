@@ -9,7 +9,10 @@
 #      subdomains) and pins vercel.app (+ subdomains) to the bogus all-A pin; no base-config;
 #   3. assets/index.android.bundle contains "http://host:port" as the inlined API URL — an occurrence right after
 #      "EXPO_PUBLIC_API_URL=" doesn't count: that is the dev-only config-error help text (src/app/_layout.tsx), which every
-#      bundle carries for 10.0.2.2:3100;
+#      bundle carries for 10.0.2.2:3100. A Hermes bytecode bundle (every release build) packs its strings, so the inlined
+#      URL can sit INSIDE that help text's bytes (seen on the 10.0.2.2 emulator build of c70184d): there the check reads
+#      the string table with hermesc's disassembler (-b -dump-bytecode) and needs "http://host:port" as an entry of its
+#      own (the help text is one literal, so a separate entry can only be the inlined API URL);
 #   4. the APK is NOT debuggable.
 # A release build references resources by id and stores them under shortened paths (res/Xy.xml): both are resolved.
 set -u
@@ -80,10 +83,25 @@ else
 fi
 
 ORIGIN_RE="$(printf '%s' "$ORIGIN" | sed 's/[.]/\\./g')"
+inlined=0
 if unzip -p "$APK" assets/index.android.bundle > "$tmp/bundle" 2>/dev/null; then
-  inlined="$(LC_ALL=C grep -aoE ".{0,20}http://$ORIGIN_RE" "$tmp/bundle" | LC_ALL=C grep -vcF "EXPO_PUBLIC_API_URL=http://")"
-else
-  inlined=0
+  if [ "$(head -c 8 "$tmp/bundle" | od -An -tx1 | tr -d ' \n')" = "c61fbc03c103191f" ]; then
+    # Hermes bytecode. hermesc: $HERMESC, else the build copy's (the one that compiled the bundle), else this checkout's.
+    HERMESC="${HERMESC:-}"
+    for h in "${APK%%/android/*}/node_modules/hermes-compiler/hermesc/win64-bin/hermesc.exe" \
+             "node_modules/hermes-compiler/hermesc/win64-bin/hermesc.exe"; do
+      if [ -z "$HERMESC" ] && [ -x "$h" ]; then HERMESC="$h"; fi
+    done
+    if [ -n "$HERMESC" ] && "$HERMESC" -b -dump-bytecode "$tmp/bundle" > "$tmp/hbc.txt" 2>/dev/null; then
+      # Global String Table lines look like:  s3694[ASCII, 129950..129969]: http://10.0.2.2:3100
+      inlined="$(LC_ALL=C grep -cE "^s[0-9]+\[ASCII, [0-9]+\.\.[0-9]+\]: http://$ORIGIN_RE\$" "$tmp/hbc.txt")"
+      echo "    (Hermes bytecode: $inlined string-table entry(ies) equal to http://$ORIGIN)"
+    else
+      echo "    (Hermes bytecode, but no hermesc could read it: set HERMESC)"
+    fi
+  else
+    inlined="$(LC_ALL=C grep -aoE ".{0,20}http://$ORIGIN_RE" "$tmp/bundle" | LC_ALL=C grep -vcF "EXPO_PUBLIC_API_URL=http://")"
+  fi
 fi
 if [ "${inlined:-0}" -gt 0 ]; then
   echo "ok 3: bundle contains http://$ORIGIN (inlined API URL)"

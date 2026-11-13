@@ -1,0 +1,15 @@
+{
+  "inDir": "E:/aylo/store-shots/play/raw",
+  "outDir": "E:/aylo/store-shots/play/phone",
+  "size": { "w": 1080, "h": 1920 },
+  "shots": [
+    { "file": "01-today-raw.png", "name": "01-today", "caption": "Your day at a glance" },
+    { "file": "02-snap-raw.png", "name": "02-snap", "caption": "Snap your plate.\nKnow your meal." },
+    { "file": "03-type-raw.png", "name": "03-type-or-say", "caption": "Type or say\nwhat you ate" },
+    { "file": "04-ask-raw.png", "name": "04-ask", "caption": "Ask in English,\nHindi or Hinglish" },
+    { "file": "05-medicines-raw.png", "name": "05-medicines", "caption": "Every medicine,\nwith its photo" },
+    { "file": "06-alarm-raw.png", "name": "06-alarm", "caption": "Alarms that show\nthe medicine" },
+    { "file": "07-steps-raw.png", "name": "07-steps", "caption": "Steps from\nHealth Connect" },
+    { "file": "08-reports-raw.png", "name": "08-reports", "caption": "Your wellness,\nin numbers" }
+  ]
+}
