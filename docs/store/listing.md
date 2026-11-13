@@ -1,7 +1,7 @@
 # Store listing — App Store and Google Play (ÖRZA)
 
-Written 2026-11-13 (D3). **The user reviews every text here before it is pasted.** Character counts were made with a
-script, counting Unicode characters (Ö is 1).
+Written 2026-11-13 (D3). **The user approved the texts here on 2026-11-13** ("OK to all"); paste them as they are.
+Character counts were made with a script, counting Unicode characters (Ö is 1).
 
 **Review fixes (2026-11-13), in both descriptions:** the prescription line now says you check each medicine before
 any reminder or alarm is set (it said ÖRZA "sets the reminders for you to check"; `2b1cf48` fixed the same claim in
@@ -25,6 +25,43 @@ Where the features come from: Today, Meals, Snap, Medicines and More (`src/featu
 `credits.tsx`, `rx/*`, the alarm screen and Settings; voice in `en-IN` / `hi-IN`; coach replies in English, Hindi or
 Hinglish (web `lib/coach.ts`); about 350 foods in the food list (web `lib/nutrition/foods.ts`); free credits at
 sign-up (web `INITIAL_CREDITS`; the number isn't stated, so it can change).
+
+---
+
+## 0. Pre-launch checklist (both stores)
+
+The user's answers of 2026-11-13 are in `app-store.md` §0 and `google-play.md` §0. In order:
+
+1. **Web push.** Confirm with the user the name and the grievance contact the privacy policy will show ("Kunal Patil",
+   support@orza.app: `PRIVACY_CONTROLLER_NAME`, `PRIVACY_GRIEVANCE_EMAIL`), then push the web branch `d3-web` (privacy
+   edits and date, 18+, "Help improve ÖRZA's AI" opt-in, the website menu hidden for `from=app`). Check live: the new
+   policy sentences; `/privacy?from=app` shows no menu or pricing links, also after following a link in it; a normal
+   visit to the site still has its menu.
+2. **Account-deletion page** for Play (`/delete-account`, draft in `google-play.md` §4): the user's OK, then deploy.
+3. **iPhone build 3** from `main`, after the web push, and its TestFlight check (`app-store.md` §3 step 8).
+4. **Android app bundle** from `main` (`google-play.md` §5 step 3) and its device checks (`google-play.md` §6).
+5. **Demo account, made by the user** on production (`app-store.md` §3 step 2): onboarded, sample meals and weights,
+   one "as needed" medicine with a photo, AI consent not given, 500 credits from the admin console with a neutral
+   reason. The password stays with the user and goes only into App Store Connect (App Review Information) and the
+   Play Console (App access and the pre-launch report's credentials).
+6. **AI switched on in production** while the stores review (`ai_enabled`): with AI off, Snap and the prescription
+   scan hide their AI buttons and look broken.
+7. **Store answers as written:** App Privacy (`app-store.md` §2.1) and Data safety (`google-play.md` §3.10): approximate
+   (coarse) location yes, Product Interaction / App interactions yes, phone number no. Age rating override 18+ (Apple),
+   target audience 18+ (Play), full-screen intent option B, category Health & Fitness (+ Food & Drink on Apple),
+   India only, contact support@orza.app.
+8. **Screenshots and the feature graphic** (§4) with the demo account.
+
+**Later, before each of these changes**
+- **Switching WhatsApp reminders on:** first update both stores' privacy answers: Apple App Privacy › Contact Info ›
+  Phone Number (Yes, App Functionality) and Play Data safety › Personal info › Phone number (Yes, optional, App
+  functionality). The server shows the WhatsApp card without an app update, so the answers must change first.
+- **Adding any EU country:** decide the trader details first (Apple's Digital Services Act trader status publishes an
+  address, phone and email on the EU product page; check Play's the same way).
+- **Selling AI credits:** Apple In-App Purchase on iPhone; Google Play Billing or Google's alternative billing program
+  for India on Android; change "free" in both descriptions (§2, §3) and the App Review notes.
+- **Using chats or logs to improve the AI:** only for members who turned "Help improve ÖRZA's AI" on, never steps or
+  health-app data; add Other Purposes on Apple and re-file Play's Data safety first.
 
 ---
 
@@ -106,8 +143,8 @@ Terms of service: https://orza-nine.vercel.app/terms
 ```
 
 **Other App Store fields**
-- Category: Health & Fitness (primary), Food & Drink (secondary).
-- Support URL: `https://orza-nine.vercel.app/faq`, or a contact page.
+- Category: Health & Fitness (primary), Food & Drink (secondary) (decided).
+- Support URL: `https://orza-nine.vercel.app/faq` (its contact is support@orza.app), or a contact page later.
 - Marketing URL: `https://orza-nine.vercel.app`.
 - Privacy policy URL: `https://orza-nine.vercel.app/privacy`.
 - The age rating, review notes and privacy labels are in `docs/store/app-store.md` (App Store step).
@@ -170,8 +207,8 @@ Important
 Privacy policy: https://orza-nine.vercel.app/privacy
 ```
 
-**Other Play fields:** category Health & Fitness; tags, contact details and privacy URL as in `google-play.md` §3.9
-and §3.1.
+**Other Play fields:** category Health & Fitness; contact email support@orza.app; tags, contact details and privacy
+URL as in `google-play.md` §3.9 and §3.1.
 
 ---
 

@@ -1,7 +1,8 @@
 # Google Play — audit and Play Console answers (ÖRZA for Android)
 
 Package `in.co.ylo.orza` · version 1.0.0 · minSdk 26, targetSdk 36 · nothing released yet.
-Written 2026-11-13 (D3). Every policy below was re-read on 2026-11-13; links are in §8.
+Written 2026-11-13 (D3). Every policy below was re-read on 2026-11-13; links are in §8. Updated the same day with the
+user's answers (§0; the same decisions as `app-store.md` §0).
 
 **What was read**
 - `app.json`: `android.permissions` and `blockedPermissions`.
@@ -49,41 +50,40 @@ Kept on purpose:
 - Target API 36, as required since 31 Aug 2026.
 - All 26 arm64 libraries are 16 KB aligned (79/79 LOAD segments at `0x4000`, and zipalign `-P 16` passes).
 
-**Blockers before a Play release** (they need the user; each one is also in `open_questions`)
+**Decided by the user (2026-11-13, "OK to all"; the same answers as `app-store.md` §0)**
 
-1. **Developer account type.**
-   - Play says health apps "such as Medical apps" must be published from an **Organization** account.
-   - ÖRZA must declare **Medication and treatment management**, a Medical category: medicine reminders and
-     prescription scanning are exactly what that category describes.
-   - The account on hand is FatafatDecor's. Its developer name would show under ÖRZA, and if it is a personal account
-     made after 13 Nov 2023 it also needs the 12-tester, 14-day closed test.
-   - An Organization account (D-U-N-S) also answers Apple 5.1.1(ix).
-2. **A public account-deletion web page.**
+| Item | Decision | Status |
+|---|---|---|
+| Developer account | **Individual accounts.** Play: FatafatDecor's existing account (its type and creation date aren't known yet). | Play says health apps "such as Medical apps" must come from an **Organization** account, and ÖRZA declares **Medication and treatment management**, a Medical category. Risk accepted: if Play refuses the health declaration or the release for it, the answer is an Organization account (D-U-N-S). If the account is personal and was made after 13 Nov 2023, the 12-tester, 14-day closed test comes first (§5 step 8). |
+| Minimum age | **18 everywhere** (D1). | Done: web `d3-web` (onboarding `src/lib/onboarding.ts`, profile `components/account/options.ts`, the goal planner) and the app (`src/features/settings/options.ts` `age.min: 18`, Goals). Ages already saved are left as they are; the local test data has none under 18. Target audience 18+ (§3.5). |
+| Privacy policy developer information | **Name who is responsible for ÖRZA and a grievance contact** (D3, India DPDP), plus the service-provider sentence and "never reads your phone's location". | Done on web `d3-web` with one constant each (`PRIVACY_CONTROLLER_NAME` = "Kunal Patil", `PRIVACY_GRIEVANCE_EMAIL` = support@orza.app), to be confirmed with the user before the web push. See the open question below on the Play developer name. |
+| Support email | **support@orza.app** receives mail. | Store contact, IARC email, policy contact. |
+| Full-screen intent | **Option B: not declared** for default access; members allow it in the app. | §3.8. |
+| Countries | **India first.** No EU until the trader details are decided. | §5 step 7. |
+| WhatsApp | **Off** in production until Meta's verification, so **no phone number** is declared now. | Pre-launch checklist (`listing.md` §0): update Data safety here and App Privacy on Apple **before** switching WhatsApp on. |
+| Approximate location | **Declared** (the state picked at sign-up). | §3.10; the policy says "never reads your phone's location" (D3). |
+| App interactions | **Declared** (the credit ledger, the device's last-seen time). | §3.10. |
+| AI credits | **Free at launch** (members request, admins grant). | Later, if ÖRZA sells credits on Android (Razorpay was the plan): digital goods need **Google Play Billing**, or Google's **alternative billing program for India** (user choice billing, which offers Play Billing next to the other method; check its current terms and enrol first). A plain Razorpay checkout inside the app, or a link to one, isn't allowed. iPhone: IAP (`app-store.md` 3.1.3). |
+| Category | **Health & Fitness** (App Store: Health & Fitness + Food & Drink). | §3.9. |
+| Demo account | **The user creates it** on production; the password stays with the user. | Pre-launch checklist; §3.2. |
+| Copy | The listing and the D3 audit copy are **approved**. | `listing.md`; the new D3-decision strings are in `app-store.md` §4.2. |
+
+**Still blocking a Play release**
+
+1. **A public account-deletion web page.**
    - Play requires a URL where people can ask for deletion without the app.
    - The website only has Delete inside the signed-in Settings.
    - A draft page is in §4. It needs a website change, the user's OK and a deploy.
-3. **The privacy policy must name the developer.**
-   - Play requires "developer information and a privacy point of contact".
-   - The live policy says only "ÖRZA" and gives the support email.
-   - It needs the legal name, as on the Play account, and a contact address. A DPDP grievance contact would fit here
-     too.
-   - Also check that the support email (`support@orza.app` unless `NEXT_PUBLIC_SUPPORT_EMAIL` overrides it) is a
-     real inbox.
-4. **Minimum age.**
-   - The terms and the privacy policy say 18+, but onboarding and Settings accept 13+: web `src/lib/onboarding.ts`
-     line 785, web `components/account/options.ts`, and phone `src/features/settings/options.ts` (`age.min: 13`).
-   - The Play target audience will be 18+, and in India the DPDP Act treats under-18s as children (verifiable
-     parental consent).
-   - Change the floor to 18 in all three places, or decide otherwise.
-5. **A demo account on production** for App access and the pre-launch report. The user creates it: onboarded, with AI
-   credits, and some sample meals and medicines.
+2. **The demo account on production** for App access and the pre-launch report (the user, checklist).
+3. **The web push** of `d3-web` (policy developer details, 18+, opt-in AI improvement, the hidden menu for app pages),
+   after the user confirms the name and contact.
 
-**Decisions for the user**
-- Full-screen intent: ask for default access as an "alarm" app, or not (§3.8).
-- Countries: India only first?
-- Developer name.
-- Approximate location: declare the state picked in onboarding, and change one privacy sentence (§3.10).
-- WhatsApp: is it switched on in production? (§3.10)
+**Open questions**
+- **Play developer name.** The listing shows the Play account's developer name under ÖRZA (FatafatDecor's account
+  today). Play's User Data policy asks the privacy policy for "developer information", and the policy will name
+  "Kunal Patil". If the account's developer name is the company's, either name that company in the policy too
+  (`PRIVACY_CONTROLLER_NAME`) or change the developer name, so the two match.
+- **Account-deletion page** (§4): OK to publish it, and are 7 days and "no backups keep deleted data" right?
 
 ---
 
@@ -94,13 +94,13 @@ Verdicts: ✅ meets it · ⚠️ needs an answer or a small change · ⛔ blocks
 | Area | What Play asks | What ÖRZA does | Verdict |
 |---|---|---|---|
 | **Health apps declaration** | Every app on any track must complete it. Declare every health feature. Health Connect apps justify each data type. Ask only for what a user-facing feature needs. Re-file when the types change. | Features: Activity and fitness, Nutrition and weight management, Sleep management, Medication and treatment management. Four HC read types plus background, each tied to a screen (§3.7). | ✅ answers ready |
-| **Organization account** | Health apps "such as Medical apps" need an Organization account (D-U-N-S). | Medication management is in the Medical group of the form. FatafatDecor's account is unknown: personal or organization? | ⛔ user decides (blocker 1) |
+| **Organization account** | Health apps "such as Medical apps" need an Organization account (D-U-N-S). | Medication management is in the Medical group of the form. Decision: FatafatDecor's existing account (individual accounts, §0); its type is still to check. | ⚠️ risk accepted (§0) |
 | **Health Connect: Limited Use** | No ads, no sale, no transfer except to provide the feature, with explicit consent. The privacy policy must be the same page Health Connect opens. | The AI consent sheet names OpenAI and says steps and weight go with chats. Without consent, the server leaves HC data out (ai-consent.md R1/R2). Privacy `#phone-app`: never sold, never for ads, never used to improve AI. `HealthPrivacyActivity` opens `https://orza-nine.vercel.app/privacy#phone-app`, the same page as the Console URL. | ✅ |
 | **`READ_HEALTH_DATA_IN_BACKGROUND`** | A justification in the HC section of the form. | Steps only, about hourly (WorkManager), today plus the last few days. Asked in Health Connect's own screen, after the steps sheet or Health sync's Connect (V2 fix B1). | ✅ text in §3.7 |
 | **`READ_HEALTH_DATA_HISTORY`** | Only if needed. | Not declared. The 30 days before the first grant need no history permission. | ✅ |
-| **Data safety** | Every type collected or shared, with optional/required, purposes, encryption in transit and deletion. It must match the privacy policy. | 15 types (App interactions added in review), collected and not shared (OpenAI, hosting and email are service providers). Encrypted in transit; deletion in the app and on the web. | ⚠️ ready (§3.10). Needs the deletion URL (blocker 2), and a choice on approximate location and the phone number. |
+| **Data safety** | Every type collected or shared, with optional/required, purposes, encryption in transit and deletion. It must match the privacy policy. | 14 types (App interactions added in review; approximate location declared; no phone number while WhatsApp is off), collected and not shared (OpenAI, hosting and email are service providers). Encrypted in transit; deletion in the app and on the web. | ⚠️ ready (§3.10). Needs the deletion URL (§0, still blocking). |
 | **Exact alarms** | `USE_EXACT_ALARM` is restricted to alarm / timer / calendar apps. Others use `SCHEDULE_EXACT_ALARM`, which the user grants, and must check `canScheduleExactAlarms()`. | `SCHEDULE_EXACT_ALARM` only: `setAlarmClock` for doses, `setExactAndAllowWhileIdle` for reminders, inexact fallback, a re-plan on `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`. The first-run sheet asks for "Alarms & reminders". Steps uses inexact alarms only. `USE_EXACT_ALARM` is now blocked. | ✅ no form |
-| **Full-screen intent** (Android 14+) | Default access only for apps whose core function is setting an alarm or taking calls (declaration on App content). Others must ask the user and work without it. | The permission is declared. `canUseFullScreenIntent()` is read, and "Full-screen alarms are off" + Allow (`ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT`) shows on Alarms on this phone, on Reminders and on Medicines. Without it, an alarm is a ringing heads-up notification. | ⚠️ decision (§3.8) |
+| **Full-screen intent** (Android 14+) | Default access only for apps whose core function is setting an alarm or taking calls (declaration on App content). Others must ask the user and work without it. | The permission is declared. `canUseFullScreenIntent()` is read, and "Full-screen alarms are off" + Allow (`ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT`) shows on Alarms on this phone, on Reminders and on Medicines. Without it, an alarm is a ringing heads-up notification. Decision: option B, default access not declared (§3.8). | ✅ |
 | **`ACTIVITY_RECOGNITION`** | Health-related and sensitive: a prominent in-app disclosure right before the request, and an affirmative tap. | The "Count your steps automatically" sheet: one "Continue", then the system prompt. Back or close is "no". | ✅ |
 | **`RECEIVE_BOOT_COMPLETED`** | No form. | Re-arms medicine alarms and the step sampler after a reboot, an update or a time change. | ✅ |
 | **Foreground services** | Apps targeting 34+ declare each FGS type they use. | None. WorkManager's `SystemForegroundService` has no type and is never started (no `setForeground` anywhere). | ✅ no form |
@@ -113,15 +113,15 @@ Verdicts: ✅ meets it · ⚠️ needs an answer or a small change · ⛔ blocks
 | **User Data: third-party AI** | Prominent disclosure and consent before data goes to an AI provider. The privacy policy names it. | One consent sheet naming OpenAI before the first AI request. Not now, back and close all mean no. The server refuses every client without consent. Privacy "AI processing" names OpenAI. | ✅ |
 | **Health Content: disclaimer** | Health apps that aren't regulated devices must say in the **description** that the app "is not a medical device and does not diagnose, treat, cure, or prevent any medical condition", and remind users to consult a healthcare professional. | In the app: "Wellness guidance, not medical advice. For medical concerns, please consult your doctor." on Today, Ask, Goals, Recipes, Rebalance, Snap, the prescription review, the alarm and sign-up. In the store: the sentence is in both Play descriptions (`listing.md`). | ✅ |
 | **Health misinformation / medical device** | No claims against medical consensus. A regulated device must say so. | Wellness guardrail in every AI prompt. The prescription scan "copies what's written and never changes a dose". No diagnosis, no dosing advice. Not declared as a medical device. | ✅ (CDSCO status is the user's legal call) |
-| **Account deletion** | An in-app path, and a web link that works without the app, naming the app or developer. Deactivation doesn't count. | In the app: More › Settings › Privacy & data › Delete account (type DELETE). It deletes every collection, the AI reports, the devices and the sessions (web `api/account`). On the web: Settings › Delete account…, signed in only. | ⛔ the web page is needed (blocker 2) |
-| **Privacy policy** | Public, not a PDF, labelled as a privacy policy, linked in the app and the listing. Developer information and a contact; data, uses, sharing, security, retention, deletion. | Public `/privacy`, linked in sign-up and Settings. Data, AI, Health Connect, sharing, security, retention and deletion are all covered. No developer name or address. | ⛔ blocker 3 |
-| **Target audience / Families** | Pick the age groups. Under-13s bring the Families policy. | 18+ in the terms and policy. Onboarding accepts 13+. | ⚠️ blocker 4 |
+| **Account deletion** | An in-app path, and a web link that works without the app, naming the app or developer. Deactivation doesn't count. | In the app: More › Settings › Privacy & data › Delete account (type DELETE). It deletes every collection, the AI reports, the devices and the sessions (web `api/account`). On the web: Settings › Delete account…, signed in only. | ⛔ the web page is needed (§0) |
+| **Privacy policy** | Public, not a PDF, labelled as a privacy policy, linked in the app and the listing. Developer information and a contact; data, uses, sharing, security, retention, deletion. | Public `/privacy`, linked in sign-up and Settings. Data, AI, Health Connect, sharing, security, retention and deletion are all covered. Web `d3-web` adds who is responsible for ÖRZA and a grievance contact (D3). | ⚠️ live after the web push; the developer-name question in §0 |
+| **Target audience / Families** | Pick the age groups. Under-13s bring the Families policy. | 18+ in the terms and policy, and onboarding and Settings refuse a new age under 18 (D1). | ✅ |
 | **Content rating** | Unrated apps are not allowed (clarified 15 Jul 2026). | IARC answers in §3.4. | ✅ answers ready |
 | **Ads** | Declare. | No ad SDK and no `AD_ID` (now blocked). | ✅ |
 | **Target API / 16 KB pages** | New apps target API 36 (from 31 Aug 2026). 64-bit libraries need 16 KB pages. | targetSdk 36; 16 KB checked on the test build's APK. | ✅ |
-| **App access** | Credentials for anything behind sign-in. | Everything is behind sign-in, so the demo account is needed. | ⚠️ blocker 5 |
+| **App access** | Credentials for anything behind sign-in. | Everything is behind sign-in, so the demo account is needed; the user creates it (checklist). | ⚠️ §0 |
 | **App registration** (developer verification, 2026) | Play apps must be registered in Play Console. | A new app created in Play Console is registered there. | ✅ |
-| **Payments** | Google Play Billing for digital goods. | No purchases. AI credits are granted by the team and requested in the app, with no prices and no payment links. | ✅ |
+| **Payments** | Google Play Billing for digital goods. | No purchases. AI credits are free at launch, granted by the team and requested in the app, with no prices and no payment links. Website pages opened from the app hide the site menu and pricing links (`from=app`, D5). Selling credits later needs Play Billing or the India alternative billing program (§0). | ✅ |
 
 ---
 
@@ -175,8 +175,9 @@ App content is under **Policy and programs → App content** (also reached from 
 ### 3.1 Privacy policy
 `https://orza-nine.vercel.app/privacy`
 
-This is the same page Health Connect opens (`…/privacy#phone-app`). Add the developer name and address first
-(blocker 3).
+This is the same page Health Connect opens (`…/privacy#phone-app`; the app's WebView adds `from=app`, which only
+hides the website's menu). Its developer information (who is responsible for ÖRZA, a grievance contact) goes live
+with the web push of `d3-web` (D3).
 
 ### 3.2 App access
 **All or some functionality is restricted.** Add one set of instructions:
@@ -225,7 +226,7 @@ The labels below are the questionnaire's topics. Check them against the live for
 Expect a low rating, possibly a step up for the alcohol references. That is fine for an 18+ audience.
 
 ### 3.5 Target audience and content
-- **Target age groups:** **18 and over** only (after blocker 4).
+- **Target age groups:** **18 and over** only (D1: the app and the website refuse a new age under 18).
 - **Could the listing unintentionally appeal to children?** No.
 - No Families program and no teacher-approved programme.
 
@@ -291,9 +292,9 @@ Re-file this form whenever a Health Connect type is added or dropped (`steps-v2.
 ### 3.8 Full-screen intent
 
 The Android 14+ declaration is on App content. Its exact option labels couldn't be confirmed from public pages on
-2026-11-13. Choose by meaning:
+2026-11-13. Choose by meaning. **Decision (2026-11-13): option B.**
 
-- **Option B: recommended for the first release.**
+- **Option B: chosen for the first release.**
   - Answer that ÖRZA does **not** need default (automatic) access: it isn't an alarm-clock or calling app.
   - Nothing needs review, so nothing can be rejected. ÖRZA keeps the permission. On new Android 14+ installs it starts
     off, and the app already shows "Full-screen alarms are off" + Allow.
@@ -301,7 +302,7 @@ The Android 14+ declaration is on App content. Its exact option labels couldn't 
     just doesn't fill the locked screen.
   - Optional follow-up: add full-screen as a third step of the "Let your medicine alarms ring" sheet on Android 14+,
     so new members are asked in the flow and not only on the cards. Not built; this would be new copy.
-- **Option A.**
+- **Option A (not chosen).**
   - Declare the core use case **setting alarms**: user-set medicine alarms that ring at the dose time with a full-screen
     alarm screen showing the medicine's photo. This would match the store title "Meals, Meds & AI Coach".
   - Google decides whether medicine alarms count as "core". Other apps' declarations have been rejected, which then
@@ -313,7 +314,7 @@ The Android 14+ declaration is on App content. Its exact option labels couldn't 
 - **Tags:** pick from Play's list, up to five, closest to "Nutrition", "Diet", "Calorie counter", "Medication
   reminder" and "Fitness tracking".
 - **Contact details:**
-  - Email: the support inbox (blocker 3).
+  - Email: `support@orza.app` (it receives mail).
   - Website: `https://orza-nine.vercel.app`.
   - Phone: optional.
 - **External marketing:** your choice.
@@ -340,9 +341,8 @@ turns them on.
 | Personal info › **Name** | Yes | No | Required | App functionality, Account management, Personalization | name at sign-up; the first name goes with AI chat and rebalance plans |
 | Personal info › **Email address** | Yes | No | Required | App functionality, Account management, Developer communications, Fraud prevention, security and compliance | sign-in, account emails, replies to credit requests |
 | Personal info › **User IDs** | Yes | No | Required | App functionality, Account management | the ÖRZA account ID |
-| Personal info › **Phone number** | Yes | No | Optional | App functionality | only if the member turns on WhatsApp reminders; the card shows only while WhatsApp is set up for ÖRZA (decision below) |
 | Personal info › **Other info** | Yes | No | Required | App functionality, Personalization | age, sex, preferred language, diet preference, household mode |
-| Location › **Approximate location** | Yes | No | Required | App functionality, Personalization | the Indian state (or "Outside India") picked in onboarding, for regional food (decision below); there is no location permission and no GPS |
+| Location › **Approximate location** | Yes | No | Required | App functionality, Personalization | the Indian state (or "Outside India") picked at sign-up, for regional food (decided below); there is no location permission and no GPS |
 | Health and fitness › **Health info** | Yes | No | Required | App functionality, Personalization | height, weight and target weight, allergies, health notes; medicines (name, strength, dose, schedule, stock, who it's for), dose history, prescriptions; resting heart rate and weight from Health Connect |
 | Health and fitness › **Fitness info** | Yes | No | Required | App functionality, Personalization | goal, activity level, meals and nutrition, water, step goal and steps (Health Connect or the phone's sensor), sleep (Health Connect) |
 | Messages › **Other in-app messages** | Yes | No | Optional | App functionality, Personalization | Ask ÖRZA chats (your messages and ÖRZA's replies) |
@@ -353,7 +353,7 @@ turns them on.
 | App activity › **App interactions** | Yes | No | Required | App functionality | added in review (2026-11-13): the credit ledger, one row per AI use with the feature and the time (web `lib/credits.ts`), and the time this phone last opened ÖRZA in its device record (`lib/device.ts`, web `lib/devices.ts`), used for the balance and so medicine alarms don't ring twice |
 | Device or other IDs | Yes | No | Required | App functionality, Account management | this phone's ÖRZA device record (an ID ÖRZA's server gives it, the device name or model, platform, app version, time zone), so medicine alarms don't ring twice and the member can see their signed-in phones |
 
-**Not collected:** Address; Race and ethnicity; Political or religious beliefs (the "Jain" diet is a food preference
+**Not collected:** Phone number (while WhatsApp is off, above); Address; Race and ethnicity; Political or religious beliefs (the "Jain" diet is a food preference
 and ÖRZA asks no religion question); Sexual orientation; all Financial info (no payments; credits aren't money);
 Precise location; Emails; SMS; Videos; Audio (the phone's own speech service turns speech into text, and ÖRZA receives
 only the text); Files and docs (exports are made on the phone and shared by the member); Contacts;
@@ -363,17 +363,18 @@ other performance data (no crash or analytics SDK); Advertising ID.
 Data that never leaves the phone is not "collection": step-sensor samples, Recording API buckets, the photo cache and
 the alarm plan.
 
-**Decisions inside this form**
-- **Approximate location: declare it.**
+**Decided for this form (2026-11-13)**
+- **Approximate location: declared.**
   - It is the member's state of residence, an area much larger than 3 km².
-  - Then the privacy line in `#phone-app`, "…and ÖRZA never collects your location", should read "…never reads your
-    phone's location" (a web change). The profile list already names "region".
-  - If the user prefers not to declare it, the reasoning is that it's a food-region preference, not a physical
-    location. Play's definition doesn't cover typed regions either way.
-- **Phone number: declare it, as optional,** if WhatsApp reminders are or may be switched on in production (the server
-  can show the card without an app update). Leave it out only if WhatsApp will stay off.
-- **No "Analytics" purpose for chats.** The policy says anonymised conversations *may* improve the AI, but no code does
-  that today (`ai_training_opt_out` is only stored). Anonymised data isn't user data. Re-file before any such work
+  - The privacy line in `#phone-app` now reads "…never reads your phone's location" (web `d3-web`, D3; it said
+    "…never collects your location"). The profile list already names "region".
+- **Phone number: not declared** while WhatsApp reminders are off in production (until Meta's verification).
+  - The server can show the WhatsApp card without an app update, so **before WhatsApp is switched on**, add
+    Personal info › **Phone number** (Yes, not ephemeral, Optional, App functionality: "only if the member turns on
+    WhatsApp reminders") here and Contact Info › Phone Number on Apple. It is on the pre-launch checklist
+    (`listing.md` §0).
+- **No "Analytics" purpose for chats.** "Help improve ÖRZA's AI" is opt-in and off by default (D2), and no code uses
+  it today (`ai_training_opt_out` is only stored). Anonymised data isn't user data. Re-file before any such work
   starts.
 
 ---
@@ -418,10 +419,13 @@ The `{developer name}` placeholder is the Play developer name. `{support email}`
 
 ## 5. Your step-by-step (Play Console)
 
-1. **Decide the account** (blocker 1).
-   - An Organization account needs a D-U-N-S number matching the company; Google verifies it, which takes days.
-   - If you use FatafatDecor's account: check its type and creation date. A personal account made after 13 Nov 2023
-     must run a closed test with ≥ 12 testers opted in for 14 days in a row before it can ask for production.
+Do the shared pre-launch checklist first (`listing.md` §0).
+
+1. **The account: FatafatDecor's existing one** (decided, §0).
+   - Check its type and creation date. A personal account made after 13 Nov 2023 must run a closed test with ≥ 12
+     testers opted in for 14 days in a row before it can ask for production (step 8).
+   - If Play asks for an Organization account for the health declaration: it needs a D-U-N-S number matching the
+     company; Google verifies it, which takes days.
 2. **Create the app:** Play Console → **Create app**.
    - Name `ÖRZA`.
    - Default language: English (India) or English (United States).
@@ -455,7 +459,7 @@ The `{developer name}` placeholder is the Play developer name. `{support email}`
    Don't submit Data safety until the deletion page (§4) and the privacy-policy developer details are live.
 6. **Store listing** (Grow users → Store presence → Main store listing): the texts, icon, feature graphic and
    screenshots from `listing.md`.
-7. **Store settings** (§3.9). **Countries:** India first (decision). If the EU is ever added: check the Play
+7. **Store settings** (§3.9). **Countries:** India only for now (decided). If the EU is ever added: check the Play
    Console's EU Digital Services Act **trader status** (account details) first. A trader's address, phone and email
    are shown to EU users. Apple's equivalent is confirmed (`app-store.md` §3 step 5); Google's own help page for it
    wasn't found on 2026-11-13, so check the Console.
@@ -483,11 +487,18 @@ The `{developer name}` placeholder is the Play developer name. `{support email}`
 - Take a photo on Android 8–9, if a device is available: the camera still opens (`WRITE_EXTERNAL_STORAGE` is kept).
 - Sign in and sign out, and restart while signed in (secure store without biometrics).
 - The Play pre-launch report signs in with the demo account and shows no crash.
+- Health Connect › App permissions › ÖRZA › Privacy policy, and Settings › Privacy policy / Terms of service: the
+  policy opens without the website's menu or pricing links, and following a link inside it keeps them hidden (D5).
+- Then open `orza-nine.vercel.app` in Chrome itself: a normal visit still shows the website's menu (the website keeps
+  "opened from the app" in the in-app tab's own storage, not in a cookie, because Custom Tabs share Chrome's cookies).
 
 ---
 
 ## 7. What changed in the repo
 - `app.json` `android.blockedPermissions` (+5), commit `a478b71`.
+- The D3 decisions (2026-11-13): 18+ in Settings and Goals, "Help improve ÖRZA's AI" opt-in, `from=app` on every
+  website page the app opens (`src/lib/web.ts`; also the Health Connect privacy WebView, a native change in
+  `modules/orza-steps`, so the next Android build carries it), iPhone-only calendar wording.
 - This file and `docs/store/listing.md`.
 
 ## 8. Sources (all checked 2026-11-13)
