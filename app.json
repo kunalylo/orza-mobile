@@ -35,7 +35,6 @@
     },
     "android": {
       "package": "in.co.ylo.orza",
-      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#07090C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
