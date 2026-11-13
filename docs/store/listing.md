@@ -3,6 +3,12 @@
 Written 2026-11-13 (D3). **The user reviews every text here before it is pasted.** Character counts were made with a
 script, counting Unicode characters (Ö is 1).
 
+**Review fixes (2026-11-13), in both descriptions:** the prescription line now says you check each medicine before
+any reminder or alarm is set (it said ÖRZA "sets the reminders for you to check"; `2b1cf48` fixed the same claim in
+the app); the daily targets come from your body, activity level and goal (web `domain/targets.ts`; diet
+and allergies don't change them); the reminder kinds are meals, water, weigh-ins and your own (there is no walk
+reminder). §4.2: Apple requires the Dynamic Island **medium** screenshot set as well as the large one.
+
 **Rules followed**
 - Everything said here is something the app does today.
 - No medical claims ("lose weight", "improve your health", "never miss a dose"), no "best" / "#1" / "free forever",
@@ -65,11 +71,11 @@ Ask ÖRZA
 
 Medicines, on time
 • Add your medicines with photos, doses and times. Each reminder shows the medicine's photo, with Take, Snooze and Skip.
-• Snap a prescription: ÖRZA reads the medicines and timings (1-0-1, BD, TDS, after food) and sets the reminders for you to check. It never changes a dose.
+• Snap a prescription: ÖRZA reads the medicines and timings (1-0-1, BD, TDS, after food), and you check each one before any reminder is set. It never changes a dose.
 • Keep track of stock, get a refill reminder, and see your last 7 days.
 
 Plan and progress
-• Daily calorie, protein, carb, fat, fibre and water targets that fit your goal, diet and allergies.
+• Daily calorie, protein, carb, fat, fibre and water targets worked out from your body, activity level and goal.
 • Recipes made for your diet, region and calorie budget.
 • Rebalance: after a festival meal or a party, a kind plan for the next few days. No guilt.
 • Goals and your weight trend, daily and weekly reports, and a spreadsheet of your week you can share with your doctor.
@@ -78,7 +84,7 @@ Apple Health
 • With your permission, ÖRZA reads your steps, sleep, resting heart rate and weight from Apple Health, or counts steps with your iPhone's motion sensor. Only daily totals are saved to your account. ÖRZA never writes to Apple Health.
 
 Reminders and calendar
-• Gentle reminders for water, meals, walks and weigh-ins, with quiet hours.
+• Gentle reminders for meals, water and weigh-ins, or your own, with quiet hours.
 • Add your medicine times to your iPhone's calendar.
 
 Your data, your choice
@@ -128,12 +134,12 @@ Ask ÖRZA
 Medicines, on time
 • Add your medicines with photos, doses and times. At each dose time the alarm rings with the medicine's photo, with Take, Snooze and Skip, even when you're offline.
 • When you allow it, the alarm fills the locked screen like an alarm clock.
-• Snap a prescription: ÖRZA reads the medicines and timings (1-0-1, BD, TDS, after food) and sets the alarms for you to check. It never changes a dose.
+• Snap a prescription: ÖRZA reads the medicines and timings (1-0-1, BD, TDS, after food), and you check each one before any alarm is set. It never changes a dose.
 • Keep track of stock, get a refill reminder, and see your last 7 days.
 • On phones that close apps to save battery, ÖRZA shows the settings that keep alarms working.
 
 Plan and progress
-• Daily calorie, protein, carb, fat, fibre and water targets that fit your goal, diet and allergies.
+• Daily calorie, protein, carb, fat, fibre and water targets worked out from your body, activity level and goal.
 • Recipes made for your diet, region and calorie budget.
 • Rebalance: after a festival meal or a party, a kind plan for the next few days. No guilt.
 • Goals and your weight trend, daily and weekly reports, and a spreadsheet of your week you can share with your doctor.
@@ -144,7 +150,7 @@ Health Connect and steps
 • Only daily totals are saved to your account. ÖRZA never writes to Health Connect.
 
 Reminders and calendar
-• Gentle reminders for water, meals, walks and weigh-ins, with quiet hours.
+• Gentle reminders for meals, water and weigh-ins, or your own, with quiet hours.
 • Add your medicine times to your phone's calendar.
 
 Your data, your choice
@@ -189,7 +195,7 @@ and §3.1.
 
 | Store | Required | Size to make | Notes |
 |---|---|---|---|
-| App Store, iPhone only (`supportsTablet: false`) | At least 1, up to 10 per size | **1320 × 2868** portrait (6.9-inch, iPhone with Dynamic Island, large) | PNG or JPEG, no transparency. App Store Connect scales it down to the smaller sizes. If it still asks for the 6.3-inch slot (Dynamic Island, medium), add the same screens at **1206 × 2622**. A shot taken on the user's own iPhone is 1179 × 2556 (iPhone 15/16) or 1290 × 2796 (Plus / Pro Max); both are accepted sizes. |
+| App Store, iPhone only (`supportsTablet: false`) | **Two sets**, 1–10 shots each (Apple's screenshot specifications, checked 2026-11-13): **iPhone with Dynamic Island, medium** is required for every iPhone app, and **Dynamic Island, large** (or Face ID, large) is required too | Medium: **1206 × 2622** (or 1179 × 2556). Large: **1320 × 2868** (or 1290 × 2796) | PNG or JPEG, no transparency. Make both sets from the same captures and frames. A shot taken on an iPhone 15, 15 Pro or 16 (1179 × 2556) or a 16 Pro (1206 × 2622) fits the medium slot as it is. One from a 15/16 Plus or 15 Pro Max (1290 × 2796) fits the large slot. The other set is the same framed screen at the other size. |
 | Google Play, phone | At least 2, up to 8; **4 or more at ≥ 1080 px** to be eligible for promotion | **1080 × 1920** portrait (9:16) | PNG (no alpha) or JPEG. The long side may be at most twice the short side. Raw shots from modern phones (about 9:20, e.g. 1080 × 2400) break that rule, so place each shot in a 1080 × 1920 frame with its caption. |
 | Google Play, app icon | Required | **512 × 512**, 32-bit PNG, ≤ 1 MB | Scale down `assets/images/icon.png` (1024²). A full square; Play rounds the corners itself. |
 | Google Play, feature graphic | Required | **1024 × 500**, JPEG or 24-bit PNG, no alpha | §4.4 |
@@ -240,5 +246,5 @@ See the table in §1–§3. The full descriptions:
 
 | Text | Chars | Limit |
 |---|---|---|
-| App Store description | 2911 | 4000 |
-| Google Play full description | 3217 | 4000 |
+| App Store description | 2940 | 4000 |
+| Google Play full description | 3246 | 4000 |

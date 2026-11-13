@@ -18,6 +18,12 @@ No build, no device, no server, and no AI calls were used.
 
 ## 0. On one screen
 
+**Adversarial review (2026-11-13, after `fb431a7`).** Every Data safety row, permission and justification was checked
+again against the code, the web routes and the live policy. One correction: **App activity › App interactions** is now
+declared (the credit ledger and the device's last-seen time; it had been listed as "not collected"). The `a478b71`
+blocks hold: expo-secure-store calls androidx.biometric only for `requireAuthentication` items (none in ÖRZA), and
+Android never asks for the photo library (the picker needs no storage permission). Listing fixes are in `listing.md`.
+
 **Fixed in this step** (commit `a478b71`, `app.json` only). These are added to `android.blockedPermissions`, so they
 are gone from the next Android build:
 
@@ -92,7 +98,7 @@ Verdicts: ✅ meets it · ⚠️ needs an answer or a small change · ⛔ blocks
 | **Health Connect: Limited Use** | No ads, no sale, no transfer except to provide the feature, with explicit consent. The privacy policy must be the same page Health Connect opens. | The AI consent sheet names OpenAI and says steps and weight go with chats. Without consent, the server leaves HC data out (ai-consent.md R1/R2). Privacy `#phone-app`: never sold, never for ads, never used to improve AI. `HealthPrivacyActivity` opens `https://orza-nine.vercel.app/privacy#phone-app`, the same page as the Console URL. | ✅ |
 | **`READ_HEALTH_DATA_IN_BACKGROUND`** | A justification in the HC section of the form. | Steps only, about hourly (WorkManager), today plus the last few days. Asked in Health Connect's own screen, after the steps sheet or Health sync's Connect (V2 fix B1). | ✅ text in §3.7 |
 | **`READ_HEALTH_DATA_HISTORY`** | Only if needed. | Not declared. The 30 days before the first grant need no history permission. | ✅ |
-| **Data safety** | Every type collected or shared, with optional/required, purposes, encryption in transit and deletion. It must match the privacy policy. | 14 types, collected and not shared (OpenAI, hosting and email are service providers). Encrypted in transit; deletion in the app and on the web. | ⚠️ ready (§3.10). Needs the deletion URL (blocker 2), and a choice on approximate location and the phone number. |
+| **Data safety** | Every type collected or shared, with optional/required, purposes, encryption in transit and deletion. It must match the privacy policy. | 15 types (App interactions added in review), collected and not shared (OpenAI, hosting and email are service providers). Encrypted in transit; deletion in the app and on the web. | ⚠️ ready (§3.10). Needs the deletion URL (blocker 2), and a choice on approximate location and the phone number. |
 | **Exact alarms** | `USE_EXACT_ALARM` is restricted to alarm / timer / calendar apps. Others use `SCHEDULE_EXACT_ALARM`, which the user grants, and must check `canScheduleExactAlarms()`. | `SCHEDULE_EXACT_ALARM` only: `setAlarmClock` for doses, `setExactAndAllowWhileIdle` for reminders, inexact fallback, a re-plan on `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`. The first-run sheet asks for "Alarms & reminders". Steps uses inexact alarms only. `USE_EXACT_ALARM` is now blocked. | ✅ no form |
 | **Full-screen intent** (Android 14+) | Default access only for apps whose core function is setting an alarm or taking calls (declaration on App content). Others must ask the user and work without it. | The permission is declared. `canUseFullScreenIntent()` is read, and "Full-screen alarms are off" + Allow (`ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT`) shows on Alarms on this phone, on Reminders and on Medicines. Without it, an alarm is a ringing heads-up notification. | ⚠️ decision (§3.8) |
 | **`ACTIVITY_RECOGNITION`** | Health-related and sensitive: a prominent in-app disclosure right before the request, and an affirmative tap. | The "Count your steps automatically" sheet: one "Continue", then the system prompt. Back or close is "no". | ✅ |
@@ -344,12 +350,13 @@ turns them on.
 | Calendar › **Calendar events** | Yes | No | Optional | App functionality | only if the member connects their own calendar's iCal address (ÖRZA's server reads its events to show them). Events written to the phone's ÖRZA calendar stay on the phone. |
 | App activity › **In-app search history** | Yes | No | Optional | App functionality | food-list searches (not stored by ÖRZA; hosting request logs may keep them briefly) |
 | App activity › **Other user-generated content** | Yes | No | Optional | App functionality, Personalization | what ÖRZA remembers, lifestyle notes, reminder texts, recipe and rebalance requests, reports of AI answers, credit-request notes |
+| App activity › **App interactions** | Yes | No | Required | App functionality | added in review (2026-11-13): the credit ledger, one row per AI use with the feature and the time (web `lib/credits.ts`), and the time this phone last opened ÖRZA in its device record (`lib/device.ts`, web `lib/devices.ts`), used for the balance and so medicine alarms don't ring twice |
 | Device or other IDs | Yes | No | Required | App functionality, Account management | this phone's ÖRZA device record (an ID ÖRZA's server gives it, the device name or model, platform, app version, time zone), so medicine alarms don't ring twice and the member can see their signed-in phones |
 
 **Not collected:** Address; Race and ethnicity; Political or religious beliefs (the "Jain" diet is a food preference
 and ÖRZA asks no religion question); Sexual orientation; all Financial info (no payments; credits aren't money);
 Precise location; Emails; SMS; Videos; Audio (the phone's own speech service turns speech into text, and ÖRZA receives
-only the text); Files and docs (exports are made on the phone and shared by the member); Contacts; App interactions;
+only the text); Files and docs (exports are made on the phone and shared by the member); Contacts;
 Installed apps (the `<queries>` checks stay on the phone); Other actions; Web browsing; Crash logs, Diagnostics and
 other performance data (no crash or analytics SDK); Advertising ID.
 
@@ -448,7 +455,10 @@ The `{developer name}` placeholder is the Play developer name. `{support email}`
    Don't submit Data safety until the deletion page (§4) and the privacy-policy developer details are live.
 6. **Store listing** (Grow users → Store presence → Main store listing): the texts, icon, feature graphic and
    screenshots from `listing.md`.
-7. **Store settings** (§3.9). **Countries:** India first (decision).
+7. **Store settings** (§3.9). **Countries:** India first (decision). If the EU is ever added: check the Play
+   Console's EU Digital Services Act **trader status** (account details) first. A trader's address, phone and email
+   are shown to EU users. Apple's equivalent is confirmed (`app-store.md` §3 step 5); Google's own help page for it
+   wasn't found on 2026-11-13, so check the Console.
 8. **Closed testing** (only if step 1 says so).
    - Testing → Closed testing → create a track.
    - At least 12 testers, opted in for 14 days in a row, actually using the app.

@@ -15,6 +15,15 @@ step fixed 11 findings in code (§1, "FIXED"). The remaining risks need the user
 account** (5.1.1(ix)), a **demo account**, a **support email that works**, and two web changes. One web change is
 the privacy-policy sentence on third parties (5.1.1(i)). The other is the 18+ terms against the 13+ onboarding.
 
+**Adversarial review (2026-11-13, after `fb431a7`).** The code commits since `3a6f9f3` hold up (no regression, nothing
+iOS-only reaches Android or the reverse). Corrected here: App Privacy now declares **Usage Data › Product Interaction**
+(the credit ledger and the device's last-seen time were declared nowhere), the **Phone Number** answer follows the
+same WhatsApp rule as Play (the server can show the card on iPhone without an update), and Coarse Location points at
+the privacy sentence that contradicts it. Found: medicine events written into the member's **iCloud** calendar
+(5.1.3(ii), §1 and §5 Q13), the EU Digital Services Act **trader status** (§3 step 5), and Apple's **required**
+Dynamic Island medium screenshot set (`listing.md` §4.2). Review notes: Settings paths start at More. Listing fixes
+are in `listing.md`.
+
 ---
 
 ## 1. Audit (strict reviewer)
@@ -49,7 +58,7 @@ a decision or a web change (§5). **USER**: something to do in App Store Connect
 | **5.1.1(ix)** Regulated field, individual developer | **RISK** | Medicine alarms and prescription scans put ÖRZA near "healthcare". Apple expects such apps from a legal entity, not an individual. Team = "Kunal Patil (Individual)". The user decides (§5 Q1). |
 | **5.1.2(i)** Third-party AI | PASS | Done (`docs/notes/ai-consent.md`). The sheet names OpenAI before the first AI request, the server refuses AI without consent from every client, and AI health data (steps, weight) is sent only after consent. |
 | **5.1.2(vi), 5.1.3(i)** HealthKit and Motion data use | PASS | Used only for the member's own wellness: no ads, marketing or data mining. It reaches OpenAI only inside Ask ÖRZA, after consent (the purpose strings say so). The specific types are named in the purpose string and on the Health card before connecting. |
-| **5.1.3(ii)** No false HealthKit writes; no health data in iCloud | PASS (+ note) | No HealthKit writes (read-only; `NSHealthUpdateUsageDescription` says so). No iCloud APIs (CloudKit, iCloud Drive, KVS). On the phone, HealthKit-derived step counts are kept only in the cache folder (`orza-steps-days.json`), which isn't backed up. Note: the alarm engine's medicine cache and photos sit in Documents, which a device iCloud *backup* includes. That isn't HealthKit data and not "iCloud storage" as the rule means it, but they could move out of backups later (native work, §5 Q11). |
+| **5.1.3(ii)** No false HealthKit writes; no health data in iCloud | PASS + RISK (review 2026-11-13) | No HealthKit writes (read-only; `NSHealthUpdateUsageDescription` says so). No iCloud APIs (CloudKit, iCloud Drive, KVS). On the phone, HealthKit-derived step counts are kept only in the cache folder (`orza-steps-days.json`), which isn't backed up. Note: the alarm engine's medicine cache and photos sit in Documents, which a device iCloud *backup* includes. That isn't HealthKit data and not "iCloud storage" as the rule means it, but they could move out of backups later (native work, §5 Q11). **RISK (missed by the first pass):** "Add to my calendar" creates the ÖRZA calendar in the **default calendar's source first** (`features/calendar/deviceCalendar.ts` `createOwnCalendar`), which on most iPhones is **iCloud**. Its events carry the medicine name and dose ("💊 Metformin — 500 mg") and the next 14 days of dose times, so the app itself puts medicine data into the member's iCloud calendar (and their other Apple devices). The member starts it, and a reviewer is unlikely to look, but it is the plain reading of "may not store personal health information in iCloud", and the purpose string's "an ÖRZA calendar on your iPhone" undersells the sync. Not changed in code: the "On My iPhone" source is often missing or hidden when iCloud Calendars is on, so forcing it can make the calendar invisible, and that needs a device check. Decision: §5 Q13. |
 | **HealthKit HIG** (icon, wording) | FIXED | The Apple **logo** glyph (`mci:apple`) stood for Apple Health on the Connect button, the connected status and the steps sheet. Apple: "Use only the Apple-provided icon", "Don't use the Apple Health icon as a button". **FIXED:** a neutral heart icon everywhere. The UI never says "HealthKit"; it says "Apple Health". |
 | **Privacy manifest / required-reason APIs** | PASS | See §2.8. Every SDK that touches a required-reason API was checked. React Native's pod-install step combines all pod manifests into the app's `PrivacyInfo.xcprivacy`. Build 1.0.0 (2) passed Apple processing with no ITMS-91053 / 91061. |
 | **Info.plist strings** | PASS + FIXED | See §2.8. Each one is specific, says why, is asked in context, and matches the code. |
@@ -71,10 +80,10 @@ requests for ÖRZA only. Every type below is **linked to the user** (account-bas
 |---|---|---|---|
 | Contact Info › **Name** | Yes | Name at sign-up; the coach uses the first name | App Functionality, Product Personalization |
 | Contact Info › **Email Address** | Yes | Sign-in, replies to credit requests and support | App Functionality |
-| Contact Info › Phone Number | **No** (today) | Only for WhatsApp reminders, which are off in production. **Add it when WhatsApp goes live.** | n/a |
+| Contact Info › Phone Number | **Same decision as Play** (`google-play.md` §3.10) | Only for WhatsApp reminders. The iPhone shows the WhatsApp card (`features/reminders/WhatsAppCard.tsx`) as soon as the server reports WhatsApp configured (`GET /api/integrations`), **with no app update**. So if WhatsApp is or may be switched on in production, declare it now: **Yes**, App Functionality. Leave it out only if WhatsApp stays off, and add it before anyone turns it on (labels can change any time without a build). | App Functionality |
 | Health & Fitness › **Health** | Yes | Meals and nutrition, water, weight, allergies, health notes; medicines, doses, refills, prescriptions; resting heart rate, sleep and weight from Apple Health | App Functionality, Product Personalization |
 | Health & Fitness › **Fitness** | Yes | Daily steps (Apple Health / Motion & Fitness), activity level | App Functionality, Product Personalization |
-| Location › **Coarse Location** | Yes (conservative) | The region the member picks (cuisine) and the device time zone. No device location is read. | App Functionality, Product Personalization |
+| Location › **Coarse Location** | Yes (conservative) | The region the member picks (cuisine) and the device time zone. No device location is read. The live policy's `#phone-app` line "…and ÖRZA never collects your location" then contradicts this answer: the same small web change as Play (`google-play.md` §3.10, "never reads your phone's location"), §5 Q8. | App Functionality, Product Personalization |
 | Location › Precise Location | No | n/a | n/a |
 | Sensitive Info | No | Not asked. Free-text health notes are declared under Health. | n/a |
 | User Content › **Photos or Videos** | Yes | Medicine and prescription photos (stored); meal photos (sent for analysis, kept by OpenAI up to 30 days for abuse checks) | App Functionality |
@@ -85,7 +94,8 @@ requests for ÖRZA only. Every type below is **linked to the user** (account-bas
 | Identifiers › **User ID** | Yes | Account id | App Functionality |
 | Identifiers › Device ID | No | No IDFA or IDFV. The device registry sends only platform, model, app version and time zone (see Other Data). | n/a |
 | Purchases, Financial Info, Contacts, Browsing History, Search History | No | No payments. Food searches aren't stored. | n/a |
-| Usage Data, Diagnostics | No | No analytics or crash SDKs. The credit ledger and dose history are functional records, already declared above. | n/a |
+| Usage Data › **Product Interaction** | **Yes** (corrected in review, 2026-11-13) | Apple: "app launches, taps… or other information about how the user interacts with the app". The server keeps the **credit ledger**: every AI use as a row with the feature (`action`: scan, chat, recipe…) and its time (web `lib/credits.ts`), and the phone's device record holds its **last-seen time**, refreshed on launch and return to the app (`lib/device.ts`, web `lib/devices.ts`). Both are functional (balance, alarm de-duplication), but they are records of how the member uses the app, and the first pass's "already declared above" wasn't true: no other type covers them. Dose history is Health (above). | App Functionality |
+| Usage Data › Advertising Data, Other Usage Data; Diagnostics | No | No analytics, ads or crash SDKs; the phone sends no crash or error reports. | n/a |
 | Other Data › **Other Data Types** | Yes | Age, sex, height, goal, diet, language, household mode, lifestyle; device model and app version (alarm de-duplication) | App Functionality, Product Personalization |
 
 If "Help improve ÖRZA's AI" stays on by default and the team ever uses it, add **Other Purposes** to Other User
@@ -150,10 +160,10 @@ SIGN-IN
 Demo account (onboarding done, sample meals, one "as needed" medicine, AI credits):
 Email: [DEMO_EMAIL]
 Password: [DEMO_PASSWORD]
-An account is needed because the same data is used on the ÖRZA website. Delete the account in the app: Settings > Privacy & data > Delete account (type DELETE). This deletes the account and all its data on our server.
+An account is needed because the same data is used on the ÖRZA website. Delete the account in the app: More > Settings > Privacy & data > Delete account (type DELETE). This deletes the account and all its data on our server.
 
 AI (OPENAI) AND CONSENT
-The first AI feature you use shows "Allow ÖRZA's AI features?". It names OpenAI and lists what is sent. Nothing goes to OpenAI before you tap Allow, and "Not now" keeps the rest of the app working. Change it any time: Settings > Privacy & data > AI features.
+The first AI feature you use shows "Allow ÖRZA's AI features?". It names OpenAI and lists what is sent. Nothing goes to OpenAI before you tap Allow, and "Not now" keeps the rest of the app working. Change it any time: More > Settings > Privacy & data > AI features.
 AI features: Snap tab (meal photo), Meals > Type or speak, More > Ask ÖRZA, More > Recipes, More > Rebalance, Medicines > Scan a prescription.
 Report AI output: "Report" under every Ask ÖRZA reply (or long-press a reply), and on AI recipes, rebalance plans, the Snap result and AI-logged meals.
 
@@ -175,7 +185,7 @@ Background mode "processing" re-plans the next 7 days of medicine alarms about h
 MEDICAL SAFETY
 A scanned prescription is checked line by line before any alarm is made ("Check and create alarms"). ÖRZA copies what is written and never changes a dose. Screens say "Wellness guidance, not medical advice. For medical concerns, please consult your doctor."
 
-Support: [SUPPORT_EMAIL] (in the app: Settings > Help > Contact support).
+Support: [SUPPORT_EMAIL] (in the app: More > Settings > Help > Contact support).
 ```
 
 Before pasting, replace `[DEMO_EMAIL]`, `[DEMO_PASSWORD]` and `[SUPPORT_EMAIL]`. Change the "free of charge" and
@@ -242,17 +252,23 @@ ITMS-91061, so theirs were found. If Apple ever emails ITMS-91053 for a category
    such as "Review account"; never "purchase" or "paid". Check that `ai_enabled` is true in production. Keep the
    password only in App Store Connect.
 3. **Support contact:** confirm the support address receives mail (§5 Q2). In App Store Connect › version ›
-   **Support URL** use a page that shows the contact (for example `https://orza-nine.vercel.app/privacy#contact`, or a
-   `/contact` page when the web adds one). Marketing URL is optional (`https://orza-nine.vercel.app`).
+   **Support URL** use a page that shows the contact: `https://orza-nine.vercel.app/faq` (it has a mailto link to the
+   support address; the same URL as `listing.md` §2), or `/privacy#contact`, or a `/contact` page when the web adds
+   one. Marketing URL is optional (`https://orza-nine.vercel.app`).
 4. **App Information:** Name "ÖRZA" (subtitle from `docs/store/listing.md`); Category Health & Fitness + Food & Drink
    (§2.5); Content Rights (§2.4); Age Rating questionnaire + Override 18+ (§2.2); App Store Regulations & Permits ›
    Declare Regulated Medical Device → No for each US / UK / EU region offered (§2.6); Privacy Policy URL (§2.1).
-5. **Pricing and Availability:** Free. Countries: India (decide on others, §5 Q9).
+5. **Pricing and Availability:** Free. Countries: India (decide on others, §5 Q9). **EU Digital Services Act trader
+   status** (missed by the first pass; Apple's help page checked 2026-11-13): the account must have a trader status in
+   App Store Connect (Business) even when nothing is offered in the EU. Distributing only outside the EU is "not acting
+   as a trader". If any EU country is ticked, ÖRZA is a trader's app: Apple verifies, then **publishes** the address
+   (an individual enters an "Address or P.O. Box"), phone and email on the EU product pages, and an app without trader
+   status is removed from the EU store. Check what the account already declares.
 6. **App Privacy:** Get Started › "Yes, we collect data" › tick the types in §2.1 › for each: purposes as listed,
    linked to the user **Yes**, tracking **No** › Publish.
-7. **Version 1.0.0:** screenshots (6.9" iPhone, from `docs/store/listing.md`), promotional text, description (must
-   name **Apple Health**; no prices, Premium, waitlist or website plans), keywords, support URL, copyright
-   ("2026 <legal entity>").
+7. **Version 1.0.0:** screenshots (two iPhone sets, Dynamic Island medium and large, `docs/store/listing.md` §4.2),
+   promotional text, description (must name **Apple Health**; no prices, Premium, waitlist or website plans),
+   keywords, support URL, copyright ("2026 <legal entity>").
 8. **Build:** after build 3 from `main` (this step's fixes) finishes processing in TestFlight and passes the user's
    quick check (alarm sheet "Continue", Settings › Help, Health screen without the website link), select it under
    Build. Export compliance is answered by the build.
@@ -312,14 +328,25 @@ ITMS-91061, so theirs were found. If Apple ever emails ITMS-91053 for a category
 8. **Privacy policy sentence (web, needs your OK).** Add to "How information is shared › With service providers":
    *"They may use it only to provide their service to ÖRZA and must protect it at least as well as this policy
    does."* Apple's 5.1.1(i) asks the policy to confirm third parties give "the same or equal protection". Also,
-   should the policy name the company behind ÖRZA and a grievance contact (DPDP)?
+   should the policy name the company behind ÖRZA and a grievance contact (DPDP)? And, if Coarse Location is declared
+   (§2.1), change `#phone-app`'s "…and ÖRZA never collects your location" to "…and ÖRZA never reads your phone's
+   location" (the same change as Play, `google-play.md` §3.10), so the policy and the label agree.
 9. **Countries.** India only, or also the US, UK and EU? Those regions need the "not a regulated medical device"
-   answer, and their storefront rules differ (the US allows external purchase links).
+   answer, and their storefront rules differ (the US allows external purchase links). The EU also needs the DSA trader
+   status, which puts a public address, phone and email on the EU product page (§3 step 5). For the individual
+   account that means a personal address or a P.O. box.
 10. **Category.** Health & Fitness, with Food & Drink as secondary (recommended), or Medical as secondary?
 11. **Backups.** Medicine names, dose times and photos cached for offline alarms sit in the app's Documents folder,
     so an iPhone's iCloud backup includes them. It isn't HealthKit data, so no rule is broken. Exclude them from
     backup later (small native change)?
 12. **Copy.** Please approve the new strings in §4.
+13. **Medicine events in iCloud (5.1.3(ii), found in review).** On iPhone, "Add to my calendar" puts the ÖRZA
+    calendar in the default calendar account, usually iCloud, with medicine names, doses and times. Options:
+    (a) keep it as it is and accept the low risk; (b) on iPhone, leave the medicine name out of the event ("💊 Medicine
+    time · ÖRZA", the name and photo stay in the app), a small code change plus new copy; (c) try "On My iPhone" first
+    and fall back to iCloud, which needs a device check because iOS often hides local calendars when iCloud Calendars
+    is on; (d) hide "Add to my calendar" on iPhone (the subscribe link stays). Recommended: (b), before build 3 if you
+    agree.
 
 ---
 
@@ -338,6 +365,11 @@ ITMS-91061, so theirs were found. If Apple ever emails ITMS-91053 for a category
 - Age ratings values and definitions; Set an app age rating (override for a EULA minimum age):
   https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions/ ·
   https://developer.apple.com/help/app-store-connect/manage-app-information/set-an-app-age-rating/
+- EU Digital Services Act trader requirements (review, checked 2026-11-13):
+  https://developer.apple.com/help/app-store-connect/manage-compliance-information/manage-european-union-digital-services-act-trader-requirements/
+  · https://developer.apple.com/news/?id=einwn76m
+- Screenshot specifications (review, checked 2026-11-13; required iPhone set = Dynamic Island, medium):
+  https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/
 - Declare regulated medical device status:
   https://developer.apple.com/help/app-store-connect/manage-app-information/declare-regulated-medical-device-status/
 - App Store categories: https://developer.apple.com/app-store/categories/
