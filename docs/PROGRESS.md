@@ -938,3 +938,8 @@ batch 1" log entry); 3 is still open.
   created or access is "Add Events Only", case-specific messages. Then iOS build 4 → the user re-checks; App Store submission uses
   build 4. Asked the user for their iPhone's calendar setup (Settings › Calendar › Accounts / Default Calendar; Settings › ÖRZA ›
   Calendars).
+- 2026-11-13: USER: default calendar = Gmail, ÖRZA has Full Access → cause (a) confirmed (Google source can't take a new calendar;
+  no usable Local source) — the running fix covers it. Play feature graphic + 512 icon made (`scripts/store/feature-graphic.mjs`,
+  `4e399e6`; E:\aylo\store-shots\play). Local server moved to web main `16b542e` (AI blocked). Running `wf_c1d4ad9e-5ce`: 8 Play phone
+  screenshots from the emulator with a sample "Asha" account (framed 1080×1920 → E:\aylo\store-shots\play\phone). iPhone shots: the 4
+  framed ones suffice to submit; more (Medicines, alarm, Health) only from the user's iPhone on the demo account.
