@@ -891,3 +891,8 @@ batch 1" log entry); 3 is still open.
   ÖRZA at 10:39 on 11-12 (→ treat as a possible vivo kill; the OEM guide covers it). **ÖRZA shows in TestFlight on the user's
   iPhone** (build 2 passed Apple processing). Next, coordinator-led with the user: install the vivo build (install -r = A-2 update),
   AL medicine alarms + W0 walk; iPhone I-2…I-6 on TestFlight (production, the user's own account).
+- 2026-11-13: USER: "iPhone working perfect" (TestFlight build 2) — leave the Android phone tests for later (no phone now; the SAFE
+  build of `16e8cf8` waits in the build copy; resume = install -r + AL/W0–W4 from the walk plan rev. 2). **D3 started**
+  (`wf_45ef6833-68d`): App Store audit + code fixes + App Store Connect answers (`docs/store/app-store.md`), Google Play audit +
+  Play Console answers (`docs/store/google-play.md`), listing copy + screenshot plan (`docs/store/listing.md`), review. After it:
+  iOS TestFlight build 3 from main (carries the a11y polish, AI report, V2 fixes, D3 fixes).
