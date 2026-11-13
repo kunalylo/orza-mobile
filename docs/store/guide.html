@@ -1,0 +1,1580 @@
+<title>ÖRZA Store Launch Guide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap');
+/* Layout: one calm reading column under a sticky part switcher; each part is a numbered checklist whose answers sit in paste-ready boxes. */
+:root {
+  --bg: #F2F5F5;
+  --surface: #FFFFFF;
+  --sunk: #E9EFEF;
+  --ink: #132022;
+  --muted: #556769;
+  --line: #D2DCDD;
+  --accent: #0A6E7F;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #DDEFF2;
+  --warn: #7A5200;
+  --warn-soft: #FFF3D6;
+  --warn-line: #E8C77D;
+  --stop: #A1202C;
+  --stop-soft: #FCEAEB;
+  --stop-line: #EBB3B8;
+  --f-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --f-body: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --f-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  --r: 10px;
+  --nav-h: 58px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0C1315;
+    --surface: #131D20;
+    --sunk: #0F181B;
+    --ink: #E2EBEC;
+    --muted: #94A6A9;
+    --line: #25363A;
+    --accent: #4CC2D3;
+    --accent-ink: #04212A;
+    --accent-soft: #10303A;
+    --warn: #F0C25E;
+    --warn-soft: #2A2111;
+    --warn-line: #5B4718;
+    --stop: #F3939B;
+    --stop-soft: #331619;
+    --stop-line: #692C33;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0C1315;
+  --surface: #131D20;
+  --sunk: #0F181B;
+  --ink: #E2EBEC;
+  --muted: #94A6A9;
+  --line: #25363A;
+  --accent: #4CC2D3;
+  --accent-ink: #04212A;
+  --accent-soft: #10303A;
+  --warn: #F0C25E;
+  --warn-soft: #2A2111;
+  --warn-line: #5B4718;
+  --stop: #F3939B;
+  --stop-soft: #331619;
+  --stop-line: #692C33;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px);
+  z-index: 10;
+  background: var(--bg);
+}
+.page {
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 72px;
+}
+.wrap { max-width: 800px; margin-inline: auto; }
+a { color: var(--accent); text-underline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Header */
+header.top { padding-block: 36px 24px; }
+.eyebrow {
+  font: 600 12px/1.2 var(--f-mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0;
+}
+h1 {
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: clamp(2rem, 6vw, 2.75rem);
+  line-height: 1.1;
+  margin: 8px 0 12px;
+  text-wrap: balance;
+}
+.lede { margin: 0; max-width: 62ch; color: var(--muted); font-size: 1.0625rem; }
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 1px;
+  margin: 22px 0 0;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.facts div { background: var(--surface); padding: 10px 12px; min-width: 0; }
+.facts dt { font: 600 11px/1.3 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
+.facts dd { margin: 0; font-weight: 600; min-width: 0; }
+
+/* Sticky switcher */
+nav.switch {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 9;
+  background: var(--surface);
+  border-block: 1px solid var(--line);
+  /* The bar spans the full width: it steps out of the page gutter and puts the same gutter back inside. */
+  margin-left: calc(-1 * max(16px, env(safe-area-inset-left, 0px)));
+  margin-right: calc(-1 * max(16px, env(safe-area-inset-right, 0px)));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+nav.switch ul {
+  list-style: none;
+  margin: 0 auto;
+  padding: 8px 0;
+  max-width: 800px;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+nav.switch ul::-webkit-scrollbar { display: none; }
+nav.switch a {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
+}
+nav.switch a:hover { color: var(--ink); background: var(--sunk); }
+nav.switch a[aria-current="true"] { background: var(--accent-soft); color: var(--accent); }
+nav.switch .n { font: 500 12px/1 var(--f-mono); font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) { nav.switch a { padding: 8px 9px; font-size: 14px; gap: 5px; } }
+
+/* Parts */
+main { padding-block: 8px 0; }
+section.part { padding-top: 44px; scroll-margin-top: calc(env(safe-area-inset-top, 0px) + var(--nav-h)); }
+.part-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.part-head > div { min-width: 0; }
+h2 {
+  font-family: var(--f-display);
+  font-weight: 600;
+  font-size: clamp(1.6rem, 4.5vw, 2rem);
+  line-height: 1.15;
+  margin: 4px 0 0;
+  text-wrap: balance;
+}
+h3 { font-size: 1.125rem; font-weight: 700; margin: 28px 0 10px; text-wrap: balance; }
+.prog {
+  font: 500 13px/1 var(--f-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 11px;
+  white-space: nowrap;
+}
+.intro { display: grid; gap: 12px; margin-bottom: 16px; }
+.intro p { margin: 0; max-width: 66ch; }
+
+/* Steps */
+ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; counter-reset: step; }
+li.step {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 4px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 16px 16px 18px 14px;
+  scroll-margin-top: calc(env(safe-area-inset-top, 0px) + var(--nav-h) + 12px);
+}
+li.step.done { background: var(--sunk); }
+input.tick { width: 22px; height: 22px; margin: 2px 0 0; accent-color: var(--accent); cursor: pointer; }
+.step-body { min-width: 0; display: grid; gap: 10px; }
+.step-title { display: block; font-weight: 700; font-size: 1.0625rem; line-height: 1.35; cursor: pointer; text-wrap: balance; }
+.step-title::before {
+  content: "Step " counter(step);
+  display: block;
+  font: 500 12px/1.4 var(--f-mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+li.step.done .step-title { color: var(--muted); }
+li.step.done .step-title::after { content: "  Done"; font: 600 12px var(--f-mono); color: var(--accent); }
+.step-body p { margin: 0; max-width: 68ch; }
+.step-body ul, .step-body ol.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.where { font-size: 15px; color: var(--muted); }
+.where b { color: var(--ink); font-weight: 600; }
+.path { font-weight: 600; color: var(--ink); }
+
+/* Field / value rows */
+dl.fields { margin: 0; display: grid; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+dl.fields > div {
+  display: grid;
+  grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
+  gap: 4px 14px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+dl.fields > div:first-child { border-top: 0; }
+dl.fields dt { font-size: 14px; color: var(--muted); font-weight: 500; min-width: 0; }
+dl.fields dd { margin: 0; min-width: 0; }
+@media (max-width: 560px) { dl.fields > div { grid-template-columns: minmax(0, 1fr); } }
+
+code, .mono { font-family: var(--f-mono); font-size: .875em; }
+.val { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: 100%; vertical-align: baseline; }
+.val code {
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 7px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  color: var(--ink);
+  font-weight: 500;
+}
+.ph code { border-style: dashed; color: var(--stop); }
+b.ans { color: var(--accent); }
+
+/* Buttons */
+button { font-family: var(--f-body); }
+.btn, .cp {
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--accent);
+}
+.btn { font-size: 14px; padding: 6px 14px; min-height: 34px; background: var(--accent); color: var(--accent-ink); }
+.cp { font-size: 12px; padding: 2px 8px; min-height: 26px; background: transparent; color: var(--accent); }
+.btn:hover { filter: brightness(1.08); }
+.cp:hover { background: var(--accent-soft); }
+.btn.flash, .cp.flash { background: var(--accent-soft); color: var(--accent); }
+.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.ghost:hover { color: var(--ink); }
+
+/* Copy boxes */
+.copy { border: 1px solid var(--line); border-radius: 8px; background: var(--sunk); overflow: hidden; min-width: 0; }
+.copy-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 8px 10px 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.copy-label { font-weight: 700; font-size: 14px; flex: 1 1 12rem; min-width: 0; }
+.count { font: 500 12px/1.2 var(--f-mono); font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+.count.over { color: var(--stop); font-weight: 600; }
+.pasted { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.pasted input.tick { width: 18px; height: 18px; margin: 0; }
+.copy.done .copy-head { background: var(--sunk); }
+pre.copytext {
+  margin: 0;
+  padding: 12px;
+  font-family: var(--f-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  max-height: 30rem;
+  overflow-y: auto;
+}
+pre.copytext.short { font-size: 14px; }
+
+/* Notes */
+.note { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 10px 12px; font-size: 15px; display: grid; gap: 6px; }
+.note p { margin: 0; }
+.note .tag { font: 600 11px/1.2 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.note.warn { background: var(--warn-soft); border-color: var(--warn-line); }
+.note.warn .tag { color: var(--warn); }
+.note.stop { background: var(--stop-soft); border-color: var(--stop-line); }
+.note.stop .tag { color: var(--stop); }
+.step-body .note { background: var(--sunk); }
+.step-body .note.warn { background: var(--warn-soft); }
+.step-body .note.stop { background: var(--stop-soft); }
+
+/* Tables */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { font: 600 11px/1.3 var(--f-mono); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--sunk); }
+td.k { font-weight: 600; white-space: nowrap; }
+td.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Rules list at top */
+.rules { margin: 20px 0 0; padding: 14px 16px 14px 36px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); display: grid; gap: 6px; }
+.rules li { padding-left: 4px; }
+.order { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin: 14px 0 0; font-size: 15px; color: var(--muted); }
+.order a { font-weight: 600; }
+
+footer.end { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; color: var(--muted); font-size: 14px; }
+</style>
+
+<div id="sr-status" class="sr-only" aria-live="polite"></div>
+
+<div class="page">
+
+<header class="top">
+  <div class="wrap">
+    <p class="eyebrow">ÖRZA 1.0.0 · App Store and Google Play</p>
+    <h1>ÖRZA Store Launch Guide</h1>
+    <p class="lede">Keep this page open next to App Store Connect and Play Console. Every answer here comes from ÖRZA's store review pack of 13 November 2026. Tick each step when it's done. Your ticks are saved in this browser only.</p>
+    <dl class="facts">
+      <div><dt>Support email</dt><dd><span class="val"><code id="v-support">support@orza.app</code><button type="button" class="cp" data-copy="v-support" aria-label="Copy the support email">Copy</button></span></dd></div>
+      <div><dt>Demo account email</dt><dd><span class="val"><code id="v-demo">appreview@yourlocalonline.in</code><button type="button" class="cp" data-copy="v-demo" aria-label="Copy the demo account email">Copy</button></span></dd></div>
+      <div><dt>Privacy policy</dt><dd><span class="val"><code id="v-privacy">https://orza-nine.vercel.app/privacy</code><button type="button" class="cp" data-copy="v-privacy" aria-label="Copy the privacy policy address">Copy</button></span></dd></div>
+      <div><dt>Price and countries</dt><dd>Free · India only · 18+</dd></div>
+    </dl>
+    <ol class="rules">
+      <li>Paste the texts exactly as they are here. They were approved on 13 November 2026.</li>
+      <li>The demo password goes only into App Store Connect and Play Console. Never type it into this page, a chat or a file.</li>
+      <li>No prices, Premium, waitlist or website plans anywhere in either store.</li>
+      <li>If a screen asks something this page doesn't cover, or its options don't match, stop and ask Claude before you answer.</li>
+    </ol>
+    <p class="order"><span>Best order:</span> <a href="#start">Before you start</a> <span aria-hidden="true">›</span> <a href="#screenshots">Screenshots</a> <span aria-hidden="true">›</span> <a href="#apple">Apple</a> <span aria-hidden="true">›</span> <a href="#google">Google</a>. <span>The texts for both stores are in <a href="#listing">Listing</a>.</span></p>
+  </div>
+</header>
+
+<nav class="switch" aria-label="Parts of this guide">
+  <ul>
+    <li><a href="#start" aria-current="false">Start <span class="n" data-prog="start" data-short="1">0/8</span></a></li>
+    <li><a href="#apple" aria-current="false">Apple <span class="n" data-prog="apple" data-short="1">0/20</span></a></li>
+    <li><a href="#google" aria-current="false">Google <span class="n" data-prog="google" data-short="1">0/23</span></a></li>
+    <li><a href="#listing" aria-current="false">Listing <span class="n" data-prog="listing" data-short="1">0/8</span></a></li>
+    <li><a href="#screenshots" aria-current="false">Screenshots <span class="n" data-prog="screenshots" data-short="1">0/7</span></a></li>
+  </ul>
+</nav>
+
+<main>
+<div class="wrap">
+
+<!-- ===================== 1. BEFORE YOU START ===================== -->
+<section class="part" id="start" data-part="start">
+  <div class="part-head">
+    <div><p class="eyebrow">Part 1 of 5</p><h2>Before you start</h2></div>
+    <span class="prog" data-prog="start">0 of 8 done</span>
+  </div>
+  <div class="intro">
+    <p>Apple's and Google's reviewers sign in with the demo account you made, <b>appreview@yourlocalonline.in</b>. Get it ready first. Do these on the live ÖRZA (the real website and the real app), not a test copy.</p>
+  </div>
+  <ol class="steps">
+    <li class="step">
+      <input type="checkbox" class="tick" id="st-1">
+      <div class="step-body">
+        <label class="step-title" for="st-1">Change the demo account's password</label>
+        <p class="where">Website <b>orza-nine.vercel.app</b> › sign in as the demo account › <b>Settings</b> › <b>Change password</b> (the address is <span class="val"><code id="v-pwpage">https://orza-nine.vercel.app/dashboard/settings#security</code><button type="button" class="cp" data-copy="v-pwpage" aria-label="Copy the settings address">Copy</button></span>)</p>
+        <ul>
+          <li>Fill in <b>Current password</b>, <b>New password</b> (at least 8 characters) and <b>Confirm new password</b>, then click <b>Update password</b>. Pick a strong new password.</li>
+          <li>Changing it signs the demo account out on your other devices. Sign in again with the new password.</li>
+        </ul>
+        <div class="note stop"><span class="tag">Never</span><p>Don't write the password on this page, in a chat or in any file. You'll type it yourself in App Store Connect and Play Console. Everywhere this page needs it, it shows <span class="val ph"><code>type your demo password</code></span> instead.</p></div>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="st-2">
+      <div class="step-body">
+        <label class="step-title" for="st-2">Onboarding is finished on the demo account</label>
+        <p>Sign in to the app as the demo account. It should open on Today, not on the onboarding chat.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="st-3">
+      <div class="step-body">
+        <label class="step-title" for="st-3">It has sample meals and weights</label>
+        <ul>
+          <li>3 to 4 meals spread over 2 to 3 days.</li>
+          <li>2 weights.</li>
+          <li>Everyday Indian meals. No real names, emails or phone numbers anywhere.</li>
+        </ul>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="st-4">
+      <div class="step-body">
+        <label class="step-title" for="st-4">It has exactly one "as needed" medicine, with a photo</label>
+        <p>One medicine set to "as needed" (no dose times), with a photo. When the reviewer then adds a medicine with a time, they see ÖRZA's notification screen, which Apple wants to check.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="st-5">
+      <div class="step-body">
+        <label class="step-title" for="st-5">AI features are NOT allowed on the demo account</label>
+        <p>The reviewer must see the question "Allow ÖRZA's AI features?" themselves. So on this account, don't tap Allow.</p>
+        <p>If you already allowed it (for example while taking screenshots), turn it off: <span class="path">More › Settings › Privacy &amp; data › AI features › Turn off AI features › Turn off</span>. The question then comes back the next time an AI feature is used.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="st-6">
+      <div class="step-body">
+        <label class="step-title" for="st-6">Give the demo account 500 AI credits</label>
+        <p class="where">Website › sign in with your admin account › admin console › <b>Members</b></p>
+        <ol class="plain">
+          <li>Search the demo email in <b>Search name or email</b>.</li>
+          <li>Click <b>Adjust</b> on its row. Choose add.</li>
+          <li>Amount: <span class="val"><code id="v-500">500</code></span></li>
+          <li>Reason: <span class="val"><code id="v-reason">Review account</code><button type="button" class="cp" data-copy="v-reason" aria-label="Copy the reason">Copy</button></span></li>
+          <li>Click <b>Add credits</b>.</li>
+        </ol>
+        <div class="note stop"><span class="tag">Never</span><p>Never write "purchase" or "paid" in the reason. Credits are free, and reviewers can see the reason in the credit history.</p></div>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="st-7">
+      <div class="step-body">
+        <label class="step-title" for="st-7">AI is switched on in the live app</label>
+        <p class="where">Website › sign in with your admin account › admin console home › <b>AI engine</b></p>
+        <ul>
+          <li>It must say <b class="ans">AI on</b>.</li>
+          <li>If it says <b>Built-in engine</b>, AI is off. Snap then says "Photo scanning isn't available right now", and Snap and the prescription scan look broken to reviewers. Tell Claude before you submit.</li>
+        </ul>
+        <p>Keep AI on for the whole time the stores are reviewing.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="st-8">
+      <div class="step-body">
+        <label class="step-title" for="st-8">The support email receives mail</label>
+        <p>Send a short test email to <span class="val"><code id="v-support-2">support@orza.app</code><button type="button" class="cp" data-copy="v-support-2" aria-label="Copy the support email">Copy</button></span> from your own address and check it arrives. Both stores show this address to the public and to reviewers.</p>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<!-- ===================== 2. APPLE ===================== -->
+<section class="part" id="apple" data-part="apple">
+  <div class="part-head">
+    <div><p class="eyebrow">Part 2 of 5</p><h2>Apple App Store Connect</h2></div>
+    <span class="prog" data-prog="apple">0 of 20 done</span>
+  </div>
+  <div class="intro">
+    <p>Open <a href="https://appstoreconnect.apple.com" target="_blank" rel="noopener">appstoreconnect.apple.com</a>, sign in with your Apple account, then <b>Apps › ÖRZA</b>. The app already exists and build 3 is already uploaded. The account is the individual one, "Kunal Patil (Individual)".</p>
+  </div>
+  <ol class="steps">
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-1">
+      <div class="step-body">
+        <label class="step-title" for="ap-1">Check build 3 on your iPhone first</label>
+        <p class="where">iPhone › <b>TestFlight</b> › ÖRZA › update to build <b>1.0.0 (3)</b></p>
+        <ul>
+          <li>Add a medicine with a dose time. If notifications aren't allowed for ÖRZA yet, the sheet that explains medicine alarms shows one <b>Continue</b> button, with no "Not now" and no close button.</li>
+          <li><span class="path">More › Settings</span> has a <b>Help</b> group with "Contact support".</li>
+          <li>The <b>Health</b> screen has no link to the website.</li>
+          <li><span class="path">More › Settings › Privacy &amp; data › Privacy policy</span> opens without the website's menu.</li>
+          <li><span class="path">More › Settings › Preferences › Help improve ÖRZA's AI</span> is off.</li>
+          <li><span class="path">More › Calendar › Sync now</span>: the iPhone calendar events say "Medicine time", not the medicine's name.</li>
+        </ul>
+        <p>If anything looks different, stop and tell Claude.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-2">
+      <div class="step-body">
+        <label class="step-title" for="ap-2">Agreements</label>
+        <p class="where">App Store Connect home › <b>Business</b> › <b>Agreements</b></p>
+        <p>If an agreement says it needs your action, open it, read it and accept it. ÖRZA is free, so you don't need the Paid Apps agreement or any bank or tax details.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-3">
+      <div class="step-body">
+        <label class="step-title" for="ap-3">EU trader status: not a trader</label>
+        <p class="where">App Store Connect home › <b>Business</b> › Digital Services Act (trader status)</p>
+        <ul>
+          <li>Apple needs a trader status on every account, even when the app isn't offered in the EU.</li>
+          <li>Declare <b class="ans">not a trader</b>. ÖRZA is offered only outside the EU for now.</li>
+          <li>If the account already shows a status, check that it says not a trader.</li>
+        </ul>
+        <div class="note warn"><span class="tag">Why it matters</span><p>A trader's address, phone and email are checked and published on the EU store pages. Don't tick any EU country until you've decided what details to publish.</p></div>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-4">
+      <div class="step-body">
+        <label class="step-title" for="ap-4">App name and subtitle</label>
+        <p class="where">Left menu › <b>General › App Information</b></p>
+        <dl class="fields">
+          <div><dt>Name</dt><dd><span class="val"><code id="v-asc-name">ÖRZA: Meals, Meds &amp; AI Coach</code><button type="button" class="cp" data-copy="v-asc-name" aria-label="Copy the app name">Copy</button></span> <span class="count">28 / 30</span></dd></div>
+          <div><dt>Subtitle</dt><dd><span class="val"><code id="v-asc-sub">Photo meal log, pill reminders</code><button type="button" class="cp" data-copy="v-asc-sub" aria-label="Copy the subtitle">Copy</button></span> <span class="count">30 / 30</span></dd></div>
+        </dl>
+        <p>The name field says "ÖRZA" today. Change it to the full name above, the same name used on Google Play. It can still change until the first version is approved.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-5">
+      <div class="step-body">
+        <label class="step-title" for="ap-5">Category</label>
+        <p class="where">General › App Information › Category</p>
+        <dl class="fields">
+          <div><dt>Primary</dt><dd><b class="ans">Health &amp; Fitness</b></dd></div>
+          <div><dt>Secondary</dt><dd><b class="ans">Food &amp; Drink</b></dd></div>
+        </dl>
+        <p>Not Medical. Medical brings a stricter review.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-6">
+      <div class="step-body">
+        <label class="step-title" for="ap-6">Content rights</label>
+        <p class="where">General › App Information › Content Rights</p>
+        <p>"Does your app contain, show, or access third-party content?" Answer <b class="ans">Yes, and I have the necessary rights</b>.</p>
+        <p>The reason: ÖRZA shows AI answers made with OpenAI, the member's own Apple Health data, and fonts and icons with open licences.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-7">
+      <div class="step-body">
+        <label class="step-title" for="ap-7">Age rating, then override to 18+</label>
+        <p class="where">General › App Information › Age Rating › Edit</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Section</th><th>Question</th><th>Answer</th></tr></thead>
+            <tbody>
+              <tr><td class="k">In-App Controls</td><td>Parental Controls</td><td><b class="ans">No</b> (there are none)</td></tr>
+              <tr><td></td><td>Age Assurance</td><td><b class="ans">No</b></td></tr>
+              <tr><td class="k">Capabilities</td><td>Unrestricted Web Access</td><td><b class="ans">No</b>. The in-app browser opens only ÖRZA's own pages and links in replies, with no address bar.</td></tr>
+              <tr><td></td><td>User-Generated Content</td><td><b class="ans">No</b>. Nothing is shared with other users.</td></tr>
+              <tr><td></td><td>Social Media / Messaging and Chat</td><td><b class="ans">No</b>. The chat is with the AI, not between people.</td></tr>
+              <tr><td></td><td>Advertising</td><td><b class="ans">No</b></td></tr>
+              <tr><td class="k">Mature Themes</td><td>Profanity or Crude Humor</td><td><b class="ans">None</b></td></tr>
+              <tr><td></td><td>Horror/Fear Themes</td><td><b class="ans">None</b></td></tr>
+              <tr><td></td><td>Alcohol, Tobacco, or Drug Use or References</td><td><b class="ans">Infrequent</b>. Beer, wine and spirits are in the food list.</td></tr>
+              <tr><td class="k">Medical or Wellness</td><td>Medical or Treatment Information</td><td><b class="ans">Infrequent</b>. Medicine reminders and prescription copying, no medical advice.</td></tr>
+              <tr><td></td><td>Health or Wellness Topics</td><td><b class="ans">Yes</b>. Calories, diet, steps.</td></tr>
+              <tr><td class="k">Sexuality or Nudity</td><td>Every question</td><td><b class="ans">None</b></td></tr>
+              <tr><td class="k">Violence</td><td>Every question</td><td><b class="ans">None</b></td></tr>
+              <tr><td class="k">Chance-Based Activities</td><td>Gambling, Simulated Gambling, Contests</td><td><b class="ans">None</b></td></tr>
+              <tr><td></td><td>Loot Boxes</td><td><b class="ans">No</b></td></tr>
+              <tr><td class="k">Age Categories and Override</td><td>Override to Higher Age Rating</td><td><b class="ans">18+</b>. ÖRZA's terms need 18+ and the app refuses a new age under 18. Not "Made for Kids".</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-8">
+      <div class="step-body">
+        <label class="step-title" for="ap-8">Regulated medical device</label>
+        <p class="where">General › App Information › App Store Regulations &amp; Permits › Regulated Medical Device</p>
+        <p>Apple asks this only for the US, the UK and the EU. ÖRZA is offered in India only, so there's nothing to answer now. If you add one of those later, answer <b class="ans">No</b> for each: ÖRZA is a wellness app, not a regulated medical device.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-9">
+      <div class="step-body">
+        <label class="step-title" for="ap-9">Price: Free. Countries: India only</label>
+        <p class="where">Left menu › <b>Monetization › Pricing and Availability</b></p>
+        <dl class="fields">
+          <div><dt>Price</dt><dd><b class="ans">Free</b></dd></div>
+          <div><dt>Countries or regions</dt><dd><b class="ans">India</b> only. Untick every other country.</dd></div>
+        </dl>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-10">
+      <div class="step-body">
+        <label class="step-title" for="ap-10">Privacy policy address</label>
+        <p class="where">Left menu › <b>App Privacy</b> › Privacy Policy › Edit</p>
+        <p><span class="val"><code id="v-privacy-2">https://orza-nine.vercel.app/privacy</code><button type="button" class="cp" data-copy="v-privacy-2" aria-label="Copy the privacy policy address">Copy</button></span></p>
+        <p>If App Store Connect asks for it on the App Information page instead, use the same address there.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-11">
+      <div class="step-body">
+        <label class="step-title" for="ap-11">App Privacy: the data ÖRZA collects</label>
+        <p class="where">App Privacy › <b>Get Started</b> › "Yes, we collect data from this app"</p>
+        <ol class="plain">
+          <li>Tick exactly the 11 data types in the table, then Save.</li>
+          <li>For each type, open it and tick the purposes in the table.</li>
+          <li>"Is this data linked to the user's identity?" <b class="ans">Yes</b> for every type.</li>
+          <li>"Do you or your third-party partners use this data for tracking?" <b class="ans">No</b> for every type.</li>
+          <li>When all 11 are done, click <b>Publish</b>.</li>
+        </ol>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Data type</th><th>Purposes to tick</th><th>Linked</th><th>Tracking</th><th>What it is in ÖRZA</th></tr></thead>
+            <tbody>
+              <tr><td class="k">Contact Info › Name</td><td>App Functionality, Product Personalization</td><td>Yes</td><td>No</td><td>Name at sign-up; the coach uses the first name</td></tr>
+              <tr><td class="k">Contact Info › Email Address</td><td>App Functionality</td><td>Yes</td><td>No</td><td>Sign-in, replies to credit requests and support</td></tr>
+              <tr><td class="k">Health &amp; Fitness › Health</td><td>App Functionality, Product Personalization</td><td>Yes</td><td>No</td><td>Meals, water, weight, allergies, health notes, medicines, doses, refills, prescriptions; heart rate, sleep and weight from Apple Health</td></tr>
+              <tr><td class="k">Health &amp; Fitness › Fitness</td><td>App Functionality, Product Personalization</td><td>Yes</td><td>No</td><td>Daily steps, activity level</td></tr>
+              <tr><td class="k">Location › Coarse Location</td><td>App Functionality, Product Personalization</td><td>Yes</td><td>No</td><td>The state picked at sign-up and the phone's time zone. ÖRZA never reads the phone's location.</td></tr>
+              <tr><td class="k">User Content › Photos or Videos</td><td>App Functionality</td><td>Yes</td><td>No</td><td>Medicine, prescription and meal photos</td></tr>
+              <tr><td class="k">User Content › Customer Support</td><td>App Functionality</td><td>Yes</td><td>No</td><td>"Request more credits" messages, AI reports, support emails</td></tr>
+              <tr><td class="k">User Content › Other User Content</td><td>App Functionality, Product Personalization</td><td>Yes</td><td>No</td><td>Ask ÖRZA chats, typed or spoken meals, what ÖRZA remembers, recipe and rebalance requests, reminders, a connected calendar address</td></tr>
+              <tr><td class="k">Identifiers › User ID</td><td>App Functionality</td><td>Yes</td><td>No</td><td>The account ID</td></tr>
+              <tr><td class="k">Usage Data › Product Interaction</td><td>App Functionality</td><td>Yes</td><td>No</td><td>The history of AI credit use and the time the phone last opened ÖRZA</td></tr>
+              <tr><td class="k">Other Data › Other Data Types</td><td>App Functionality, Product Personalization</td><td>Yes</td><td>No</td><td>Age, sex, height, goal, diet, language, household, lifestyle; phone model and app version</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note warn"><span class="tag">Leave unticked</span><p>Every other type, including Phone Number, Precise Location, Sensitive Info, Audio Data, Emails or Text Messages, Device ID, Purchases, Financial Info, Contacts, Browsing History, Search History, Advertising Data, Other Usage Data, and all Diagnostics.</p></div>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-12">
+      <div class="step-body">
+        <label class="step-title" for="ap-12">Version page: screenshots</label>
+        <p class="where">Left menu › <b>iOS App › 1.0 Prepare for Submission</b> › Previews and Screenshots</p>
+        <p>Upload two sets of the same 10 screens, in the order in <a href="#screenshots">Screenshots</a>:</p>
+        <ul>
+          <li><b>iPhone with Dynamic Island, medium</b>: 1206 × 2622 or 1179 × 2556 (App Store Connect may call it the 6.3-inch display). Required.</li>
+          <li><b>iPhone with Dynamic Island, large</b>: 1320 × 2868 or 1290 × 2796 (may be called the 6.9-inch display). Required.</li>
+        </ul>
+        <p>Do <a href="#screenshots">Screenshots</a> before this step.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-13">
+      <div class="step-body">
+        <label class="step-title" for="ap-13">Version page: promotional text, description, keywords</label>
+        <p>Copy each one from <a href="#listing">Listing › App Store</a>:</p>
+        <ul>
+          <li><b>Promotional Text</b> (140 of 170). It can be changed any time without a review.</li>
+          <li><b>Description</b> (2,940 of 4,000). It names Apple Health, which Apple requires.</li>
+          <li><b>Keywords</b> (95 of 100), with no spaces after the commas.</li>
+        </ul>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-14">
+      <div class="step-body">
+        <label class="step-title" for="ap-14">Version page: addresses, version, copyright</label>
+        <dl class="fields">
+          <div><dt>Support URL</dt><dd><span class="val"><code id="v-asc-support">https://orza-nine.vercel.app/faq</code><button type="button" class="cp" data-copy="v-asc-support" aria-label="Copy the support URL">Copy</button></span></dd></div>
+          <div><dt>Marketing URL (optional)</dt><dd><span class="val"><code id="v-asc-mkt">https://orza-nine.vercel.app</code><button type="button" class="cp" data-copy="v-asc-mkt" aria-label="Copy the marketing URL">Copy</button></span></dd></div>
+          <div><dt>Version</dt><dd><span class="val"><code id="v-asc-ver">1.0.0</code></span> (the same as the build)</dd></div>
+          <div><dt>Copyright</dt><dd><span class="val"><code id="v-asc-copy">2026 Kunal Patil</code><button type="button" class="cp" data-copy="v-asc-copy" aria-label="Copy the copyright line">Copy</button></span></dd></div>
+        </dl>
+        <p>The FAQ page has the support email on it, which is why it's the Support URL.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-15">
+      <div class="step-body">
+        <label class="step-title" for="ap-15">Choose build 3</label>
+        <p class="where">Version page › <b>Build</b> › Add Build (the + button)</p>
+        <p>Select <b>1.0.0 (3)</b>, then Done. Only choose it after Step 1 of this part passed.</p>
+        <p>Export compliance is already answered inside the build. If Apple asks anyway, choose <b class="ans">None of the algorithms mentioned above</b>. ÖRZA uses only the encryption built into iOS. No French declaration and no CCATS are needed.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-16">
+      <div class="step-body">
+        <label class="step-title" for="ap-16">App Review Information: sign-in</label>
+        <p class="where">Version page › <b>App Review Information</b></p>
+        <dl class="fields">
+          <div><dt>Sign-in required</dt><dd><b class="ans">Ticked</b></dd></div>
+          <div><dt>User name</dt><dd><span class="val"><code id="v-asc-user">appreview@yourlocalonline.in</code><button type="button" class="cp" data-copy="v-asc-user" aria-label="Copy the demo email">Copy</button></span></dd></div>
+          <div><dt>Password</dt><dd><span class="val ph"><code>type your demo password</code></span> (type it yourself, here only)</dd></div>
+        </dl>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-17">
+      <div class="step-body">
+        <label class="step-title" for="ap-17">App Review Information: contact</label>
+        <p>Your own first name, last name, phone number and email. Apple calls or emails this person if the reviewer has a question.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-18">
+      <div class="step-body">
+        <label class="step-title" for="ap-18">App Review Information: notes</label>
+        <p>Copy the whole box into <b>Notes</b>. Then, in the Notes field, replace <span class="val ph"><code>[type your demo password]</code></span> with the demo password.</p>
+        <div class="copy">
+          <div class="copy-head"><span class="copy-label">Notes for Apple's reviewer</span><span class="count" data-count="t-notes" data-limit="4000">counting…</span><button type="button" class="btn" data-copy="t-notes">Copy</button></div>
+<pre class="copytext" id="t-notes">ÖRZA is a wellness app for India: log meals by photo, text or voice, chat with the Ask ÖRZA coach, get recipes and a "rebalance" plan after a big meal, track goals, water, weight and steps, and set medicine reminders with photos. It gives wellness guidance only. It does not diagnose, prescribe or change a dose, and it is not a medical device.
+
+SIGN-IN
+Demo account (onboarding done, sample meals, one "as needed" medicine, AI credits):
+Email: appreview@yourlocalonline.in
+Password: [type your demo password]
+An account is needed because the same data is used on the ÖRZA website. Delete the account in the app: More &gt; Settings &gt; Privacy &amp; data &gt; Delete account (type DELETE). This deletes the account and all its data on our server.
+
+AI (OPENAI) AND CONSENT
+The first AI feature you use shows "Allow ÖRZA's AI features?". It names OpenAI and lists what is sent. Nothing goes to OpenAI before you tap Allow, and "Not now" keeps the rest of the app working. Change it any time: More &gt; Settings &gt; Privacy &amp; data &gt; AI features.
+AI features: Snap tab (meal photo), Meals &gt; Type or speak, More &gt; Ask ÖRZA, More &gt; Recipes, More &gt; Rebalance, Medicines &gt; Scan a prescription.
+Report AI output: "Report" under every Ask ÖRZA reply (or long-press a reply), and on AI recipes, rebalance plans, the Snap result and AI-logged meals.
+
+AI CREDITS: NO PURCHASES
+AI features use free credits. Every account starts with 100. Members can ask the team for more (More &gt; AI credits &gt; Request more credits) and the team adds them free of charge. Credits are not sold in the app or anywhere else, and the app has no in-app purchases.
+
+APPLE HEALTH (read only)
+More &gt; Health sync &gt; Connect Apple Health reads steps, sleep, resting heart rate and weight. On Today, "Count my steps automatically" explains, then shows the Apple Health sheet. Only daily totals are saved to the account. ÖRZA writes nothing to Apple Health, never uses health data for ads, and never stores it in iCloud. Background delivery updates steps at most hourly.
+Motion &amp; Fitness: only when Apple Health has no steps, Today offers "Use iPhone motion instead".
+Without these permissions, use "Log steps" on Today.
+
+NOTIFICATIONS (medicine alarms)
+Add a medicine with dose times (Medicines &gt; +). ÖRZA explains, then shows the iPhone prompt (also in More &gt; Reminders &gt; Alarms on this phone). Dose alarms are local time-sensitive notifications with the medicine's photo and Take / Snooze / Skip. To try one: More &gt; Reminders &gt; Alarms on this phone &gt; Test alarm (rings in 10 seconds). Time Sensitive is used only for medicine doses and their snoozes. Other reminders are normal notifications. No marketing, no remote push.
+
+OTHER PERMISSIONS (asked only when used)
+Camera: Snap &gt; Take photo, medicine photos, Scan a prescription. Photos: the system picker (no library access). Microphone and Speech Recognition: the mic in Meals and Ask ÖRZA. Calendar: More &gt; Calendar &gt; Add to my calendar (an "ÖRZA" calendar with dose times; the events say "Medicine time" and don't name the medicine, because the calendar can sync to iCloud).
+Background mode "processing" re-plans the next 7 days of medicine alarms about hourly.
+
+MEDICAL SAFETY
+A scanned prescription is checked line by line before any alarm is made ("Check and create alarms"). ÖRZA copies what is written and never changes a dose. Screens say "Wellness guidance, not medical advice. For medical concerns, please consult your doctor."
+
+Support: support@orza.app (in the app: More &gt; Settings &gt; Help &gt; Contact support).</pre>
+        </div>
+        <p><b>Optional attachment:</b> a 30-second screen recording of the Test alarm ringing on a locked iPhone (<span class="path">More › Reminders › Alarms on this phone › Test alarm</span>, which rings in 10 seconds). Reviewers can't wait for a real dose time.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-19">
+      <div class="step-body">
+        <label class="step-title" for="ap-19">Release: manually</label>
+        <p class="where">Version page › <b>App Store Version Release</b></p>
+        <p>Choose <b class="ans">Manually release this version</b>. Then the app only goes live when you press the button yourself, after approval.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="ap-20">
+      <div class="step-body">
+        <label class="step-title" for="ap-20">Add for Review, then Submit</label>
+        <p>Before you click: Part 1 is all ticked, AI features are off on the demo account, and the Notes have the real password in place of the placeholder.</p>
+        <p>Click <b>Add for Review</b> (top right of the version page). Check the summary, then click <b>Submit</b>.</p>
+      </div>
+    </li>
+  </ol>
+
+  <h3>What happens next</h3>
+  <div class="note">
+    <ul>
+      <li>The status moves from <b>Waiting for Review</b> to <b>In Review</b>. Apple emails you when it changes.</li>
+      <li>If Apple approves, the status becomes <b>Pending Developer Release</b>. Open the version page and click <b>Release This Version</b> when you're ready.</li>
+      <li>Reviewer questions and rejections arrive in <span class="path">App Store Connect › App Review</span>. Reply there; you can also appeal a rejection there.</li>
+      <li>Keep the demo password the same and AI switched on until the review is finished.</li>
+    </ul>
+  </div>
+
+  <h3>If Apple rejects because the account is an individual one</h3>
+  <div class="note warn">
+    <span class="tag">Guideline 5.1.1(ix)</span>
+    <p>Apple may say apps close to healthcare (ÖRZA has medicine alarms and prescription scans) must come from an organization, not a person. You chose to try the individual account first and accepted this risk.</p>
+    <ol class="plain">
+      <li>You can reply or appeal in <span class="path">App Review</span>.</li>
+      <li>If Apple keeps the rejection, the fix is an <b>Organization</b> account in the Apple Developer Program. It needs a D-U-N-S number for your company.</li>
+      <li>Then the app moves to that account: <span class="path">App Information › Transfer App</span>. A transfer needs one approved version first, so after a first-time rejection the app is created again in the new account instead.</li>
+      <li>Talk to Claude before you start. The app's settings must change for a new account.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ===================== 3. GOOGLE ===================== -->
+<section class="part" id="google" data-part="google">
+  <div class="part-head">
+    <div><p class="eyebrow">Part 3 of 5</p><h2>Google Play Console</h2></div>
+    <span class="prog" data-prog="google">0 of 23 done</span>
+  </div>
+  <div class="intro">
+    <p>Open <a href="https://play.google.com/console" target="_blank" rel="noopener">play.google.com/console</a> with FatafatDecor's existing developer account. The Android app is called <code>in.co.ylo.orza</code> inside Play.</p>
+    <div class="note warn"><span class="tag">Not ready yet</span><p>Two things are still missing before Google can review ÖRZA. First, the public "delete your account" web page (needed for Data safety, Step 17): it is written but not on the live website yet. Second, the Android app file and its checks on an Android phone (Step 4). You can create the app and fill most forms now.</p></div>
+  </div>
+  <ol class="steps">
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-1">
+      <div class="step-body">
+        <label class="step-title" for="gp-1">Check the account type and when it was made</label>
+        <p class="where">Play Console › the developer account's details</p>
+        <ul>
+          <li>Note the <b>account type</b> (personal or organization) and the <b>date it was created</b>.</li>
+          <li>If it is <b>personal</b> and was made <b>after 13 November 2023</b>: before you can ask for production, at least <b>12 testers</b> must be opted in to a closed test for <b>14 days in a row</b>, really using the app (Step 21).</li>
+          <li>Organization account, or a personal one made earlier: skip Step 21.</li>
+        </ul>
+        <div class="note warn"><span class="tag">Risk you accepted</span><p>Google says health apps such as medical apps must come from an organization account, and ÖRZA declares medication management. If Google refuses the health form or the release for this, the fix is an organization account with a D-U-N-S number that matches the company. Google checks it, which takes days.</p></div>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-2">
+      <div class="step-body">
+        <label class="step-title" for="gp-2">Decide the developer name</label>
+        <p>Google Play shows the account's developer name under ÖRZA (FatafatDecor's today). ÖRZA's privacy policy says ÖRZA is run by "Kunal Patil". Google wants the two to match.</p>
+        <p>Pick one, then tell Claude: change the Play developer name, or have Claude add the company's name to the privacy policy.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-3">
+      <div class="step-body">
+        <label class="step-title" for="gp-3">Create the app</label>
+        <p class="where">Play Console home › <b>Create app</b></p>
+        <dl class="fields">
+          <div><dt>App name</dt><dd><span class="val"><code id="v-gp-create">ÖRZA</code><button type="button" class="cp" data-copy="v-gp-create" aria-label="Copy the app name">Copy</button></span> (the full title goes in later, Step 19)</dd></div>
+          <div><dt>Default language</dt><dd><b class="ans">English (India)</b>. English (United States) also works.</dd></div>
+          <div><dt>App or game</dt><dd><b class="ans">App</b></dd></div>
+          <div><dt>Free or paid</dt><dd><b class="ans">Free</b></dd></div>
+          <div><dt>Declarations</dt><dd>Tick the <b>Developer Program Policies</b> box and the <b>US export laws</b> box.</dd></div>
+        </dl>
+        <p>Click <b>Create app</b>.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-4">
+      <div class="step-body">
+        <label class="step-title" for="gp-4">Make the Android app file (.aab)</label>
+        <p>Ask Claude to prepare it, or run this yourself in a terminal opened in the <b>orza-mobile</b> folder (E:\aylo\orza-mobile). It asks questions, so run it in your own terminal.</p>
+        <p><span class="val"><code id="v-eas">eas build --platform android --profile production</code><button type="button" class="cp" data-copy="v-eas" aria-label="Copy the build command">Copy</button></span></p>
+        <ul>
+          <li>When it asks to <b>generate a new Android keystore</b>, answer <b class="ans">Yes</b>.</li>
+          <li>When it finishes, open the build page it links to and download the <b>.aab</b> file.</li>
+          <li>The Android phone checks are still to do when the phone is back. Tell Claude when you have it.</li>
+        </ul>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-5">
+      <div class="step-body">
+        <label class="step-title" for="gp-5">First upload to Internal testing, by hand</label>
+        <p class="where">Left menu › <b>Test and release › Testing › Internal testing</b> › Create new release</p>
+        <ol class="plain">
+          <li>Play App Signing: accept the <b class="ans">Google-generated key</b>.</li>
+          <li>Upload the .aab file.</li>
+          <li>Release name: <span class="val"><code id="v-gp-rel">1.0.0 (1)</code><button type="button" class="cp" data-copy="v-gp-rel" aria-label="Copy the release name">Copy</button></span>. Play may fill this in from the file. If the number in brackets is different, keep Play's.</li>
+          <li>Release notes: <span class="val"><code id="v-gp-notes">First internal test.</code><button type="button" class="cp" data-copy="v-gp-notes" aria-label="Copy the release notes">Copy</button></span> (put it between the language tags Play shows, in place of the sample line)</li>
+          <li>Save › Review release › <b>Start rollout to Internal testing</b>.</li>
+        </ol>
+        <p>Internal testing doesn't need the store listing or the forms first.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-6">
+      <div class="step-body">
+        <label class="step-title" for="gp-6">Add testers and install from the opt-in link</label>
+        <p class="where">Internal testing › <b>Testers</b> tab</p>
+        <ol class="plain">
+          <li>Create an email list and add your own Google account(s). Save.</li>
+          <li>Copy the <b>opt-in link</b>.</li>
+          <li>Open it on the Android phone, signed in with one of those Google accounts. Accept, then install ÖRZA from Play.</li>
+        </ol>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-7">
+      <div class="step-body">
+        <label class="step-title" for="gp-7">App content: Privacy policy</label>
+        <p class="where">Left menu › <b>Policy and programs › App content</b> (also under Monitor and improve)</p>
+        <p><span class="val"><code id="v-privacy-3">https://orza-nine.vercel.app/privacy</code><button type="button" class="cp" data-copy="v-privacy-3" aria-label="Copy the privacy policy address">Copy</button></span></p>
+        <p>This is the same page Health Connect opens from ÖRZA. Do the <b>Health apps</b> form (Steps 14 and 15) early: its review can take some days.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-8">
+      <div class="step-body">
+        <label class="step-title" for="gp-8">App content: App access (the demo account)</label>
+        <p>Choose <b class="ans">All or some functionality is restricted</b>, then add one set of instructions:</p>
+        <dl class="fields">
+          <div><dt>Name</dt><dd><span class="val"><code id="v-gp-accname">Demo account</code><button type="button" class="cp" data-copy="v-gp-accname" aria-label="Copy the instruction name">Copy</button></span></dd></div>
+          <div><dt>Username</dt><dd><span class="val"><code id="v-gp-user">appreview@yourlocalonline.in</code><button type="button" class="cp" data-copy="v-gp-user" aria-label="Copy the demo email">Copy</button></span></dd></div>
+          <div><dt>Password</dt><dd><span class="val ph"><code>type your demo password</code></span></dd></div>
+        </dl>
+        <div class="copy">
+          <div class="copy-head"><span class="copy-label">Any other information</span><span class="count" data-count="t-access" data-limit="0">counting…</span><button type="button" class="btn" data-copy="t-access">Copy</button></div>
+<pre class="copytext" id="t-access">All of ÖRZA needs a free account. This demo account has finished onboarding, has AI credits, and has sample meals and medicines.
+- AI features (Ask ÖRZA, Snap &amp; Know, typed or spoken meals, recipes, rebalance plans, prescription scan) ask once for permission to use OpenAI: tap "Allow". Settings &gt; Privacy &amp; data &gt; AI features turns it off; everything else keeps working.
+- Report an AI answer: tap the flag under any Ask ÖRZA reply, or long-press the reply &gt; "Report this reply". Recipes, plans, the Snap result and AI meals have "Report" too.
+- Medicine alarms: Medicines &gt; add a medicine with a time 2 minutes ahead, then allow notifications and "Alarms &amp; reminders". Or More &gt; Reminders &gt; Alarms on this phone &gt; "Test alarm" (rings in 10 seconds). Full-screen alarms over the lock screen need "Full-screen alarms" allowed (Allow on the same card, Android 14+).
+- Health Connect: More &gt; Health sync &gt; Connect (steps, sleep, resting heart rate, weight). Steps: Today &gt; "Count steps automatically". Health Connect &gt; App permissions &gt; ÖRZA &gt; Privacy policy opens our policy.
+- Every permission can be refused: steps can be typed ("Log steps"), meals picked from the food list, medicines entered by hand.
+- Account deletion: More &gt; Settings &gt; Privacy &amp; data &gt; Delete account (please keep this demo account).</pre>
+        </div>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-9">
+      <div class="step-body">
+        <label class="step-title" for="gp-9">Pre-launch report: the same sign-in</label>
+        <p class="where">Test and release › <b>Pre-launch report › Settings › Credentials</b></p>
+        <p>Enter the same demo email and password, so Google's test robot can sign in.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-10">
+      <div class="step-body">
+        <label class="step-title" for="gp-10">App content: Ads</label>
+        <p><b class="ans">No, my app does not contain ads.</b></p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-11">
+      <div class="step-body">
+        <label class="step-title" for="gp-11">App content: Content rating</label>
+        <p class="where">App content › Content rating › Start questionnaire</p>
+        <dl class="fields">
+          <div><dt>Email</dt><dd><span class="val"><code id="v-support-3">support@orza.app</code><button type="button" class="cp" data-copy="v-support-3" aria-label="Copy the support email">Copy</button></span></dd></div>
+          <div><dt>Category</dt><dd>The one for <b class="ans">all other app types</b> (utility, productivity and the like). Not Game, not Social networking, not News or Educational.</dd></div>
+        </dl>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Question (topic)</th><th>Answer</th><th>Why</th></tr></thead>
+            <tbody>
+              <tr><td class="k">Violence, blood, fear or horror</td><td><b class="ans">No</b></td><td></td></tr>
+              <tr><td class="k">Sexuality, nudity</td><td><b class="ans">No</b></td><td></td></tr>
+              <tr><td class="k">Language (swearing, crude humour)</td><td><b class="ans">No</b></td><td>The AI coach has safety rules.</td></tr>
+              <tr><td class="k">Drugs, alcohol or tobacco</td><td><b class="ans">Yes, references to alcohol only</b>. Use isn't shown or encouraged, and nothing is sold.</td><td>The food list has beer, wine and spirits so drinks can be logged. Medicines are legal, in a reminder context.</td></tr>
+              <tr><td class="k">Gambling, simulated gambling, contests</td><td><b class="ans">No</b></td><td></td></tr>
+              <tr><td class="k">Users interact or share content with each other</td><td><b class="ans">No</b></td><td>The chat is with ÖRZA's AI, not with people.</td></tr>
+              <tr><td class="k">Shares the user's location with other users</td><td><b class="ans">No</b></td><td></td></tr>
+              <tr><td class="k">Digital purchases</td><td><b class="ans">No</b></td><td>AI credits are free and given by the team.</td></tr>
+              <tr><td class="k">Unrestricted internet or web browser</td><td><b class="ans">No</b></td><td>It opens only ÖRZA's own pages.</td></tr>
+              <tr><td class="k">Generative AI content (if asked)</td><td><b class="ans">Yes</b></td><td>AI chat, recipes, plans, meal and prescription reading, with reporting inside the app.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>The topic names above may be worded differently in the live form; answer by meaning. Expect a low rating, maybe one step higher for the alcohol. That's fine for an 18+ app.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-12">
+      <div class="step-body">
+        <label class="step-title" for="gp-12">App content: Target audience and content</label>
+        <dl class="fields">
+          <div><dt>Target age groups</dt><dd><b class="ans">18 and over</b> only</dd></div>
+          <div><dt>Could the listing unintentionally appeal to children?</dt><dd><b class="ans">No</b></dd></div>
+          <div><dt>Families or teacher-approved programmes</dt><dd>None</dd></div>
+        </dl>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-13">
+      <div class="step-body">
+        <label class="step-title" for="gp-13">App content: the short declarations</label>
+        <dl class="fields">
+          <div><dt>News app</dt><dd><b class="ans">No</b></dd></div>
+          <div><dt>COVID-19 contact tracing or status</dt><dd><b class="ans">No</b></dd></div>
+          <div><dt>Government app</dt><dd><b class="ans">No</b></dd></div>
+          <div><dt>Financial features</dt><dd><b class="ans">My app doesn't provide any financial features</b></dd></div>
+          <div><dt>Advertising ID</dt><dd><b class="ans">No</b></dd></div>
+        </dl>
+        <p>Google may also show a form about foreground services, exact alarms or photo and video permissions. None is expected. If one shows up, this is the answer:</p>
+        <div class="copy">
+          <div class="copy-head"><span class="copy-label">If a permissions form appears</span><button type="button" class="btn" data-copy="t-fgs">Copy</button></div>
+<pre class="copytext short" id="t-fgs">ÖRZA has no foreground service with a type, and it uses neither USE_EXACT_ALARM nor READ_MEDIA_IMAGES / READ_MEDIA_VIDEO. Photos are chosen with the system Photo Picker, and medicine alarms use SCHEDULE_EXACT_ALARM, which the user allows.</pre>
+        </div>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-14">
+      <div class="step-body">
+        <label class="step-title" for="gp-14">Health apps, page 1: the health features</label>
+        <p>Tick only these four:</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Group</th><th>Tick</th><th>What it is in ÖRZA</th></tr></thead>
+            <tbody>
+              <tr><td class="k">Health and fitness</td><td><b class="ans">Activity and fitness</b></td><td>Daily steps toward a step goal</td></tr>
+              <tr><td class="k">Health and fitness</td><td><b class="ans">Nutrition and weight management</b></td><td>Meal logging, calorie and macro targets, weight goal and trend</td></tr>
+              <tr><td class="k">Health and fitness</td><td><b class="ans">Sleep management</b></td><td>A sleep chart from Health Connect</td></tr>
+              <tr><td class="k">Medical</td><td><b class="ans">Medication and treatment management</b></td><td>Medicine schedules, photo alarms, stock and refill alerts, prescription scan to alarms</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note warn"><span class="tag">Leave unticked</span><p>Everything else, including Medical device apps, Diseases and conditions management, Clinical decision support and Human subjects research. ÖRZA isn't a regulated device, doesn't diagnose and doesn't manage a disease.</p></div>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-15">
+      <div class="step-body">
+        <label class="step-title" for="gp-15">Health apps, page 2: why ÖRZA reads each Health Connect type</label>
+        <p>There's one text box per permission. Copy each box into the matching one. If the form asks for a privacy policy, use <span class="val"><code id="v-privacy-4">https://orza-nine.vercel.app/privacy</code><button type="button" class="cp" data-copy="v-privacy-4" aria-label="Copy the privacy policy address">Copy</button></span></p>
+        <div class="copy">
+          <div class="copy-head"><span class="copy-label">Steps (READ_STEPS)</span><span class="count" data-count="t-hc-steps" data-limit="0">counting…</span><button type="button" class="btn" data-copy="t-hc-steps">Copy</button></div>
+<pre class="copytext" id="t-hc-steps">Today shows the member's daily steps against their own step goal, without typing. After the member turns on "Count steps automatically" in ÖRZA and allows Steps in Health Connect, ÖRZA reads the day's aggregated step total (this phone plus any watch or fitness app that shares steps with Health Connect) for today and up to the last 30 days, and saves one total per day to the member's ÖRZA account. The totals are shown on Today, the Health screen, the weekly report and the member's ÖRZA website dashboard. Only if the member has allowed ÖRZA's AI features (run by OpenAI, explained in the app before asking), today's step count is part of the context the AI coach uses to answer the member's own chat messages. Steps are never used for ads, never sold, never shared with data brokers and never used to train or improve AI. Turning the feature off stops all reads.</pre>
+        </div>
+        <div class="copy">
+          <div class="copy-head"><span class="copy-label">Read health data in the background (READ_HEALTH_DATA_IN_BACKGROUND)</span><span class="count" data-count="t-hc-bg" data-limit="0">counting…</span><button type="button" class="btn" data-copy="t-hc-bg">Copy</button></div>
+<pre class="copytext" id="t-hc-bg">Keeps the member's step total current while ÖRZA is closed, so the step goal on Today, the website dashboard and the weekly report are up to date without opening the app. About once an hour (an Android WorkManager job), ÖRZA reads only daily step totals for today and the previous few days (watches often sync late) and saves one total per day to the member's account. No other data type is read in the background. Health Connect asks the member separately on its own screen; if they refuse, steps are saved only while ÖRZA is open, and the app says so.</pre>
+        </div>
+        <div class="copy">
+          <div class="copy-head"><span class="copy-label">Sleep (READ_SLEEP)</span><span class="count" data-count="t-hc-sleep" data-limit="0">counting…</span><button type="button" class="btn" data-copy="t-hc-sleep">Copy</button></div>
+<pre class="copytext" id="t-hc-sleep">Shows the member's nightly sleep time on the Health screen's sleep chart and on their ÖRZA website, next to what they eat. After the member connects Health Connect on ÖRZA's Health screen, ÖRZA reads each night's total sleep for up to the last 30 days, when the app is opened (at most every few hours) or when the member taps "Sync now", and saves one total per day to the member's account. Sleep is never sent to AI providers, never used for ads and never sold.</pre>
+        </div>
+        <div class="copy">
+          <div class="copy-head"><span class="copy-label">Resting heart rate (READ_RESTING_HEART_RATE)</span><span class="count" data-count="t-hc-rhr" data-limit="0">counting…</span><button type="button" class="btn" data-copy="t-hc-rhr">Copy</button></div>
+<pre class="copytext" id="t-hc-rhr">Shows the member's daily resting heart rate as a trend chart on the Health screen, next to their meals and activity. Read only after the member connects Health Connect, for up to the last 30 days, when the app is opened (at most every few hours) or on "Sync now"; one value per day is saved to the member's account. It is never sent to AI providers, never used for ads and never sold. ÖRZA does not diagnose or monitor any condition.</pre>
+        </div>
+        <div class="copy">
+          <div class="copy-head"><span class="copy-label">Weight (READ_WEIGHT)</span><span class="count" data-count="t-hc-weight" data-limit="0">counting…</span><button type="button" class="btn" data-copy="t-hc-weight">Copy</button></div>
+<pre class="copytext" id="t-hc-weight">Fills the member's weight trend and the Goals weight tracker with weigh-ins from a smart scale or another app, so they don't have to type them. Read only after the member connects Health Connect, for up to the last 30 days, when the app is opened (at most every few hours) or on "Sync now"; one value per day is saved to the member's account and shown as progress toward the member's own weight goal. Only if the member has allowed ÖRZA's AI features (OpenAI), their tracked weight may be part of what the AI coach uses to answer their own chat messages. Never used for ads, never sold and never used to train or improve AI.</pre>
+        </div>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-16">
+      <div class="step-body">
+        <label class="step-title" for="gp-16">App content: Full-screen intent</label>
+        <p>Answer that ÖRZA <b class="ans">does not need full-screen access by default</b>: it isn't an alarm-clock app or a calling app. If the form asks for the app's core function, pick the option that is neither alarms nor calls.</p>
+        <p>Members can still turn on full-screen alarms inside the app. Without it, a dose rings as a loud notification with the photo and Take / Snooze / Skip.</p>
+        <div class="note"><span class="tag">Labels not confirmed</span><p>The exact wording of this form couldn't be checked in advance. If no option means "doesn't need default access", stop and ask Claude.</p></div>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-17">
+      <div class="step-body">
+        <label class="step-title" for="gp-17">App content: Data safety</label>
+        <div class="note stop"><span class="tag">Wait</span><p>Don't submit this form until the account-deletion page is live. The page is written and goes live with the next website update. Open <span class="val"><code id="v-del">https://orza-nine.vercel.app/delete-account</code><button type="button" class="cp" data-copy="v-del" aria-label="Copy the delete account address">Copy</button></span> in a browser. If it says the page isn't found, stop here and tell Claude.</p></div>
+        <p><b>Overview questions</b></p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Question</th><th>Answer</th></tr></thead>
+            <tbody>
+              <tr><td>Does your app collect or share any of the required user data types?</td><td><b class="ans">Yes</b></td></tr>
+              <tr><td>Is all of the user data collected by your app encrypted in transit?</td><td><b class="ans">Yes</b></td></tr>
+              <tr><td>Which methods of account creation does your app support?</td><td><b class="ans">Username and password</b> (email and password, nothing else)</td></tr>
+              <tr><td>Delete account URL</td><td><code>https://orza-nine.vercel.app/delete-account</code></td></tr>
+              <tr><td>Can users ask for some or all of their data to be deleted without deleting their account?</td><td><b class="ans">Yes</b> (the extra URL is optional; leave it empty)</td></tr>
+              <tr><td>Independent security review</td><td><b class="ans">No</b></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><b>Data types.</b> Tick these 14. For every one: collected <b class="ans">Yes</b>, shared <b class="ans">No</b>, processed ephemerally <b class="ans">No</b>. OpenAI, the hosting and the email service only work for ÖRZA, so Google doesn't count them as sharing.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Category › type</th><th>Required or optional</th><th>Purposes to tick</th><th>What it is in ÖRZA</th></tr></thead>
+            <tbody>
+              <tr><td class="k">Personal info › Name</td><td>Required</td><td>App functionality, Account management, Personalization</td><td>Name at sign-up</td></tr>
+              <tr><td class="k">Personal info › Email address</td><td>Required</td><td>App functionality, Account management, Developer communications, Fraud prevention, security, and compliance</td><td>Sign-in, account emails, replies to credit requests</td></tr>
+              <tr><td class="k">Personal info › User IDs</td><td>Required</td><td>App functionality, Account management</td><td>The ÖRZA account ID</td></tr>
+              <tr><td class="k">Personal info › Other info</td><td>Required</td><td>App functionality, Personalization</td><td>Age, sex, language, diet, household</td></tr>
+              <tr><td class="k">Location › Approximate location</td><td>Required</td><td>App functionality, Personalization</td><td>The Indian state picked at sign-up. No location permission, no GPS.</td></tr>
+              <tr><td class="k">Health and fitness › Health info</td><td>Required</td><td>App functionality, Personalization</td><td>Height, weight, allergies, health notes, medicines, doses, prescriptions; heart rate and weight from Health Connect</td></tr>
+              <tr><td class="k">Health and fitness › Fitness info</td><td>Required</td><td>App functionality, Personalization</td><td>Goal, activity level, meals, water, steps, sleep</td></tr>
+              <tr><td class="k">Messages › Other in-app messages</td><td>Optional</td><td>App functionality, Personalization</td><td>Ask ÖRZA chats</td></tr>
+              <tr><td class="k">Photos and videos › Photos</td><td>Optional</td><td>App functionality</td><td>Meal photos (not kept), medicine and prescription photos (kept)</td></tr>
+              <tr><td class="k">Calendar › Calendar events</td><td>Optional</td><td>App functionality</td><td>Only if the member connects their own calendar's address</td></tr>
+              <tr><td class="k">App activity › In-app search history</td><td>Optional</td><td>App functionality</td><td>Food-list searches</td></tr>
+              <tr><td class="k">App activity › Other user-generated content</td><td>Optional</td><td>App functionality, Personalization</td><td>What ÖRZA remembers, notes, reminder texts, recipe and plan requests, AI reports, credit-request notes</td></tr>
+              <tr><td class="k">App activity › App interactions</td><td>Required</td><td>App functionality</td><td>The history of AI credit use and when the phone last opened ÖRZA</td></tr>
+              <tr><td class="k">Device or other IDs</td><td>Required</td><td>App functionality, Account management</td><td>The phone's ÖRZA device record, so alarms don't ring twice</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note warn"><span class="tag">Leave unticked</span><p>Phone number, Address, Race and ethnicity, Political or religious beliefs, Sexual orientation, all Financial info, Precise location, Emails, SMS, Videos, Audio, Files and docs, Contacts, Installed apps, Other actions, Web browsing, Crash logs, Diagnostics, Other performance data, Advertising ID.</p></div>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-18">
+      <div class="step-body">
+        <label class="step-title" for="gp-18">Store settings: category, tags, contact</label>
+        <p class="where">Left menu › <b>Grow users › Store presence › Store settings</b></p>
+        <dl class="fields">
+          <div><dt>App or game</dt><dd><b class="ans">App</b></dd></div>
+          <div><dt>Category</dt><dd><b class="ans">Health &amp; Fitness</b> (not Medical)</dd></div>
+          <div><dt>Tags</dt><dd>Up to five from Play's list, the closest to Nutrition, Diet, Calorie counter, Medication reminder and Fitness tracking</dd></div>
+          <div><dt>Email</dt><dd><span class="val"><code id="v-support-4">support@orza.app</code><button type="button" class="cp" data-copy="v-support-4" aria-label="Copy the support email">Copy</button></span></dd></div>
+          <div><dt>Website</dt><dd><span class="val"><code id="v-gp-web">https://orza-nine.vercel.app</code><button type="button" class="cp" data-copy="v-gp-web" aria-label="Copy the website address">Copy</button></span></dd></div>
+          <div><dt>Phone</dt><dd>Optional. You can leave it empty.</dd></div>
+          <div><dt>External marketing</dt><dd>Your choice</dd></div>
+        </dl>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-19">
+      <div class="step-body">
+        <label class="step-title" for="gp-19">Main store listing</label>
+        <p class="where">Left menu › <b>Grow users › Store presence › Main store listing</b></p>
+        <ul>
+          <li><b>App name</b>, <b>Short description</b> and <b>Full description</b>: copy from <a href="#listing">Listing › Google Play</a>.</li>
+          <li><b>App icon</b>: 512 × 512 PNG. <b>Feature graphic</b>: 1024 × 500. <b>Phone screenshots</b>: 2 to 8, framed at 1080 × 1920. Claude makes these from your pictures (<a href="#screenshots">Screenshots</a>).</li>
+        </ul>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-20">
+      <div class="step-body">
+        <label class="step-title" for="gp-20">Countries: India only</label>
+        <p class="where">Production › <b>Countries / regions</b> › Add countries / regions</p>
+        <p>Choose <b class="ans">India</b> only. If the EU is ever added, check Play Console's EU trader status first: a trader's address, phone and email are shown to EU users.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-21">
+      <div class="step-body">
+        <label class="step-title" for="gp-21">Closed test (only if Step 1 says so)</label>
+        <p class="where">Test and release › <b>Testing › Closed testing</b> › create a track</p>
+        <ul>
+          <li>At least <b>12 testers</b>, opted in for <b>14 days in a row</b>, really using the app.</li>
+          <li>After the 14 days: <span class="path">Dashboard › Apply for production</span>. Google asks questions about the test.</li>
+        </ul>
+        <p>Not needed? Tick this step and move on.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-22">
+      <div class="step-body">
+        <label class="step-title" for="gp-22">Turn on Managed publishing</label>
+        <p class="where">Left menu › <b>Publishing overview</b> › Managed publishing</p>
+        <p>Turn it <b class="ans">on</b>. Then an approved app waits for you instead of going live by itself.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="gp-23">
+      <div class="step-body">
+        <label class="step-title" for="gp-23">Production release</label>
+        <p class="where">Test and release › <b>Production</b> › Create new release</p>
+        <p>Promote the tested build (or upload a new one), review the release, and send it for review.</p>
+        <div class="note"><span class="tag">What happens next</span><p>The first review usually takes a few days; the health and full-screen forms can add time. Because Managed publishing is on, the app goes live only when you publish the approved changes from Publishing overview.</p></div>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<!-- ===================== 4. LISTING ===================== -->
+<section class="part" id="listing" data-part="listing">
+  <div class="part-head">
+    <div><p class="eyebrow">Part 4 of 5</p><h2>Store listing texts</h2></div>
+    <span class="prog" data-prog="listing">0 of 8 done</span>
+  </div>
+  <div class="intro">
+    <p>Paste each text as it is. Tick <b>Pasted</b> when it's in. The counts are the store's own limits; every text fits.</p>
+    <p>The iPhone texts say "reminders" and name Apple Health. The Google Play texts say "alarms" and name Health Connect. Don't swap them between stores.</p>
+  </div>
+
+  <h3>App Store (iPhone)</h3>
+  <div class="intro">
+    <div class="copy">
+      <div class="copy-head"><span class="copy-label">Name</span><span class="count" data-count="t-asc-name" data-limit="30">28 / 30 characters</span><label class="pasted"><input type="checkbox" class="tick" id="li-a1"> Pasted</label><button type="button" class="btn" data-copy="t-asc-name">Copy</button></div>
+<pre class="copytext short" id="t-asc-name">ÖRZA: Meals, Meds &amp; AI Coach</pre>
+    </div>
+    <div class="copy">
+      <div class="copy-head"><span class="copy-label">Subtitle</span><span class="count" data-count="t-asc-sub" data-limit="30">30 / 30 characters</span><label class="pasted"><input type="checkbox" class="tick" id="li-a2"> Pasted</label><button type="button" class="btn" data-copy="t-asc-sub">Copy</button></div>
+<pre class="copytext short" id="t-asc-sub">Photo meal log, pill reminders</pre>
+    </div>
+    <div class="copy">
+      <div class="copy-head"><span class="copy-label">Promotional text</span><span class="count" data-count="t-asc-promo" data-limit="170">140 / 170 characters</span><label class="pasted"><input type="checkbox" class="tick" id="li-a3"> Pasted</label><button type="button" class="btn" data-copy="t-asc-promo">Copy</button></div>
+<pre class="copytext short" id="t-asc-promo">Log a meal with one photo, ask ÖRZA about food in English, Hindi or Hinglish, and get medicine reminders that show a photo of each medicine.</pre>
+    </div>
+    <div class="copy">
+      <div class="copy-head"><span class="copy-label">Description</span><span class="count" data-count="t-asc-desc" data-limit="4000">2,940 / 4,000 characters</span><label class="pasted"><input type="checkbox" class="tick" id="li-a4"> Pasted</label><button type="button" class="btn" data-copy="t-asc-desc">Copy</button></div>
+<pre class="copytext" id="t-asc-desc">ÖRZA is a wellness companion built around Indian food. Log meals in seconds, ask questions in your own words, and keep your medicines on time with reminders that show a photo of each one.
+
+Snap, type or say what you ate
+• Snap &amp; Know: take a photo of your plate and ÖRZA estimates the dishes, portions, calories and macros. Check and edit before you log.
+• Type or speak a meal in English or Hindi, like "2 roti, dal and a katori of rice".
+• Or pick from hundreds of Indian dishes and everyday foods, in katori, plate, piece and cup portions.
+
+Ask ÖRZA
+• Chat about food, habits and your plan. ÖRZA knows your targets and what you've logged today, and replies in English, Hindi or Hinglish.
+• See and edit what ÖRZA remembers about you.
+
+Medicines, on time
+• Add your medicines with photos, doses and times. Each reminder shows the medicine's photo, with Take, Snooze and Skip.
+• Snap a prescription: ÖRZA reads the medicines and timings (1-0-1, BD, TDS, after food), and you check each one before any reminder is set. It never changes a dose.
+• Keep track of stock, get a refill reminder, and see your last 7 days.
+
+Plan and progress
+• Daily calorie, protein, carb, fat, fibre and water targets worked out from your body, activity level and goal.
+• Recipes made for your diet, region and calorie budget.
+• Rebalance: after a festival meal or a party, a kind plan for the next few days. No guilt.
+• Goals and your weight trend, daily and weekly reports, and a spreadsheet of your week you can share with your doctor.
+
+Apple Health
+• With your permission, ÖRZA reads your steps, sleep, resting heart rate and weight from Apple Health, or counts steps with your iPhone's motion sensor. Only daily totals are saved to your account. ÖRZA never writes to Apple Health.
+
+Reminders and calendar
+• Gentle reminders for meals, water and weigh-ins, or your own, with quiet hours.
+• Add your medicine times to your iPhone's calendar.
+
+Your data, your choice
+• AI features are run by OpenAI and ask for your permission first. Everything else works without them.
+• Report any AI answer from inside the app.
+• Export your data or delete your account at any time in Settings.
+• No ads. Your health data is never sold.
+
+AI credits
+New accounts get free AI credits for photo scans, AI meal logging, chat, recipes and plans. Need more? Ask from the Credits screen. There are no purchases in the app, and logging from the food list never uses credits.
+
+Use the same account on the ÖRZA website.
+
+Important
+ÖRZA offers wellness guidance, not medical advice. It is not a medical device and does not diagnose, treat, cure, or prevent any medical condition. Calorie and nutrition values are estimates. Take medicines as your doctor prescribed, and talk to your doctor or another qualified healthcare professional for medical advice, diagnosis or treatment.
+
+Privacy policy: https://orza-nine.vercel.app/privacy
+Terms of service: https://orza-nine.vercel.app/terms</pre>
+    </div>
+    <div class="copy">
+      <div class="copy-head"><span class="copy-label">Keywords</span><span class="count" data-count="t-asc-keys" data-limit="100">95 / 100 characters</span><label class="pasted"><input type="checkbox" class="tick" id="li-a5"> Pasted</label><button type="button" class="btn" data-copy="t-asc-keys">Copy</button></div>
+<pre class="copytext short" id="t-asc-keys">calorie,counter,diet,nutrition,indian,food,tracker,medication,tablet,steps,weight,recipes,water</pre>
+    </div>
+    <dl class="fields">
+      <div><dt>Support URL</dt><dd><code>https://orza-nine.vercel.app/faq</code></dd></div>
+      <div><dt>Marketing URL</dt><dd><code>https://orza-nine.vercel.app</code></dd></div>
+      <div><dt>Privacy policy URL</dt><dd><code>https://orza-nine.vercel.app/privacy</code></dd></div>
+      <div><dt>Category</dt><dd>Health &amp; Fitness, then Food &amp; Drink</dd></div>
+    </dl>
+  </div>
+
+  <h3>Google Play (Android)</h3>
+  <div class="intro">
+    <div class="copy">
+      <div class="copy-head"><span class="copy-label">App name</span><span class="count" data-count="t-gp-name" data-limit="30">28 / 30 characters</span><label class="pasted"><input type="checkbox" class="tick" id="li-g1"> Pasted</label><button type="button" class="btn" data-copy="t-gp-name">Copy</button></div>
+<pre class="copytext short" id="t-gp-name">ÖRZA: Meals, Meds &amp; AI Coach</pre>
+    </div>
+    <div class="copy">
+      <div class="copy-head"><span class="copy-label">Short description</span><span class="count" data-count="t-gp-short" data-limit="80">78 / 80 characters</span><label class="pasted"><input type="checkbox" class="tick" id="li-g2"> Pasted</label><button type="button" class="btn" data-copy="t-gp-short">Copy</button></div>
+<pre class="copytext short" id="t-gp-short">Snap or speak meals, chat with an AI coach and get medicine alarms with photos</pre>
+    </div>
+    <div class="copy">
+      <div class="copy-head"><span class="copy-label">Full description</span><span class="count" data-count="t-gp-full" data-limit="4000">3,246 / 4,000 characters</span><label class="pasted"><input type="checkbox" class="tick" id="li-g3"> Pasted</label><button type="button" class="btn" data-copy="t-gp-full">Copy</button></div>
+<pre class="copytext" id="t-gp-full">ÖRZA is a wellness companion built around Indian food. Log meals in seconds, ask questions in your own words, and keep your medicines on time with alarms that show a photo of each one.
+
+Snap, type or say what you ate
+• Snap &amp; Know: take a photo of your plate and ÖRZA estimates the dishes, portions, calories and macros. Check and edit before you log.
+• Type or speak a meal in English or Hindi, like "2 roti, dal and a katori of rice".
+• Or pick from hundreds of Indian dishes and everyday foods, in katori, plate, piece and cup portions.
+
+Ask ÖRZA
+• Chat about food, habits and your plan. ÖRZA knows your targets and what you've logged today, and replies in English, Hindi or Hinglish.
+• See and edit what ÖRZA remembers about you.
+
+Medicines, on time
+• Add your medicines with photos, doses and times. At each dose time the alarm rings with the medicine's photo, with Take, Snooze and Skip, even when you're offline.
+• When you allow it, the alarm fills the locked screen like an alarm clock.
+• Snap a prescription: ÖRZA reads the medicines and timings (1-0-1, BD, TDS, after food), and you check each one before any alarm is set. It never changes a dose.
+• Keep track of stock, get a refill reminder, and see your last 7 days.
+• On phones that close apps to save battery, ÖRZA shows the settings that keep alarms working.
+
+Plan and progress
+• Daily calorie, protein, carb, fat, fibre and water targets worked out from your body, activity level and goal.
+• Recipes made for your diet, region and calorie budget.
+• Rebalance: after a festival meal or a party, a kind plan for the next few days. No guilt.
+• Goals and your weight trend, daily and weekly reports, and a spreadsheet of your week you can share with your doctor.
+
+Health Connect and steps
+• With your permission, ÖRZA reads your daily steps from Health Connect, from this phone and any watch or fitness app that shares steps there, or counts them with your phone's motion sensor.
+• Connect Health Connect to see your sleep, resting heart rate and weight next to what you eat.
+• Only daily totals are saved to your account. ÖRZA never writes to Health Connect.
+
+Reminders and calendar
+• Gentle reminders for meals, water and weigh-ins, or your own, with quiet hours.
+• Add your medicine times to your phone's calendar.
+
+Your data, your choice
+• AI features are run by OpenAI and ask for your permission first. Everything else works without them.
+• Report any AI answer from inside the app.
+• Export your data or delete your account at any time in Settings.
+• No ads. Your health data is never sold.
+
+AI credits
+New accounts get free AI credits for photo scans, AI meal logging, chat, recipes and plans. Need more? Ask from the Credits screen. There are no purchases in the app, and logging from the food list never uses credits.
+
+Use the same account on the ÖRZA website.
+
+Important
+ÖRZA offers wellness guidance, not medical advice. It is not a medical device and does not diagnose, treat, cure, or prevent any medical condition. Calorie and nutrition values are estimates. Take medicines as your doctor prescribed, and talk to your doctor or another qualified healthcare professional for medical advice, diagnosis or treatment.
+
+Privacy policy: https://orza-nine.vercel.app/privacy</pre>
+    </div>
+    <dl class="fields">
+      <div><dt>Category</dt><dd>Health &amp; Fitness</dd></div>
+      <div><dt>Contact email</dt><dd><code>support@orza.app</code></dd></div>
+    </dl>
+  </div>
+</section>
+
+<!-- ===================== 5. SCREENSHOTS ===================== -->
+<section class="part" id="screenshots" data-part="screenshots">
+  <div class="part-head">
+    <div><p class="eyebrow">Part 5 of 5</p><h2>Screenshots</h2></div>
+    <span class="prog" data-prog="screenshots">0 of 7 done</span>
+  </div>
+  <div class="intro">
+    <p>Take new screenshots on the <b>demo account</b>, not your own. Pictures sent through chat can't be used, because chat makes them smaller.</p>
+    <div class="note warn"><span class="tag">The 6 pictures already in E:\aylo\store-shots</span><p>IMG_1235 to IMG_1240 are full-quality originals (1170 × 2532), which is good. But they show your own account: Today and Ask ÖRZA greet you by your name, the clock says 5:08 and the battery is at 44%. Retake them on the demo account, as below. Leave the old ones where they are and put the new ones in a new folder, so the two sets don't mix.</p></div>
+  </div>
+
+  <h3>Sizes each store needs</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Store</th><th>What</th><th>Size</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="k">App Store</td><td>iPhone, Dynamic Island, <b>medium</b> (required)</td><td class="num">1206 × 2622 or 1179 × 2556</td><td>1 to 10 shots. An iPhone 15, 15 Pro or 16 makes 1179 × 2556, and a 16 Pro makes 1206 × 2622: these fit as they are.</td></tr>
+        <tr><td class="k">App Store</td><td>iPhone, Dynamic Island, <b>large</b> (required)</td><td class="num">1320 × 2868 or 1290 × 2796</td><td>The same screens. A 15 Plus, 16 Plus or 15 Pro Max makes 1290 × 2796. The other size is made from the same pictures.</td></tr>
+        <tr><td class="k">Google Play</td><td>Phone screenshots</td><td class="num">1080 × 1920</td><td>2 to 8. Upload at least 4 so Google can feature the app. Each Android shot sits in a 1080 × 1920 frame with its caption.</td></tr>
+        <tr><td class="k">Google Play</td><td>App icon</td><td class="num">512 × 512</td><td>PNG, up to 1 MB. Made from the app's icon.</td></tr>
+        <tr><td class="k">Google Play</td><td>Feature graphic</td><td class="num">1024 × 500</td><td>The dark ÖRZA look with the glowing orb and the wordmark. No phone frame, no prices, no badges.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="where">PNG or JPEG, no transparency. iPhone pictures go only to the App Store, Android pictures only to Google Play. Your iPhone makes 1170 × 2532 pictures, which fit neither Apple size as they are. That's fine: Claude puts each one in a frame at both Apple sizes.</p>
+
+  <h3>The 10 screens, in this order</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>Screen, and what it shows</th><th>Caption</th><th>App Store</th><th>Play</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td><b>Today</b> at mid-day: energy card, a few meals, water, steps, the medicines card</td><td>Your day at a glance</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td class="num">2</td><td><b>Snap &amp; Know result</b>: a thali photo, the dish list with calories, the Log button</td><td>Snap your plate. Know your meal.</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td class="num">3</td><td><b>Meals › Type or speak</b>: "2 roti, dal and a katori of rice" typed, with the mic</td><td>Type or say what you ate</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td class="num">4</td><td><b>Ask ÖRZA</b>: one question and a short, practical reply</td><td>Ask in English, Hindi or Hinglish</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td class="num">5</td><td><b>Medicines</b>: today's timeline with medicine photos, one dose marked taken</td><td>Every medicine, with its photo</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td class="num">6</td><td><b>The alarm screen</b> (Test alarm): photo, name, dose, Take / Snooze / Skip. On Android, the full-screen alarm over the lock screen.</td><td>iPhone: Take, snooze or skip<br>Android: Alarms that show the medicine</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td class="num">7</td><td><b>Prescription review</b> after scanning the sample prescription: medicines, times, "never changes a dose"</td><td>Snap a prescription, check the times</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td class="num">8</td><td><b>Health sync</b> or the Today steps card</td><td>iPhone: Steps from Apple Health<br>Android: Steps from Health Connect</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td class="num">9</td><td><b>Recipes</b>: one recipe card for a vegetarian diet</td><td>Recipes for your diet and budget</td><td>Yes</td><td>No</td></tr>
+        <tr><td class="num">10</td><td><b>Reports</b>: the weekly view</td><td>See your week</td><td>Yes</td><td>No</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="where">Keep 1 to 3 first: they are what most people see in search. Captions are added in the frames later, so take the raw screens without text.</p>
+
+  <h3>Steps</h3>
+  <ol class="steps">
+    <li class="step">
+      <input type="checkbox" class="tick" id="sc-1">
+      <div class="step-body">
+        <label class="step-title" for="sc-1">Fill the demo account with sample data for the pictures</label>
+        <ul>
+          <li>First name <b>Asha</b>: <span class="path">More › Settings › Profile › Name</span>.</li>
+          <li>Everyday Indian meals, including a thali photo for Snap.</li>
+          <li>Two or three common medicines with dose times, each photographed as a plain strip, with no person in the picture.</li>
+          <li>A <b>made-up sample prescription</b> on paper, marked "Sample", with an invented doctor and patient. Never a real one.</li>
+          <li>No real names, emails or phone numbers anywhere on screen.</li>
+          <li>Snap, Ask ÖRZA, Recipes and the prescription scan need AI, so tap <b>Allow</b> when ÖRZA asks. You turn it off again in Step 6.</li>
+        </ul>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="sc-2">
+      <div class="step-body">
+        <label class="step-title" for="sc-2">Set up the iPhone</label>
+        <ul>
+          <li>Wi-Fi on and the battery full in the status bar.</li>
+          <li>Time 9:41 if you can (take them at 9:41 in the morning).</li>
+          <li>No notifications on screen: turn on Do Not Disturb while you work.</li>
+          <li>The light look (ÖRZA has only one theme).</li>
+        </ul>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="sc-3">
+      <div class="step-body">
+        <label class="step-title" for="sc-3">Take the 10 iPhone screenshots</label>
+        <p>Press the side button and volume up together. Follow the table above. For screen 6, use <span class="path">More › Reminders › Alarms on this phone › Test alarm</span>, which rings in 10 seconds.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="sc-4">
+      <div class="step-body">
+        <label class="step-title" for="sc-4">Put the original files in a folder on the PC</label>
+        <p>Make the folder <span class="val"><code id="v-shots">E:\aylo\store-shots\demo</code><button type="button" class="cp" data-copy="v-shots" aria-label="Copy the folder path">Copy</button></span> and copy the new screenshots into it, unchanged. Copy them the same way you copied IMG_1235 to IMG_1240, or like this:</p>
+        <ol class="plain">
+          <li>Unlock the iPhone and connect it to the PC with its cable. Tap <b>Trust</b> on the iPhone if it asks.</li>
+          <li>On the PC, open File Explorer › This PC › <b>Apple iPhone</b> › Internal Storage › <b>DCIM</b>.</li>
+          <li>Find the new screenshots in the newest folders and copy them into <b>E:\aylo\store-shots\demo</b>. PNG or JPG are both fine.</li>
+        </ol>
+        <div class="note stop"><span class="tag">Don't</span><p>Don't send them through WhatsApp, chat or email. Those make the pictures smaller, and the stores reject the wrong sizes.</p></div>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="sc-5">
+      <div class="step-body">
+        <label class="step-title" for="sc-5">Tell Claude the folder is ready</label>
+        <p>Say that <b>E:\aylo\store-shots\demo</b> has the new pictures. Claude makes the framed sets from your originals: both iPhone sizes for the App Store, the 1080 × 1920 frames, the 512 × 512 icon and the 1024 × 500 feature graphic for Google Play. The frames have the caption at the top and the screen below, with no phone frame around it.</p>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="sc-6">
+      <div class="step-body">
+        <label class="step-title" for="sc-6">Put the demo account back for the reviewers</label>
+        <p>Do this before you submit to either store.</p>
+        <ul>
+          <li>Turn AI off: <span class="path">More › Settings › Privacy &amp; data › AI features › Turn off AI features › Turn off</span>. The reviewer then sees the AI question again.</li>
+          <li>Delete the medicines you added for the pictures, so exactly one "as needed" medicine with a photo is left, as the review notes say.</li>
+          <li>Check the AI credits. Taking pictures uses some. If the balance is well under 500, add more the same way (reason "Review account").</li>
+        </ul>
+      </div>
+    </li>
+    <li class="step">
+      <input type="checkbox" class="tick" id="sc-7">
+      <div class="step-body">
+        <label class="step-title" for="sc-7">Android screenshots, later</label>
+        <p>When Android testing starts again: take screens 1 to 8 on the Android phone, or Claude takes them on the computer's Android emulator. Use the Android captions from the table.</p>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<!-- ===================== LATER ===================== -->
+<section class="part" id="later">
+  <div class="part-head">
+    <div><p class="eyebrow">Not now</p><h2>Before you change these later</h2></div>
+  </div>
+  <div class="intro">
+    <div class="note warn"><span class="tag">Switching WhatsApp reminders on</span><p>First change both stores' privacy answers. Apple: App Privacy › Contact Info › Phone Number, Yes, App Functionality. Google: Data safety › Personal info › Phone number, Yes, optional, App functionality. The WhatsApp card can appear in the app without an update, so the answers must change first.</p></div>
+    <div class="note warn"><span class="tag">Adding an EU country</span><p>Decide the trader details first. Apple publishes a trader's address, phone and email on the EU store pages; check Google's the same way.</p></div>
+    <div class="note warn"><span class="tag">Selling AI credits</span><p>iPhone must use Apple In-App Purchase. Android must use Google Play Billing or Google's alternative billing programme for India. Change "free" in both descriptions and in Apple's review notes.</p></div>
+    <div class="note warn"><span class="tag">Using chats to improve the AI</span><p>Only for members who turned "Help improve ÖRZA's AI" on, and never steps or health-app data. Update Apple's App Privacy (add Other Purposes) and Google's Data safety first.</p></div>
+  </div>
+  <footer class="end">
+    <span>Answers from ÖRZA's store review pack, 13 November 2026.</span>
+    <button type="button" class="ghost" id="clear-ticks">Clear all ticks</button>
+  </footer>
+</section>
+
+</div>
+</main>
+
+</div>
+
+<script>
+(function () {
+  var KEY = 'orza-store-guide:v1';
+  var ticks = Array.prototype.slice.call(document.querySelectorAll('input.tick'));
+  var saved = [];
+  try {
+    var raw = window.localStorage.getItem(KEY);
+    if (raw) { var parsed = JSON.parse(raw); if (Array.isArray(parsed)) saved = parsed; }
+  } catch (e) { saved = []; }
+  ticks.forEach(function (t) { if (saved.indexOf(t.id) > -1) t.checked = true; });
+
+  function save() {
+    try {
+      var ids = ticks.filter(function (t) { return t.checked; }).map(function (t) { return t.id; });
+      window.localStorage.setItem(KEY, JSON.stringify(ids));
+    } catch (e) { /* the page works without storage */ }
+  }
+
+  function refresh() {
+    document.querySelectorAll('section.part[data-part]').forEach(function (sec) {
+      var all = sec.querySelectorAll('input.tick');
+      var done = 0;
+      all.forEach(function (t) {
+        if (t.checked) done++;
+        var box = t.closest('li.step, .copy');
+        if (box) box.classList.toggle('done', t.checked);
+      });
+      document.querySelectorAll('[data-prog="' + sec.id + '"]').forEach(function (el) {
+        el.textContent = el.hasAttribute('data-short') ? done + '/' + all.length : done + ' of ' + all.length + ' done';
+      });
+    });
+  }
+
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.matches && e.target.matches('input.tick')) { save(); refresh(); }
+  });
+  refresh();
+
+  // Character counts, from the text itself
+  function fmt(n) { try { return n.toLocaleString('en-IN'); } catch (e) { return String(n); } }
+  document.querySelectorAll('[data-count]').forEach(function (el) {
+    var src = document.getElementById(el.getAttribute('data-count'));
+    if (!src) return;
+    var n = Array.from(src.textContent).length;
+    var lim = Number(el.getAttribute('data-limit')) || 0;
+    if (lim > 0) {
+      el.textContent = fmt(n) + ' / ' + fmt(lim) + ' characters';
+      el.classList.toggle('over', n > lim);
+    } else {
+      el.textContent = fmt(n) + ' characters';
+    }
+  });
+
+  // Copy buttons
+  var status = document.getElementById('sr-status');
+  function flash(btn, msg) {
+    if (!btn.hasAttribute('data-label')) btn.setAttribute('data-label', btn.textContent);
+    btn.textContent = msg;
+    btn.classList.add('flash');
+    if (status) status.textContent = msg;
+    clearTimeout(btn._t);
+    btn._t = setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-label');
+      btn.classList.remove('flash');
+    }, 2200);
+  }
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('button[data-copy]') : null;
+    if (!btn) return;
+    var src = document.getElementById(btn.getAttribute('data-copy'));
+    if (!src) return;
+    var text = src.textContent;
+    function fallback() {
+      var ok = false;
+      try {
+        var range = document.createRange();
+        range.selectNodeContents(src);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        ok = document.execCommand('copy');
+      } catch (err) { ok = false; }
+      flash(btn, ok ? 'Copied' : 'Selected. Copy it now');
+    }
+    try {
+      navigator.clipboard.writeText(text).then(function () { flash(btn, 'Copied'); }, fallback);
+    } catch (err) { fallback(); }
+  });
+
+  // Highlight the part in view
+  var links = Array.prototype.slice.call(document.querySelectorAll('nav.switch a'));
+  var strip = document.querySelector('nav.switch ul');
+  function mark(id) {
+    links.forEach(function (a) {
+      var on = a.getAttribute('href') === '#' + id;
+      a.setAttribute('aria-current', on ? 'true' : 'false');
+      if (on && strip) {
+        var l = a.offsetLeft, r = l + a.offsetWidth;
+        if (l < strip.scrollLeft || r > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = Math.max(0, l - 16);
+      }
+    });
+  }
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) { if (en.isIntersecting) mark(en.target.id); });
+    }, { rootMargin: '-90px 0px -65% 0px' });
+    document.querySelectorAll('section.part[data-part]').forEach(function (s) { io.observe(s); });
+  }
+  if (location.hash) mark(location.hash.slice(1));
+
+  // Clear all ticks, with an in-page second tap
+  var clr = document.getElementById('clear-ticks');
+  var armed = false, armTimer;
+  if (clr) clr.addEventListener('click', function () {
+    if (!armed) {
+      armed = true;
+      clr.textContent = 'Tap again to clear every tick';
+      armTimer = setTimeout(function () { armed = false; clr.textContent = 'Clear all ticks'; }, 4000);
+      return;
+    }
+    clearTimeout(armTimer);
+    armed = false;
+    ticks.forEach(function (t) { t.checked = false; });
+    save();
+    refresh();
+    clr.textContent = 'Cleared';
+    setTimeout(function () { clr.textContent = 'Clear all ticks'; }, 2000);
+  });
+})();
+</script>
