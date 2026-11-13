@@ -10,10 +10,12 @@
  * - T1 permission: full access, iOS 17+ "Add Events Only", not asked, denied, blocked.
  * - T2 the accounts tried for the ÖRZA calendar: iCloud → On My iPhone → the default calendar's → other writable ones;
  *   never subscribed / birthdays / read-only ones.
- * - T3 own calendar or the default calendar.
+ * - T3 own calendar or the default calendar; T3b what a sync clears first (lost map, another account's events,
+ *   sign-out with "Add Events Only" and the same account adding again).
  * - T4 re-sync with full access (update, delete, history in the default calendar).
  * - T5 re-sync with "Add Events Only": only adds, never twice, counts what it can't fix; full access fixes it later.
- * - T6 ÖRZA's events found by their orza:// link (map lost, full access only); the default calendar's key.
+ * - T6 ÖRZA's events found by their orza:// link or ÖRZA's words (map lost, full access only), the listing window,
+ *   the default calendar's key.
  * - T7 the diagnostic line.
  * - T8 copy.
  */
@@ -26,14 +28,19 @@ import {
   decideTarget,
   DEFAULT_CALENDAR_KEY,
   DEFAULT_HISTORY_MS,
+  defaultIsNew,
   describeAttempts,
   errorText,
   iosSourceOrder,
   isICloudSource,
+  isOrzaEvent,
   isOrzaEventUrl,
   linkMode,
+  listWindow,
+  ORZA_REMINDER_NOTE,
   PHONE_CALENDAR_COPY,
   phonePermissionFrom,
+  planCleanup,
   planSync,
   removeBlockedMessage,
   sourceLabel,
@@ -42,6 +49,7 @@ import {
   type SyncedEvent,
   type WantedEvent,
 } from '../../src/features/calendar/phoneTarget';
+import { PHONE_EVENT_COPY } from '../../src/features/calendar/phoneEvents';
 
 const HOUR = 3600_000;
 const DAY = 24 * HOUR;
@@ -95,7 +103,7 @@ describe('T2 the accounts tried for the ÖRZA calendar', () => {
   test('iCloud Calendars off: On My iPhone before the default calendar\'s Google account', () => {
     assert.deepEqual(ids(iosSourceOrder([GMAIL, LOCAL], [{ sourceId: 'src-gmail', allowsModifications: true }], 'src-gmail')), ['src-local', 'src-gmail']);
   });
-  test('iCloud → local → default → other writable accounts; read-only accounts are skipped', () => {
+  test('iCloud → default → other writable accounts; read-only accounts are skipped', () => {
     const order = iosSourceOrder(
       [OUTLOOK, EXCHANGE, GMAIL, LOCAL, ICLOUD],
       [
@@ -105,7 +113,27 @@ describe('T2 the accounts tried for the ÖRZA calendar', () => {
       ],
       'src-gmail'
     );
-    assert.deepEqual(ids(order), ['src-icloud', 'src-local', 'src-gmail', 'src-ex']);
+    assert.deepEqual(ids(order), ['src-icloud', 'src-gmail', 'src-ex']);
+  });
+  test('iCloud Calendars on: the hidden local source is not tried (a calendar there may not show), unless it is in use', () => {
+    // Listed by iOS but holding no calendar: skipped.
+    assert.deepEqual(ids(iosSourceOrder([LOCAL, ICLOUD, GMAIL], [{ sourceId: 'src-gmail', allowsModifications: true }], 'src-gmail')), [
+      'src-icloud',
+      'src-gmail',
+    ]);
+    // It holds the default calendar, or another calendar ÖRZA may change: it shows, so it is tried.
+    assert.deepEqual(ids(iosSourceOrder([LOCAL, ICLOUD], [{ sourceId: 'src-local', allowsModifications: true }], 'src-local')), ['src-icloud', 'src-local']);
+    assert.deepEqual(
+      ids(iosSourceOrder([LOCAL, ICLOUD, GMAIL], [{ sourceId: 'src-local', allowsModifications: true }, { sourceId: 'src-gmail', allowsModifications: true }], 'src-gmail')),
+      ['src-icloud', 'src-gmail', 'src-local']
+    );
+  });
+  test('no iCloud: On My iPhone right after it would have been, then the rest', () => {
+    assert.deepEqual(ids(iosSourceOrder([EXCHANGE, LOCAL, GMAIL], [{ sourceId: 'src-ex', allowsModifications: true }], 'src-gmail')), [
+      'src-local',
+      'src-gmail',
+      'src-ex',
+    ]);
   });
   test('subscribed and birthday sources never take a calendar, even with a writable-looking calendar', () => {
     const order = iosSourceOrder(
@@ -136,11 +164,17 @@ describe('T3 own calendar or the default calendar', () => {
     assert.equal(decideTarget('full', { mode: 'own', mine: true }), 'own');
     assert.equal(decideTarget('full', { mode: 'own', mine: false }), 'own');
   });
-  test('events already in the default calendar stay there (any account, any access)', () => {
-    for (const access of ['full', 'writeOnly'] as const) {
-      assert.equal(decideTarget(access, { mode: 'default', mine: true }), 'default');
-      assert.equal(decideTarget(access, { mode: 'default', mine: false }), 'default');
-    }
+  test("this account's events already in the default calendar stay there (any access)", () => {
+    for (const access of ['full', 'writeOnly'] as const) assert.equal(decideTarget(access, { mode: 'default', mine: true }), 'default');
+    assert.ok(!defaultIsNew({ mode: 'default', mine: true }));
+  });
+  test("another account's events in the default calendar: full access gets an ÖRZA calendar; \"Add Events Only\" starts fresh", () => {
+    assert.equal(decideTarget('full', { mode: 'default', mine: false }), 'own');
+    assert.equal(decideTarget('writeOnly', { mode: 'default', mine: false }), 'default');
+    // Not "ÖRZA can't see what it added": this account added nothing there.
+    assert.ok(defaultIsNew({ mode: 'default', mine: false }));
+    assert.ok(defaultIsNew({ mode: 'own', mine: true }));
+    assert.ok(defaultIsNew(null));
   });
   test('"Add Events Only": the default calendar', () => {
     assert.equal(decideTarget('writeOnly', null), 'default');
@@ -153,6 +187,44 @@ describe('T3 own calendar or the default calendar', () => {
     assert.equal(afterCreateFailed('ios', true), 'default');
     assert.equal(afterCreateFailed('ios', false), 'fail');
     assert.equal(afterCreateFailed('android', true), 'fail');
+  });
+});
+
+describe('T3b what a sync clears first (never twice, nothing left behind)', () => {
+  const NONE = { deleteLeftover: false, wipeOwn: false, wipeMarked: false, refuse: false };
+  test("this account's map of this target: nothing to clear (the diff does the rest)", () => {
+    for (const target of ['own', 'default'] as const) {
+      for (const access of ['full', 'writeOnly'] as const) {
+        assert.deepEqual(planCleanup({ mine: true, created: false, target, access, leftover: null }), NONE);
+      }
+    }
+  });
+  test('a new ÖRZA calendar or a first add to the default calendar: nothing to clear', () => {
+    assert.deepEqual(planCleanup({ mine: false, created: true, target: 'own', access: 'full', leftover: null }), NONE);
+    assert.deepEqual(planCleanup({ mine: false, created: true, target: 'default', access: 'writeOnly', leftover: null }), NONE);
+  });
+  test('map lost: ÖRZA calendar wiped; default calendar: ÖRZA\'s events deleted (full access) or nothing added ("Add Events Only")', () => {
+    assert.deepEqual(planCleanup({ mine: false, created: false, target: 'own', access: 'full', leftover: null }), { ...NONE, wipeOwn: true });
+    assert.deepEqual(planCleanup({ mine: false, created: false, target: 'default', access: 'full', leftover: null }), { ...NONE, wipeMarked: true });
+    assert.deepEqual(planCleanup({ mine: false, created: false, target: 'default', access: 'writeOnly', leftover: null }), { ...NONE, refuse: true });
+  });
+  test("another account's events in the default calendar: deleted with full access, wherever this sync writes", () => {
+    assert.deepEqual(planCleanup({ mine: false, created: true, target: 'own', access: 'full', leftover: 'default' }), { ...NONE, deleteLeftover: true });
+    assert.deepEqual(planCleanup({ mine: false, created: true, target: 'default', access: 'full', leftover: 'default' }), { ...NONE, deleteLeftover: true });
+    assert.deepEqual(planCleanup({ mine: false, created: false, target: 'own', access: 'full', leftover: 'own' }), { ...NONE, wipeOwn: true });
+  });
+  test('"Add Events Only" never deletes, and adds fresh when this account has nothing there', () => {
+    assert.deepEqual(planCleanup({ mine: false, created: true, target: 'default', access: 'writeOnly', leftover: 'default' }), NONE);
+    assert.deepEqual(planCleanup({ mine: false, created: true, target: 'default', access: 'writeOnly', leftover: 'own' }), NONE);
+  });
+  test('sign-out with "Add Events Only", then the same account adds again: its kept map is diffed against, nothing twice', () => {
+    // The kept link says this account's events are in the default calendar: not new, and the map is this account's.
+    const stored = { mode: 'default' as const, mine: true };
+    assert.equal(decideTarget('writeOnly', stored), 'default');
+    assert.deepEqual(planCleanup({ mine: true, created: defaultIsNew(stored), target: 'default', access: 'writeOnly', leftover: null }), NONE);
+    const known = { a: { id: 'e1', sig: 's', start: at(HOUR) } };
+    const plan = planSync({ known, wanted: [{ key: 'a', sig: 's', start: at(HOUR) }], now: NOW, canEdit: false, historyMs: DEFAULT_HISTORY_MS });
+    assert.deepEqual(plan.create, []);
   });
 });
 
@@ -275,6 +347,29 @@ describe('T6 ÖRZA events and the default calendar key', () => {
     assert.ok(isOrzaEventUrl('ORZA://reminders'));
     for (const url of ['https://orza-nine.vercel.app/dashboard', 'notes orza://x', '', null, undefined]) assert.ok(!isOrzaEventUrl(url), String(url));
   });
+  test("ÖRZA's events by what ÖRZA writes on them, when Google / Exchange dropped the link", () => {
+    const dose = { url: null, title: PHONE_EVENT_COPY.iosMedicineTitle, notes: `Marked as taken in ÖRZA.\n${PHONE_EVENT_COPY.iosMedicineNote}\nhttps://x/dashboard/alarm` };
+    assert.ok(isOrzaEvent(dose));
+    assert.ok(isOrzaEvent({ url: undefined, title: '💧 Drink water', notes: `Stay hydrated\n${ORZA_REMINDER_NOTE}` }));
+    assert.ok(isOrzaEvent({ url: 'orza://reminders', title: 'anything', notes: null }));
+    assert.equal(ORZA_REMINDER_NOTE, 'A gentle nudge from ÖRZA.');
+  });
+  test("a member's own events are never ÖRZA's", () => {
+    for (const ev of [
+      { title: 'Dentist', notes: 'Bring the report', url: 'https://clinic.example/booking' },
+      { title: '💊 Medicine time · ÖRZA', notes: 'my own copy' }, // the title alone isn't enough
+      { title: 'Medicine time', notes: PHONE_EVENT_COPY.iosMedicineNote.slice(0, 20) },
+      { title: null, notes: null, url: null },
+      {},
+    ]) {
+      assert.ok(!isOrzaEvent(ev), JSON.stringify(ev));
+    }
+  });
+  test('the listing window around the events to change or delete', () => {
+    assert.equal(listWindow([]), null);
+    assert.equal(listWindow([{ start: 'not a date' }]), null);
+    assert.deepEqual(listWindow([{ start: at(5 * HOUR) }, { start: at(-2 * DAY) }, { start: 'x' }]), { from: NOW - 3 * DAY, to: NOW + 5 * HOUR + DAY });
+  });
   test('the default calendar is never mistaken for ÖRZA\'s own', () => {
     assert.equal(linkMode({ calendarId: DEFAULT_CALENDAR_KEY }), 'default');
     assert.equal(linkMode({ calendarId: 'A1B2C3D4-0000-1111-2222-333344445555' }), 'own');
@@ -315,18 +410,31 @@ describe('T8 copy', () => {
       PHONE_CALENDAR_COPY.writeOnlyUnknownEvents,
       "ÖRZA can't see the events it already added to your calendar, so it won't add them again (they could show twice). To fix it, tap Open Settings, then Calendars › Full Access, then tap Sync now."
     );
-    for (const text of [PHONE_CALENDAR_COPY.noCalendarIos, PHONE_CALENDAR_COPY.ownNeedsFullAccess, PHONE_CALENDAR_COPY.writeOnlyUnknownEvents]) {
+    // Access turned off (iOS asks only once): where to turn it back on.
+    assert.equal(PHONE_CALENDAR_COPY.accessOffIos, 'Calendar access is off for ÖRZA. Tap Open Settings, then Calendars › Full Access, then come back.');
+    assert.equal(
+      PHONE_CALENDAR_COPY.accessOffLinkedIos,
+      "Calendar access is off for ÖRZA, so new doses can't be added. Tap Open Settings, then Calendars › Full Access."
+    );
+    for (const text of [
+      PHONE_CALENDAR_COPY.noCalendarIos,
+      PHONE_CALENDAR_COPY.ownNeedsFullAccess,
+      PHONE_CALENDAR_COPY.writeOnlyUnknownEvents,
+      PHONE_CALENDAR_COPY.accessOffIos,
+      PHONE_CALENDAR_COPY.accessOffLinkedIos,
+    ]) {
       assert.ok(!text.includes('iCloud'), text);
     }
   });
   test('the card says where the events went', () => {
+    // True both when no account took an ÖRZA calendar and after "Add Events Only" became full access.
     assert.equal(
       PHONE_CALENDAR_COPY.defaultCalendarNote('Home'),
-      "Your iPhone didn't let ÖRZA add a calendar of its own, so the events are in your default calendar, “Home”. Remove deletes only ÖRZA's events."
+      "ÖRZA's events are in your default calendar, “Home”, not in a calendar of their own. Remove deletes only ÖRZA's events."
     );
     assert.equal(
       PHONE_CALENDAR_COPY.defaultCalendarNote(undefined),
-      "Your iPhone didn't let ÖRZA add a calendar of its own, so the events are in your default calendar. Remove deletes only ÖRZA's events."
+      "ÖRZA's events are in your default calendar, not in a calendar of their own. Remove deletes only ÖRZA's events."
     );
     assert.equal(
       PHONE_CALENDAR_COPY.writeOnlyBeforeAdd,

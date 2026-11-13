@@ -159,7 +159,9 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
               <Icon name="alert-triangle" size={16} color={colors.warning} />
               <Text variant="caption" tone="warning" style={styles.flex}>
                 {!writeOnly
-                  ? "Calendar access is off for ÖRZA, so new doses can't be added. Turn it on in Settings."
+                  ? Platform.OS === 'ios'
+                    ? PHONE_CALENDAR_COPY.accessOffLinkedIos
+                    : "Calendar access is off for ÖRZA, so new doses can't be added. Turn it on in Settings."
                   : inDefault
                     ? [link.stuck ? PHONE_CALENDAR_COPY.stuck(link.stuck) : '', PHONE_CALENDAR_COPY.writeOnlyLinked].filter(Boolean).join(' ')
                     : PHONE_CALENDAR_COPY.ownNeedsFullAccess}
@@ -215,7 +217,7 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
           <View style={styles.warn}>
             <Icon name="alert-triangle" size={16} color={colors.warning} />
             <Text variant="caption" tone="warning" style={styles.flex}>
-              Calendar access is off for ÖRZA. Turn it on in Settings, then come back.
+              {Platform.OS === 'ios' ? PHONE_CALENDAR_COPY.accessOffIos : 'Calendar access is off for ÖRZA. Turn it on in Settings, then come back.'}
             </Text>
           </View>
           <Button label="Open Settings" icon="settings" variant="primary" onPress={() => void Linking.openSettings()} style={styles.cta} />

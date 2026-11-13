@@ -19,7 +19,10 @@
  *   delete` need full access, and so does EventKit). So a re-sync only ADDS events it never added (`planSync`):
  *   changed or stopped ones stay as they are and are counted as out of date ("stuck") until full access lets ÖRZA fix
  *   them; nothing is ever written twice. Without the map ÖRZA can't know what is already there, so it adds nothing.
+ *   A sign-out that can't delete the events (no full access) keeps the link and the map, so the same account adding
+ *   again doesn't write them twice and full access can still remove them.
  */
+import { PHONE_EVENT_COPY } from './phoneEvents';
 
 /* ───────────────────────────── Access ───────────────────────────── */
 
@@ -73,6 +76,10 @@ export function isICloudSource(s: SourceInfo): boolean {
  * The accounts to try, in order, for the ÖRZA calendar on an iPhone: iCloud, On My iPhone (local), the default
  * calendar's account, then every other account that has a calendar ÖRZA may change. Subscribed and birthday sources
  * never take a calendar. Each account once.
+ *
+ * On My iPhone comes second only on an iPhone without iCloud Calendars: while iCloud Calendars is on, iOS hides the
+ * local source, and a calendar saved there may not show in the Calendar app (nor ring). It is still tried when it
+ * holds the default calendar or another calendar ÖRZA may change (then it's in use, so it shows).
  */
 export function iosSourceOrder(sources: SourceInfo[], calendars: CalendarSourceInfo[], defaultSourceId?: string | null): SourceInfo[] {
   const usable = sources.filter((s) => !!s && typeof s.id === 'string' && s.id !== '' && !SKIPPED_SOURCE_TYPES.has(s.type));
@@ -80,8 +87,9 @@ export function iosSourceOrder(sources: SourceInfo[], calendars: CalendarSourceI
   const add = (s: SourceInfo) => {
     if (!out.some((o) => o.id === s.id)) out.push(s);
   };
-  usable.filter(isICloudSource).forEach(add);
-  usable.filter((s) => s.type === 'local').forEach(add);
+  const iCloud = usable.filter(isICloudSource);
+  iCloud.forEach(add);
+  if (!iCloud.length) usable.filter((s) => s.type === 'local').forEach(add);
   if (defaultSourceId) {
     const known = sources.find((s) => s?.id === defaultSourceId);
     if (!known) add({ id: defaultSourceId, type: 'unknown', name: 'default calendar' });
@@ -131,21 +139,75 @@ export function linkMode(link: { calendarId: string }): TargetMode {
   return link.calendarId === DEFAULT_CALENDAR_KEY ? 'default' : 'own';
 }
 
+/** The link on this phone (`mine`: added by the signed-in account). */
+export interface StoredTarget {
+  mode: TargetMode;
+  mine: boolean;
+}
+
 /**
  * Where a sync writes:
- * - `default`: the member's default calendar — the phone already holds ÖRZA's events there (from any account: it
- *   stays there until Remove), or access is "Add Events Only".
+ * - `default`: the member's default calendar — this account's events are already there (they stay there until
+ *   Remove), or access is "Add Events Only".
  * - `own`: the ÖRZA calendar — the linked one, one found by its title, or a new one (`iosSourceOrder`); on an iPhone
- *   `afterCreateFailed` decides what happens when no account takes it.
+ *   `afterCreateFailed` decides what happens when no account takes it. Another account's events in the default
+ *   calendar don't keep this account there: with full access they are deleted (`planCleanup`), as when it takes over
+ *   another account's ÖRZA calendar.
  * - `ownNeedsFullAccess`: this account's ÖRZA calendar is on the phone, but "Add Events Only" can't change it, and
  *   adding the events to the default calendar too would show every dose twice.
- *
- * `stored`: the link on this phone (`mine`: added by the signed-in account).
  */
-export function decideTarget(access: PhoneAccess, stored: { mode: TargetMode; mine: boolean } | null): 'own' | 'default' | 'ownNeedsFullAccess' {
-  if (stored?.mode === 'default') return 'default';
+export function decideTarget(access: PhoneAccess, stored: StoredTarget | null): 'own' | 'default' | 'ownNeedsFullAccess' {
+  if (stored?.mode === 'default' && stored.mine) return 'default';
   if (access === 'writeOnly') return stored?.mode === 'own' && stored.mine ? 'ownNeedsFullAccess' : 'default';
   return 'own';
+}
+
+/**
+ * Writing to the default calendar: true when none of this account's ÖRZA events are there yet (no link of its own
+ * there). Another account's events there don't count — "Add Events Only" can't see or remove them, and refusing would
+ * leave this account with nothing; they're not this account's doses, so nothing is shown twice.
+ */
+export function defaultIsNew(stored: StoredTarget | null): boolean {
+  return !(stored?.mode === 'default' && stored.mine);
+}
+
+/**
+ * What a sync clears before it writes, when the map on the phone isn't this account's map of this target:
+ * - `deleteLeftover`: full access and the map's events are in the default calendar (another account's, or this
+ *   account's from before it moved to an ÖRZA calendar): delete them by id. (An own calendar's events go with
+ *   `wipeOwn`, or with the calendar.)
+ * - `wipeOwn`: this account's ÖRZA calendar was already on the phone but its map is lost (or is another account's):
+ *   delete its upcoming events, then write them again.
+ * - `wipeMarked`: the default calendar, full access, this account's events there but no map: delete ÖRZA's events
+ *   there (`isOrzaEvent`), then write them again.
+ * - `refuse`: the same with "Add Events Only": ÖRZA can't see what's there, so it adds nothing (every dose could show
+ *   twice).
+ */
+export interface Cleanup {
+  deleteLeftover: boolean;
+  wipeOwn: boolean;
+  wipeMarked: boolean;
+  refuse: boolean;
+}
+
+export function planCleanup(input: {
+  /** The map on the phone is this account's map of this target (the sync diffs against it). */
+  mine: boolean;
+  /** None of this account's events are at the target yet (a new ÖRZA calendar, or `defaultIsNew`). */
+  created: boolean;
+  target: TargetMode;
+  access: PhoneAccess;
+  /** Where the events of the map on the phone are, when there is one and it isn't `mine`. */
+  leftover: TargetMode | null;
+}): Cleanup {
+  const { mine, created, target, access, leftover } = input;
+  const full = access === 'full';
+  const out: Cleanup = { deleteLeftover: !mine && full && leftover === 'default', wipeOwn: false, wipeMarked: false, refuse: false };
+  if (mine || created) return out;
+  if (target === 'own') out.wipeOwn = true;
+  else if (full) out.wipeMarked = true;
+  else out.refuse = true;
+  return out;
 }
 
 /** No account took the ÖRZA calendar: an iPhone falls back to the default calendar when it has one. */
@@ -236,12 +298,34 @@ export function upcomingCount(events: Record<string, SyncedEvent>, now: number):
   return Object.values(events).filter((e) => Date.parse(e.start) > now).length;
 }
 
+/** The listing window that holds `events` (with a day either side), or null when there's nothing to look for. */
+export function listWindow(events: { start: string }[], padMs = 24 * 60 * 60 * 1000): { from: number; to: number } | null {
+  const starts = events.map((e) => Date.parse(e.start)).filter((t) => !Number.isNaN(t));
+  if (!starts.length) return null;
+  return { from: Math.min(...starts) - padMs, to: Math.max(...starts) + padMs };
+}
+
 /**
  * An event ÖRZA wrote on an iPhone: every one carries an `orza://` link (a dose, or the reminders screen). Used only
  * with full access when the sync map is gone, to find ÖRZA's own events in the default calendar and nothing else.
  */
 export function isOrzaEventUrl(url: string | null | undefined): boolean {
   return typeof url === 'string' && /^orza:\/\//i.test(url.trim());
+}
+
+/** The last line of the notes of every reminder event ÖRZA writes. */
+export const ORZA_REMINDER_NOTE = 'A gentle nudge from ÖRZA.';
+
+/**
+ * An event ÖRZA wrote on an iPhone, from what ÖRZA puts on each one: its `orza://` link — which Google and Exchange
+ * calendars don't keep once the event has synced — or else its words (a dose: the fixed title and note; a reminder:
+ * ÖRZA's line in the notes). A member's own event has none of them.
+ */
+export function isOrzaEvent(ev: { url?: string | null; title?: string | null; notes?: string | null }): boolean {
+  if (isOrzaEventUrl(ev.url)) return true;
+  const notes = typeof ev.notes === 'string' ? ev.notes : '';
+  if ((ev.title ?? '').trim() === PHONE_EVENT_COPY.iosMedicineTitle && notes.includes(PHONE_EVENT_COPY.iosMedicineNote)) return true;
+  return notes.includes(ORZA_REMINDER_NOTE);
 }
 
 /* ───────────────────────────── Copy ───────────────────────────── */
@@ -254,6 +338,10 @@ export const PHONE_CALENDAR_COPY = {
     'Your iPhone has no calendar ÖRZA can add events to. Choose a default calendar in Settings › Apps › Calendar › Default Calendar (Settings › Calendar on iOS 17), then try again.',
   /** Android: unchanged. */
   createFailedAndroid: "Couldn't create the ÖRZA calendar on this phone. Please try again.",
+  /** iPhone, calendar access turned off (iOS asks only once): the card, not added yet. */
+  accessOffIos: 'Calendar access is off for ÖRZA. Tap Open Settings, then Calendars › Full Access, then come back.',
+  /** iPhone, calendar access turned off: the card, added before. */
+  accessOffLinkedIos: "Calendar access is off for ÖRZA, so new doses can't be added. Tap Open Settings, then Calendars › Full Access.",
   /** "Add Events Only" with this account's ÖRZA calendar on the phone: a sync can't change it. */
   ownNeedsFullAccess: `Calendar access for ÖRZA is “Add Events Only”, so ÖRZA can't update its calendar. To keep it up to date, ${FULL_ACCESS_STEP}.`,
   /** "Add Events Only" without the sync map: what's already in the calendar is unknown, so nothing is added. */
@@ -262,9 +350,12 @@ export const PHONE_CALENDAR_COPY = {
   writeOnlyBeforeAdd: `Calendar access for ÖRZA is “Add Events Only”, so the events go into your default calendar and ÖRZA can't change or remove them later. For events ÖRZA keeps up to date, ${FULL_ACCESS_STEP}.`,
   /** Card, added to the default calendar, "Add Events Only". */
   writeOnlyLinked: `Calendar access for ÖRZA is “Add Events Only”: ÖRZA adds new events to your default calendar but can't change or remove the ones it added. For events ÖRZA keeps up to date, ${FULL_ACCESS_STEP}.`,
-  /** Card, added to the default calendar (no account took an ÖRZA calendar). */
+  /**
+   * Card, full access, events in the default calendar (no account took an ÖRZA calendar, or they were added with
+   * "Add Events Only" before full access was allowed).
+   */
   defaultCalendarNote: (title?: string | null) =>
-    `Your iPhone didn't let ÖRZA add a calendar of its own, so the events are in your default calendar${title ? `, “${title}”` : ''}. Remove deletes only ÖRZA's events.`,
+    `ÖRZA's events are in your default calendar${title ? `, “${title}”` : ''}, not in a calendar of their own. Remove deletes only ÖRZA's events.`,
   /** Card, "Add Events Only": events in the calendar ÖRZA can't fix. */
   stuck: (n: number) =>
     `${n} of ÖRZA's events in your calendar ${n === 1 ? 'is' : 'are'} out of date (a dose or reminder changed or stopped).`,
