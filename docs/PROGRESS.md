@@ -948,3 +948,8 @@ batch 1" log entry); 3 is still open.
   sign-out; test:calendar 52) + purpose string "…to your iPhone's calendar…" (`2bdd8ef`). **iOS build 4** started from `2bdd8ef`
   (auto-submit to TestFlight). The App Store submission uses build 4 after the user's check (Calendar › Add to my calendar on a
   Gmail-default iPhone → events in iCloud "ÖRZA" or the Gmail calendar).
+- 2026-11-14: **iOS build 4 uploaded to App Store Connect** (EAS a0a57b0c…, submission finished 00:41; from `2bdd8ef`, carries the
+  calendar fix). **Play phone screenshots DONE** (`bc35033`): 8 framed 1080×1920 shots in E:\aylo\store-shots\play\phone (raw in
+  play\raw; spec scripts/store/play-phone.json; sample account asha.demo@orza.test on the LOCAL server; 0 AI calls). Notes: in-app
+  times show early afternoon while the status bar says 9:41; the alarm shot is a real dose alarm (Vitamin B12) with its schedule edit
+  reverted. All store graphics now ready: App Store 4 framed shots (2 sizes), Play 8 shots + feature graphic + 512 icon.
