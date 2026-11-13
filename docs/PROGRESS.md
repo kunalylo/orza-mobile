@@ -896,3 +896,14 @@ batch 1" log entry); 3 is still open.
   (`wf_45ef6833-68d`): App Store audit + code fixes + App Store Connect answers (`docs/store/app-store.md`), Google Play audit +
   Play Console answers (`docs/store/google-play.md`), listing copy + screenshot plan (`docs/store/listing.md`), review. After it:
   iOS TestFlight build 3 from main (carries the a11y polish, AI report, V2 fixes, D3 fixes).
+- 2026-11-13: D3 store pack DONE (`a478b71`, `2b1cf48`, `fb431a7`, `b1113c4`, `5d54949`; docs/store/{app-store,google-play,listing}.md).
+  USER ANSWERS: (1) publish as the INDIVIDUAL accounts (Apple "Kunal Patil (Individual)"; Play = FatafatDecor's, type/age unknown →
+  watch for the 12-tester/14-day closed test); (2) support@orza.app receives mail (connect@yourlocalonline.in also usable);
+  (3) credits FREE at launch (members request, admins grant); LATER Razorpay on Android + IAP on iOS (note: Play's payments policy —
+  digital goods need Play Billing or Google's India alternative-billing program); (4) India first, other countries later (EU needs
+  the trader contact details published); (5) WhatsApp NOT live until Meta verification → don't declare phone numbers yet; update both
+  stores' privacy answers BEFORE switching it on; (6) demo account: the user may let the coordinator create it, but passwords on
+  production stay with the user (no password entry/sign-in on production by Claude) → the user creates it from the checklist.
+  Waiting: the user's OK on the recommendation list (18+, AI-improve opt-in default off, 3 privacy edits, iPhone calendar without
+  medicine names, full-screen intent option B, location/product-interaction declarations, category, website menu hidden from the app,
+  new copy). Then build 3.
