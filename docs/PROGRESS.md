@@ -932,3 +932,9 @@ batch 1" log entry); 3 is still open.
   sync left out (family names / real prescription; "no sleep data" note) → retake on the demo account. Android screenshots +
   feature graphic still to make (emulator; no iPhone imagery on Play). Open: App Store name "ÖRZA" vs listing "ÖRZA: Meals, Meds &
   AI Coach" (user sets it in App Information); Play developer name vs "Kunal Patil".
+- 2026-11-13: USER found on TestFlight build 3 (guide Apple step 1): iPhone Calendar › "Add to my calendar" → "Couldn't create the ÖRZA
+  calendar…" (first real-iPhone test of the calendar). Fixing (`wf_8c8ee5d6-5cc`): try every writable source (iCloud → On My iPhone →
+  default → others), fall back to the default calendar ("Medicine time · ÖRZA", tracked by the sync map) when no calendar can be
+  created or access is "Add Events Only", case-specific messages. Then iOS build 4 → the user re-checks; App Store submission uses
+  build 4. Asked the user for their iPhone's calendar setup (Settings › Calendar › Accounts / Default Calendar; Settings › ÖRZA ›
+  Calendars).
