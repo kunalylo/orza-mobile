@@ -912,3 +912,10 @@ batch 1" log entry); 3 is still open.
   controller + grievance contact via constants — name/contact to CONFIRM with the user before the web push), D4 iPhone calendar
   events without medicine names, D5 from=app hides the website menu for app-opened pages, D6 store docs updated. Then: web push
   (after the user confirms the name), iOS TestFlight build 3 from main.
+- 2026-11-13: D3 decisions applied + reviewed (`d921d3f`, `7f25327`, `6d801f6`; web `d88842f`, `3fb24cc`). USER: "whatever you think,
+  go faster" → privacy controller "Kunal Patil", grievance support@orza.app (constants in web `src/components/pages/legal/responsible.ts`).
+  Web `d3-web` PUSHED (main `3fb24cc`). The user CREATED the demo account appreview@yourlocalonline.in (the password stays with the
+  user: they enter it in App Store Connect / Play Console themselves; never written to the repo). iOS build 3 started from
+  `6d801f6` (terminal tab, `--auto-submit` with ascAppId). Open: the calendar subscription feed (webcal) still names medicines
+  (opt-in, Apple's servers fetch it if added to iCloud — low risk, decide later); past calendar events from builds 1–2 keep names
+  until Remove + Add on the Calendar card; the Play developer name vs "Kunal Patil".
