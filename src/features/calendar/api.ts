@@ -129,7 +129,8 @@ export interface PhoneCalendarState {
 async function readPhoneState(userId: string): Promise<PhoneCalendarState> {
   if (!phoneCalendarSupported) return { supported: false, permission: 'blocked', link: null };
   const permission = await getPhonePermission();
-  const link = permission === 'granted' ? ((await linkedCalendar(userId))?.link ?? null) : await readLink(userId);
+  // Only full access can look the calendar up; "Add Events Only" and no access keep the link as it is.
+  const link = permission === 'granted' ? await linkedCalendar(userId) : await readLink(userId);
   return { supported: true, permission, link };
 }
 
@@ -139,9 +140,16 @@ export function usePhoneCalendarState() {
 }
 
 /**
- * Ask for access when needed, fetch the next 14 days + reminders, then write them into the ÖRZA calendar.
- * `ask: false` is the quiet re-sync when Calendar opens: it never prompts and only refreshes a calendar this account
- * already added. Every sync shares `calendarKeys.phoneSync()`, and they run one at a time (deviceCalendar.ts).
+ * "Add Events Only": the first "Add to my calendar" tap of an app run asks iOS for full access (iOS may offer the
+ * member the upgrade, or answer at once with the current access). Never on Sync now or a quiet re-sync.
+ */
+let askedFullAccessUpgrade = false;
+
+/**
+ * Ask for access when needed, fetch the next 14 days + reminders, then write them into the ÖRZA calendar (or the
+ * default calendar, deviceCalendar.ts). `ask: false` is the quiet re-sync when Calendar opens: it never prompts and
+ * only refreshes a calendar this account already added. Every sync shares `calendarKeys.phoneSync()`, and they run
+ * one at a time (deviceCalendar.ts).
  */
 export function usePhoneCalendarSync(tz: string, today: string) {
   const qc = useQueryClient();
@@ -150,8 +158,12 @@ export function usePhoneCalendarSync(tz: string, today: string) {
     mutationKey: calendarKeys.phoneSync(),
     mutationFn: async ({ ask = true }: { ask?: boolean } = {}) => {
       let permission = await getPhonePermission();
-      if (permission !== 'granted' && ask && permission !== 'blocked') permission = await requestPhonePermission();
-      if (permission !== 'granted') {
+      if (ask && (permission === 'undetermined' || permission === 'denied')) permission = await requestPhonePermission();
+      else if (ask && permission === 'writeOnly' && !askedFullAccessUpgrade && !(await readLink(userId))) {
+        askedFullAccessUpgrade = true;
+        permission = await requestPhonePermission();
+      }
+      if (permission !== 'granted' && permission !== 'writeOnly') {
         throw new PhoneCalendarError(
           'permission',
           permission === 'blocked'

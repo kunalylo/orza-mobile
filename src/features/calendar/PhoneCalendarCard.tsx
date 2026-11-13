@@ -1,7 +1,9 @@
 /**
  * "Add ÖRZA to my phone calendar" — creates a dedicated ÖRZA calendar on the phone with the next 14 days of medicine
  * doses (and reminders with Calendar on), each with an alert. Re-syncs on demand and quietly when it's stale. On an
- * iPhone it also says that medicine events leave out the medicine's name (`./phoneEvents`).
+ * iPhone it also says that medicine events leave out the medicine's name (`./phoneEvents`), and, when the events had
+ * to go into the default calendar or access is "Add Events Only", where they are and what ÖRZA can do there
+ * (`./phoneTarget`).
  */
 import { useEffect, useState } from 'react';
 import { AppState, Linking, Platform, StyleSheet, View } from 'react-native';
@@ -17,8 +19,10 @@ import { Button, GlassCard, Icon, Skeleton, Tag, Text, toast } from '@/ui';
 import { calendarKeys, usePhoneCalendarState, usePhoneCalendarSync, useRemovePhoneCalendar } from './api';
 import { AUTO_SYNC_AFTER_MS, isPhoneCalendarStale, PhoneCalendarError, phoneCalendarMessage, SYNC_DAYS, type PhoneSyncResult } from './deviceCalendar';
 import { PHONE_EVENT_COPY } from './phoneEvents';
+import { linkMode, PHONE_CALENDAR_COPY } from './phoneTarget';
 
 function syncSummary(r: PhoneSyncResult): string {
+  if (r.created && r.mode === 'default') return PHONE_CALENDAR_COPY.addedToDefault(r.total);
   if (r.created) return `Added ÖRZA to your calendar with ${r.total} event${r.total === 1 ? '' : 's'}.`;
   const changes = r.added + r.updated + r.removed;
   if (!changes) return 'Your calendar is already up to date.';
@@ -34,6 +38,8 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [error, setError] = useState<{ message: string; permission: boolean } | null>(null);
   const fail = (e: unknown) => setError({ message: phoneCalendarMessage(e), permission: e instanceof PhoneCalendarError && e.reason === 'permission' });
+  // Remove's errors always show: without full access it changes nothing and says how to allow it.
+  const failRemove = (e: unknown) => setError({ message: phoneCalendarMessage(e), permission: false });
 
   // Re-read permission + link when coming back from Settings or the Calendar app.
   useEffect(() => {
@@ -46,7 +52,12 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
   const data = state.data;
   const link = data?.link ?? null;
   const granted = data?.permission === 'granted';
+  const writeOnly = data?.permission === 'writeOnly';
   const blocked = data?.permission === 'blocked';
+  // Events in the member's default calendar (no account took an ÖRZA calendar, or "Add Events Only").
+  const inDefault = !!link && linkMode(link) === 'default';
+  // "Add Events Only" can still add new events to the default calendar; ÖRZA's own calendar needs full access.
+  const canSync = granted || (writeOnly && inDefault);
 
   // Quiet re-sync when the copy on the phone is older than a few hours or ÖRZA data changed. "Syncing" counts any
   // sync still running — including one started before this screen was last closed — so reopening Calendar mid-sync
@@ -56,10 +67,10 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
   const { mutate: runSync, isError: syncFailed } = sync;
   const syncing = useIsMutating({ mutationKey: calendarKeys.phoneSync() }) > 0;
   useEffect(() => {
-    if (!linked || !granted || syncing || syncFailed) return;
+    if (!linked || !canSync || syncing || syncFailed) return;
     const syncedAt = syncedAtIso ? Date.parse(syncedAtIso) : 0;
     if (isPhoneCalendarStale() || Date.now() - syncedAt > AUTO_SYNC_AFTER_MS) runSync({ ask: false });
-  }, [linked, granted, syncedAtIso, syncing, syncFailed, runSync]);
+  }, [linked, canSync, syncedAtIso, syncing, syncFailed, runSync]);
 
   const add = () => {
     setError(null);
@@ -84,11 +95,11 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
       onSuccess: () => {
         haptics.success();
         setConfirmRemove(false);
-        toast.success('Removed the ÖRZA calendar from this phone.');
+        toast.success(inDefault ? PHONE_CALENDAR_COPY.removedFromDefault : 'Removed the ÖRZA calendar from this phone.');
       },
       onError: (e) => {
         haptics.error();
-        fail(e);
+        failRemove(e);
       },
     });
   };
@@ -109,8 +120,10 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
         right={link ? <Tag label="On" tone="success" dot /> : undefined}
       />
       <Text variant="small" tone="muted" style={styles.body}>
-        A calendar called “ÖRZA” with your medicine doses — and reminders with Calendar switched on — for the next {SYNC_DAYS} days. Each event
-        rings at its time, even when ÖRZA isn&apos;t open.{Platform.OS === 'ios' ? ` ${PHONE_EVENT_COPY.iosCardNote}` : ''}
+        {inDefault
+          ? `Your medicine doses — and reminders with Calendar switched on — for the next ${SYNC_DAYS} days, in your default calendar.`
+          : `A calendar called “ÖRZA” with your medicine doses — and reminders with Calendar switched on — for the next ${SYNC_DAYS} days.`}{' '}
+        Each event rings at its time, even when ÖRZA isn&apos;t open.{Platform.OS === 'ios' ? ` ${PHONE_EVENT_COPY.iosCardNote}` : ''}
       </Text>
 
       {state.isPending ? (
@@ -136,36 +149,60 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
               </Text>
             </View>
           </View>
+          {granted && inDefault ? (
+            <Text variant="caption" tone="muted" style={styles.note}>
+              {PHONE_CALENDAR_COPY.defaultCalendarNote(link.calendarTitle)}
+            </Text>
+          ) : null}
           {!granted ? (
             <View style={styles.warn}>
               <Icon name="alert-triangle" size={16} color={colors.warning} />
               <Text variant="caption" tone="warning" style={styles.flex}>
-                Calendar access is off for ÖRZA, so new doses can&apos;t be added. Turn it on in Settings.
+                {!writeOnly
+                  ? "Calendar access is off for ÖRZA, so new doses can't be added. Turn it on in Settings."
+                  : inDefault
+                    ? [link.stuck ? PHONE_CALENDAR_COPY.stuck(link.stuck) : '', PHONE_CALENDAR_COPY.writeOnlyLinked].filter(Boolean).join(' ')
+                    : PHONE_CALENDAR_COPY.ownNeedsFullAccess}
               </Text>
             </View>
           ) : null}
           {confirmRemove ? (
             <ConfirmStrip
-              message="Remove the ÖRZA calendar and all its events from this phone? Your medicines and reminders in ÖRZA stay as they are."
-              confirmLabel="Remove calendar"
+              message={
+                inDefault
+                  ? PHONE_CALENDAR_COPY.removeDefaultConfirm
+                  : 'Remove the ÖRZA calendar and all its events from this phone? Your medicines and reminders in ÖRZA stay as they are.'
+              }
+              confirmLabel={inDefault ? PHONE_CALENDAR_COPY.removeDefaultConfirmLabel : 'Remove calendar'}
               busy={remove.isPending}
               onCancel={() => setConfirmRemove(false)}
               onConfirm={doRemove}
             />
           ) : (
             <View style={styles.actions}>
-              {granted ? (
-                <Button label="Sync now" icon="refresh-cw" variant="primary" size="sm" loading={syncing} onPress={add} />
-              ) : (
-                <Button label="Open Settings" icon="settings" variant="primary" size="sm" onPress={() => void Linking.openSettings()} />
-              )}
+              {canSync ? <Button label="Sync now" icon="refresh-cw" variant="primary" size="sm" loading={syncing} onPress={add} /> : null}
+              {!granted ? (
+                <Button
+                  label="Open Settings"
+                  icon="settings"
+                  variant={canSync ? 'secondary' : 'primary'}
+                  size="sm"
+                  onPress={() => void Linking.openSettings()}
+                />
+              ) : null}
               <Button
                 label="Remove"
                 icon="trash-2"
                 variant="ghost"
                 size="sm"
-                disabled={syncing}
+                disabled={syncing || remove.isPending}
                 onPress={() => {
+                  setError(null);
+                  // Without full access Remove changes nothing (it says how to allow it), so there's nothing to confirm.
+                  if (!granted) {
+                    doRemove();
+                    return;
+                  }
                   haptics.warning();
                   setConfirmRemove(true);
                 }}
@@ -183,6 +220,19 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
           </View>
           <Button label="Open Settings" icon="settings" variant="primary" onPress={() => void Linking.openSettings()} style={styles.cta} />
         </View>
+      ) : writeOnly ? (
+        <View>
+          <View style={styles.warn}>
+            <Icon name="alert-triangle" size={16} color={colors.warning} />
+            <Text variant="caption" tone="warning" style={styles.flex}>
+              {PHONE_CALENDAR_COPY.writeOnlyBeforeAdd}
+            </Text>
+          </View>
+          <View style={styles.actions}>
+            <Button label="Add to my calendar" icon="calendar" variant="energy" loading={syncing} onPress={add} />
+            <Button label="Open Settings" icon="settings" variant="secondary" onPress={() => void Linking.openSettings()} />
+          </View>
+        </View>
       ) : (
         <Button label="Add to my calendar" icon="calendar" variant="energy" loading={syncing} onPress={add} style={styles.cta} />
       )}
@@ -199,6 +249,7 @@ export function PhoneCalendarCard({ tz, today }: { tz: string; today: string }) 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   body: { marginTop: spacing.md },
+  note: { marginTop: spacing.md },
   skel: { marginTop: spacing.lg, gap: spacing.md },
   stats: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.lg, alignItems: 'center' },
   stat: { flexShrink: 1, gap: 2 },

@@ -1,18 +1,25 @@
 /**
  * "Add ÖRZA to my phone calendar" — writes the next 14 days of medicine doses (and reminders with Calendar switched on)
- * into a dedicated "ÖRZA" calendar on the phone, each event with an alert at its time, using the expo-calendar v57
- * object API (`createCalendar`, `ExpoCalendar`, `ExpoCalendarEvent`).
+ * into the phone's calendar, each event with an alert at its time, using the expo-calendar v57 object API
+ * (`createCalendar`, `ExpoCalendar`, `ExpoCalendarEvent`).
  *
- * - iOS: needs full calendar access (write-only can't create calendars); the calendar lives in the default source
- *   (iCloud / On My iPhone), falling back to the local source. iCloud syncs it, so medicine events name no medicine
- *   ("💊 Medicine time · ÖRZA", `./phoneEvents`).
+ * - iOS, full access: a dedicated "ÖRZA" calendar in the first account that takes it — iCloud, On My iPhone, the
+ *   default calendar's account, then any other account with a calendar ÖRZA may change (`iosSourceOrder` in
+ *   `./phoneTarget`). When none does (e.g. the default calendar is in a Google account and iCloud Calendars is on, so
+ *   iOS hides On My iPhone), the events go into the member's default calendar instead ("default" mode). The calendar
+ *   can sync to iCloud / Google, so medicine events name no medicine ("💊 Medicine time · ÖRZA", `./phoneEvents`).
+ * - iOS 17+ "Add Events Only" (write-only) access: no calendar can be created or read, so the events go into the
+ *   default calendar and a re-sync only adds events it never added (`planSync`): changed or stopped ones can't be
+ *   changed or deleted and are counted as out of date until full access comes back.
  * - Android: a calendar under a LOCAL account (not synced anywhere), owned by "ÖRZA"; events keep the medicine's name.
  * - Re-sync is a diff against a map of server event id → phone event id (+ a signature), kept in a JSON file in the
- *   app's documents folder; the calendar id lives in SecureStore. If the map is lost but the calendar still exists, the
- *   calendar's upcoming events are wiped first, so a re-sync never duplicates events.
+ *   app's documents folder; the calendar id (or `DEFAULT_CALENDAR_KEY` for the default calendar) lives in SecureStore.
+ *   If the map is lost: ÖRZA's own calendar has its upcoming events wiped first; in the default calendar only events
+ *   carrying ÖRZA's `orza://` link are deleted (full access) — with "Add Events Only" nothing is added, since ÖRZA
+ *   can't see what's there. A re-sync never duplicates events and never touches the member's own events.
  * - The link and the map name the ÖRZA account that added the calendar: another account signed in on the same phone
  *   sees "not added" (and never auto-syncs into it); if it adds the calendar it takes it over (wipe + rewrite). A
- *   deliberate sign-out deletes the calendar (`clearPhoneCalendar`).
+ *   deliberate sign-out deletes ÖRZA's calendar or ÖRZA's events (`clearPhoneCalendar`).
  * - Syncs, removal and the sign-out clean-up run one at a time (`serialized`), so two syncs never create the same
  *   events twice.
  * - Not available in Expo Go or on web (`phoneCalendarSupported`).
@@ -27,8 +34,34 @@ import { ApiError, errorMessage } from '@/lib/api';
 import { WEB_URL } from '@/lib/config';
 
 import { medicineEventText } from './phoneEvents';
+import {
+  accessFor,
+  afterCreateFailed,
+  decideTarget,
+  DEFAULT_CALENDAR_KEY,
+  DEFAULT_HISTORY_MS,
+  describeAttempts,
+  errorText,
+  iosSourceOrder,
+  isOrzaEventUrl,
+  linkMode,
+  PHONE_CALENDAR_COPY,
+  phonePermissionFrom,
+  planSync,
+  removeBlockedMessage,
+  sourceLabel,
+  upcomingCount,
+  type CreateAttempt,
+  type PhoneAccess,
+  type PhonePermission,
+  type SourceInfo,
+  type SyncedEvent,
+  type TargetMode,
+} from './phoneTarget';
 import type { CalendarEvent } from './types';
 import { addDays, parseDoseEventId, parseReminderEventId } from './utils';
+
+export type { PhonePermission, TargetMode } from './phoneTarget';
 
 export const CALENDAR_TITLE = 'ÖRZA';
 const CALENDAR_NAME = 'orza_reminders';
@@ -38,6 +71,7 @@ export const SYNC_DAYS = 14;
 /** Re-sync quietly when the calendar screen opens and the last sync is older than this. */
 export const AUTO_SYNC_AFTER_MS = 6 * 60 * 60 * 1000;
 
+const DAY_MS = 86400000;
 const LINK_KEY = 'orza.phoneCalendar';
 const MAP_FILE = 'orza-phone-calendar.json';
 const STORE_OPTIONS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK };
@@ -113,8 +147,11 @@ function serialized<T>(work: () => Promise<T>): Promise<T> {
 /* ───────────────────────────── Errors ───────────────────────────── */
 
 export class PhoneCalendarError extends Error {
-  /** `unlinked`: a quiet re-sync found the calendar removed (or added by another account) and left it alone. */
-  readonly reason: 'unsupported' | 'permission' | 'create' | 'write' | 'unlinked';
+  /**
+   * `unlinked`: a quiet re-sync found the calendar removed (or added by another account) and left it alone.
+   * `writeOnly`: "Add Events Only" access and ÖRZA can't tell what it already added, so it added nothing.
+   */
+  readonly reason: 'unsupported' | 'permission' | 'create' | 'write' | 'unlinked' | 'writeOnly';
   constructor(reason: PhoneCalendarError['reason'], message: string) {
     super(message);
     this.name = 'PhoneCalendarError';
@@ -131,30 +168,41 @@ export function phoneCalendarMessage(e: unknown): string {
 
 /* ───────────────────────────── Permission ───────────────────────────── */
 
-export type PhonePermission = 'granted' | 'undetermined' | 'denied' | 'blocked';
-
-function toPermission(p: Calendar.PermissionResponse): PhonePermission {
-  if (p.granted) return 'granted';
-  if (p.status === 'undetermined') return 'undetermined';
-  return p.canAskAgain ? 'denied' : 'blocked';
-}
-
+/**
+ * Full access, or (iPhone, iOS 17+) "Add Events Only". expo-calendar's full-access check reports "Add Events Only"
+ * as denied for good, so the write-only check tells the two apart.
+ */
 export async function getPhonePermission(): Promise<PhonePermission> {
   if (!phoneCalendarSupported) return 'blocked';
   try {
-    return toPermission(await Calendar.getCalendarPermissions());
+    const full = await Calendar.getCalendarPermissions();
+    let writeOnly = false;
+    if (!full.granted && Platform.OS === 'ios' && full.status !== 'undetermined') {
+      try {
+        writeOnly = (await Calendar.getCalendarPermissions(true)).granted;
+      } catch {
+        writeOnly = false;
+      }
+    }
+    return phonePermissionFrom(full, writeOnly);
   } catch {
     return 'undetermined';
   }
 }
 
+/**
+ * Asks for full access (it's what lets ÖRZA create its calendar and keep the events up to date). With "Add Events
+ * Only" already chosen, iOS may offer the member the upgrade, or answer at once with the current access.
+ */
 export async function requestPhonePermission(): Promise<PhonePermission> {
   if (!phoneCalendarSupported) return 'blocked';
   try {
-    return toPermission(await Calendar.requestCalendarPermissions());
+    const res = await Calendar.requestCalendarPermissions();
+    if (res.granted) return 'granted';
   } catch {
     throw new PhoneCalendarError('unsupported', "Calendar access isn't available in this version of the app.");
   }
+  return getPhonePermission();
 }
 
 /* ───────────────────────────── Storage ───────────────────────────── */
@@ -162,15 +210,14 @@ export async function requestPhonePermission(): Promise<PhonePermission> {
 export interface PhoneCalendarLink {
   /** The ÖRZA account that added (and syncs) the calendar on this phone. */
   userId: string;
+  /** ÖRZA's own calendar, or `DEFAULT_CALENDAR_KEY` when the events are in the member's default calendar. */
   calendarId: string;
   syncedAt: string | null;
   count: number;
-}
-
-interface SyncedEvent {
-  id: string;
-  sig: string;
-  start: string;
+  /** Default calendar (full access): its name, for the card. */
+  calendarTitle?: string;
+  /** "Add Events Only": upcoming events ÖRZA added that are out of date and that it can't change. */
+  stuck?: number;
 }
 
 interface SyncMap {
@@ -232,13 +279,14 @@ function writeMap(map: SyncMap | null) {
     }
     file.write(JSON.stringify(map));
   } catch {
-    // Without the map the next sync wipes and rewrites the calendar's upcoming events (still no duplicates).
+    // Without the map the next sync wipes and rewrites ÖRZA's upcoming events (still no duplicates).
   }
 }
 
 /* ───────────────────────────── Calendar ───────────────────────────── */
 
 async function getCalendarById(id: string): Promise<Calendar.ExpoCalendar | null> {
+  if (id === DEFAULT_CALENDAR_KEY) return null; // the member's calendar, never ÖRZA's own
   try {
     return await Calendar.ExpoCalendar.get(id);
   } catch {
@@ -262,72 +310,132 @@ async function findOwnCalendar(): Promise<Calendar.ExpoCalendar | null> {
   }
 }
 
-async function createOwnCalendar(tz: string): Promise<Calendar.ExpoCalendar> {
-  if (Platform.OS === 'android') {
-    return Calendar.createCalendar({
-      title: CALENDAR_TITLE,
-      color: CALENDAR_COLOR,
-      name: CALENDAR_NAME,
-      source: { isLocalAccount: true, name: CALENDAR_TITLE, type: Calendar.SourceType.LOCAL },
-      ownerAccount: CALENDAR_TITLE,
-      accessLevel: Calendar.CalendarAccessLevel.OWNER,
-      timeZone: tz,
-      isVisible: true,
-      isSynced: true,
-    });
-  }
-  // iOS: the default calendar's source first (iCloud / On My iPhone), then the local source.
-  const sources: (string | undefined)[] = [];
+/** iPhone: the ÖRZA calendar in the first account that takes it (`iosSourceOrder`). Throws when none does. */
+async function createIosCalendar(): Promise<Calendar.ExpoCalendar> {
+  const attempts: CreateAttempt[] = [];
+  let sources: SourceInfo[] = [];
   try {
-    sources.push(Calendar.getDefaultCalendarSync().source?.id);
-  } catch {
-    // no default calendar
+    sources = Calendar.getSourcesSync().flatMap((s) => (s?.id ? [{ id: s.id, type: String(s.type ?? ''), name: String(s.name ?? '') }] : []));
+  } catch (e) {
+    attempts.push({ source: 'list of accounts', error: errorText(e) });
   }
+  let calendars: { sourceId?: string; allowsModifications: boolean }[] = [];
   try {
-    sources.push(Calendar.getSourcesSync().find((s) => s.type === Calendar.SourceType.LOCAL)?.id);
-  } catch {
-    // sources unavailable
+    calendars = (await Calendar.getCalendars(Calendar.EntityTypes.EVENT)).map((c) => ({ sourceId: c.source?.id, allowsModifications: !!c.allowsModifications }));
+  } catch (e) {
+    attempts.push({ source: 'list of calendars', error: errorText(e) });
   }
-  sources.push(undefined); // let iOS pick
-  let lastError: unknown = null;
-  for (const sourceId of [...new Set(sources)]) {
+  let defaultSourceId: string | undefined;
+  try {
+    defaultSourceId = Calendar.getDefaultCalendarSync().source?.id;
+  } catch (e) {
+    attempts.push({ source: 'default calendar', error: errorText(e) });
+  }
+  for (const source of iosSourceOrder(sources, calendars, defaultSourceId)) {
     try {
-      return await Calendar.createCalendar({ title: CALENDAR_TITLE, color: CALENDAR_COLOR, entityType: Calendar.EntityTypes.EVENT, ...(sourceId ? { sourceId } : {}) });
+      return await Calendar.createCalendar({ title: CALENDAR_TITLE, color: CALENDAR_COLOR, entityType: Calendar.EntityTypes.EVENT, sourceId: source.id });
     } catch (e) {
-      lastError = e;
+      attempts.push({ source: sourceLabel(source), error: errorText(e) });
     }
   }
-  throw lastError ?? new Error('createCalendar failed');
+  // One line for development logs: the real reason of every try (never shown to members).
+  if (__DEV__) console.warn(`[ÖRZA phone calendar] ${describeAttempts(attempts)}`);
+  throw new Error(describeAttempts(attempts));
 }
 
-/** The ÖRZA calendar already on the phone (whichever account added it — adding it again takes it over), or a new one. */
-async function ensureCalendar(tz: string): Promise<{ calendar: Calendar.ExpoCalendar; created: boolean }> {
-  const link = await readStoredLink();
-  const existing = (link && (await getCalendarById(link.calendarId))) || (await findOwnCalendar());
-  if (existing) return { calendar: existing, created: false };
+function createAndroidCalendar(tz: string): Promise<Calendar.ExpoCalendar> {
+  return Calendar.createCalendar({
+    title: CALENDAR_TITLE,
+    color: CALENDAR_COLOR,
+    name: CALENDAR_NAME,
+    source: { isLocalAccount: true, name: CALENDAR_TITLE, type: Calendar.SourceType.LOCAL },
+    ownerAccount: CALENDAR_TITLE,
+    accessLevel: Calendar.CalendarAccessLevel.OWNER,
+    timeZone: tz,
+    isVisible: true,
+    isSynced: true,
+  });
+}
+
+function defaultCalendarOrNull(): Calendar.ExpoCalendar | null {
   try {
-    return { calendar: await createOwnCalendar(tz), created: true };
+    return Platform.OS === 'ios' ? Calendar.getDefaultCalendarSync() : null;
   } catch {
-    throw new PhoneCalendarError(
-      'create',
-      Platform.OS === 'ios'
-        ? "Couldn't create the ÖRZA calendar. Check that iCloud Calendars or On My iPhone is available in Settings → Calendar → Accounts."
-        : "Couldn't create the ÖRZA calendar on this phone. Please try again."
-    );
+    return null;
   }
 }
 
-/** `userId`'s linked calendar (still on the phone), if any. Clears a link whose calendar was deleted in the Calendar app. */
-export async function linkedCalendar(userId: string): Promise<{ link: PhoneCalendarLink; calendar: Calendar.ExpoCalendar } | null> {
+/** Where a sync writes (see `decideTarget`). */
+interface SyncTarget {
+  mode: TargetMode;
+  /** The map's and the link's `calendarId`. */
+  key: string;
+  /** New events are created here: ÖRZA's calendar, or the default calendar (a virtual one with "Add Events Only"). */
+  calendar: Calendar.ExpoCalendar;
+  /** No ÖRZA events were on the phone there before this sync (a new calendar, or the first use of the default one). */
+  created: boolean;
+  /** Full access: events can be read, changed and deleted. */
+  canEdit: boolean;
+  /** Default calendar with full access: its name. */
+  title?: string;
+}
+
+function defaultTarget(calendar: Calendar.ExpoCalendar, access: PhoneAccess, created: boolean): SyncTarget {
+  let title: string | undefined;
+  if (access === 'full') {
+    try {
+      title = calendar.title || undefined;
+    } catch {
+      title = undefined;
+    }
+  }
+  return { mode: 'default', key: DEFAULT_CALENDAR_KEY, calendar, created, canEdit: access === 'full', title };
+}
+
+function noDefaultCalendar(): never {
+  throw new PhoneCalendarError('create', PHONE_CALENDAR_COPY.noCalendarIos);
+}
+
+/** ÖRZA's calendar already on the phone (whichever account added it — adding it again takes it over), a new one, or the default calendar. */
+async function resolveTarget(stored: Awaited<ReturnType<typeof readStoredLink>>, userId: string, access: PhoneAccess, tz: string): Promise<SyncTarget> {
+  const step = decideTarget(access, stored ? { mode: linkMode(stored), mine: stored.userId === userId } : null);
+  if (step === 'ownNeedsFullAccess') throw new PhoneCalendarError('permission', PHONE_CALENDAR_COPY.ownNeedsFullAccess);
+  if (step === 'default') {
+    const calendar = defaultCalendarOrNull();
+    if (!calendar) noDefaultCalendar();
+    return defaultTarget(calendar, access, !stored || linkMode(stored) !== 'default');
+  }
+
+  const existing = (stored && (await getCalendarById(stored.calendarId))) || (await findOwnCalendar());
+  if (existing) return { mode: 'own', key: existing.id, calendar: existing, created: false, canEdit: true };
+  try {
+    const calendar = Platform.OS === 'android' ? await createAndroidCalendar(tz) : await createIosCalendar();
+    return { mode: 'own', key: calendar.id, calendar, created: true, canEdit: true };
+  } catch {
+    const fallback = defaultCalendarOrNull();
+    if (afterCreateFailed(Platform.OS === 'ios' ? 'ios' : 'android', !!fallback) === 'default' && fallback) {
+      return defaultTarget(fallback, access, true);
+    }
+    if (Platform.OS === 'ios') noDefaultCalendar();
+    throw new PhoneCalendarError('create', PHONE_CALENDAR_COPY.createFailedAndroid);
+  }
+}
+
+/**
+ * `userId`'s link, if ÖRZA's events are still on the phone (needs full access to check). Clears a link whose own
+ * calendar was deleted in the Calendar app; a link to the default calendar stays (its events are tracked by id).
+ */
+export async function linkedCalendar(userId: string): Promise<PhoneCalendarLink | null> {
   const link = await readLink(userId);
   if (!link) return null;
+  if (linkMode(link) === 'default') return link;
   const calendar = await getCalendarById(link.calendarId);
   if (!calendar) {
     await writeLink(null);
     writeMap(null);
     return null;
   }
-  return { link, calendar };
+  return link;
 }
 
 /* ───────────────────────────── Events ───────────────────────────── */
@@ -382,6 +490,7 @@ function desiredEvents({ events, calendarReminders, tz }: PhoneEventSource, now:
       // iPhone: no medicine name or details (the calendar can sync to iCloud). The new text changes the signature, so
       // the next sync rewrites the upcoming events an older build wrote with names.
       ({ title, notes } = medicineEventText(e, Platform.OS === 'ios' ? 'ios' : 'android', `${WEB_URL}${alarmPath}`));
+      // The orza:// link opens the dose, and marks the event as ÖRZA's (`isOrzaEventUrl`).
       if (dose && Platform.OS === 'ios') url = `orza://alarm?med=${encodeURIComponent(dose.medicationId)}&at=${encodeURIComponent(dose.at)}`;
     } else if (e.kind === 'reminder') {
       const reminderId = parseReminderEventId(e.id);
@@ -426,7 +535,7 @@ async function deleteEventById(id: string) {
 /** Remove every upcoming event in our own calendar (used when the id map was lost). */
 async function wipeUpcoming(calendar: Calendar.ExpoCalendar, now: Date) {
   try {
-    const list = await calendar.listEvents(new Date(now.getTime() - 86400000), new Date(now.getTime() + (SYNC_DAYS + 31) * 86400000));
+    const list = await calendar.listEvents(new Date(now.getTime() - DAY_MS), new Date(now.getTime() + (SYNC_DAYS + 31) * DAY_MS));
     await inBatches(list, async (ev) => {
       try {
         await ev.delete();
@@ -439,12 +548,50 @@ async function wipeUpcoming(calendar: Calendar.ExpoCalendar, now: Date) {
   }
 }
 
+/**
+ * Full access, events in the default calendar and no map to say which (e.g. ÖRZA was reinstalled): delete only ÖRZA's
+ * events (an `orza://` link, `isOrzaEventUrl`) in the default calendar from `from` on. The member's own events are
+ * never changed, and nothing about them is kept.
+ */
+async function wipeOrzaEvents(from: Date, now: Date) {
+  try {
+    const calendar = defaultCalendarOrNull();
+    if (!calendar || calendar.title === CALENDAR_TITLE) return;
+    const list = await calendar.listEvents(from, new Date(now.getTime() + (SYNC_DAYS + 31) * DAY_MS));
+    await inBatches(
+      list.filter((ev) => isOrzaEventUrl(ev.url)),
+      async (ev) => {
+        try {
+          await ev.delete();
+        } catch {
+          // ignore
+        }
+      }
+    );
+  } catch {
+    // Listing failed — nothing deleted.
+  }
+}
+
+/** Full access: delete ÖRZA's events in the default calendar — the mapped ones by id, or (no map) by their orza:// link. */
+async function removeDefaultEvents(map: SyncMap | null, now: Date) {
+  if (map && map.calendarId === DEFAULT_CALENDAR_KEY) {
+    await inBatches(Object.values(map.events), (ev) => deleteEventById(ev.id));
+  } else {
+    await wipeOrzaEvents(new Date(now.getTime() - DEFAULT_HISTORY_MS), now);
+  }
+}
+
 export interface PhoneSyncResult {
   added: number;
   updated: number;
   removed: number;
   total: number;
   created: boolean;
+  /** `default`: the events are in the member's default calendar. */
+  mode: TargetMode;
+  /** "Add Events Only": upcoming events out of date that ÖRZA can't change. */
+  stuck: number;
 }
 
 /** The local-day range to fetch for a sync: today … today + 13. */
@@ -462,8 +609,9 @@ export interface PhoneSyncOptions {
 }
 
 /**
- * Create (if needed) the ÖRZA calendar and bring its next 14 days in line with ÖRZA. Requires granted permission.
- * Events that already passed are left alone, so the phone keeps a short history. Waits for any sync already running.
+ * Create (if needed) the ÖRZA calendar (or use the default calendar) and bring its next 14 days in line with ÖRZA.
+ * Requires full or "Add Events Only" access. Events that already passed are left alone, so the phone keeps a short
+ * history. Waits for any sync already running.
  */
 export function syncPhoneCalendar(opts: PhoneSyncOptions): Promise<PhoneSyncResult> {
   return serialized(async () => {
@@ -480,91 +628,119 @@ export function syncPhoneCalendar(opts: PhoneSyncOptions): Promise<PhoneSyncResu
 
 async function runSync({ userId, onlyIfLinked, load }: PhoneSyncOptions): Promise<PhoneSyncResult> {
   if (!phoneCalendarSupported) throw new PhoneCalendarError('unsupported', "Your phone's calendar isn't available here.");
-  const permission = await getPhonePermission();
-  if (permission !== 'granted') throw new PhoneCalendarError('permission', 'Allow ÖRZA to use your calendar first.');
-  // A quiet re-sync queued behind "Remove" or a sign-out must not put the calendar back.
-  if (onlyIfLinked && !(await linkedCalendar(userId))) {
+  const access = accessFor(await getPhonePermission());
+  if (!access) throw new PhoneCalendarError('permission', 'Allow ÖRZA to use your calendar first.');
+  // A quiet re-sync queued behind "Remove" or a sign-out must not put the calendar back. ("Add Events Only" can't
+  // look the calendar up, so it trusts the link.)
+  if (onlyIfLinked && !(access === 'full' ? await linkedCalendar(userId) : await readLink(userId))) {
     throw new PhoneCalendarError('unlinked', "ÖRZA isn't in your phone's calendar any more. Tap Add to my calendar to add it again.");
   }
 
   const source = await load();
   const now = new Date();
-  const { calendar, created } = await ensureCalendar(source.tz);
+  const stored = await readStoredLink();
+  const target = await resolveTarget(stored, userId, access, source.tz);
   const desired = desiredEvents(source, now);
   const previous = await readMap();
   // Only this account's map of this calendar is diffed against; anything else (lost map, another account's events)
-  // is wiped first so nothing is duplicated or left behind.
-  const mine = previous && previous.userId === userId && previous.calendarId === calendar.id ? previous : null;
-  const known: Record<string, SyncedEvent> = mine ? { ...mine.events } : {};
-  if (!created && !mine) await wipeUpcoming(calendar, now);
+  // is cleared first so nothing is duplicated or left behind.
+  const mine = previous && previous.userId === userId && previous.calendarId === target.key ? previous : null;
+  if (!mine && !target.created) {
+    if (target.mode === 'own') await wipeUpcoming(target.calendar, now);
+    else if (!target.canEdit) throw new PhoneCalendarError('writeOnly', PHONE_CALENDAR_COPY.writeOnlyUnknownEvents);
+    else if (previous && previous.calendarId === DEFAULT_CALENDAR_KEY) await inBatches(Object.values(previous.events), (ev) => deleteEventById(ev.id));
+    else await wipeOrzaEvents(new Date(now.getTime() - DAY_MS), now);
+  }
 
-  const next: Record<string, SyncedEvent> = {};
+  const plan = planSync({
+    known: mine ? mine.events : {},
+    wanted: desired.map((d) => ({ key: d.key, sig: d.sig, start: d.start })),
+    now: now.getTime(),
+    canEdit: target.canEdit,
+    historyMs: target.mode === 'default' ? DEFAULT_HISTORY_MS : 0,
+  });
+  const byKey = new Map(desired.map((d) => [d.key, d]));
+  const next: Record<string, SyncedEvent> = { ...plan.keep };
   let added = 0;
   let updated = 0;
   let removed = 0;
   let failed = 0;
 
-  // Upcoming events ÖRZA no longer has are deleted; ones that already passed stay in the phone calendar as history
-  // (and drop out of the map).
-  const wanted = new Set(desired.map((d) => d.key));
-  const outdated: SyncedEvent[] = [];
-  for (const [key, ev] of Object.entries(known)) {
-    if (wanted.has(key)) continue;
-    if (Date.parse(ev.start) > now.getTime()) outdated.push(ev);
-  }
-
-  await inBatches(outdated, async (ev) => {
-    await deleteEventById(ev.id);
-    removed += 1;
-  });
-
-  await inBatches(desired, async (d) => {
-    const have = known[d.key];
+  const create = async (d: DesiredEvent) => {
     try {
-      if (have && have.sig === d.sig) {
-        next[d.key] = have;
-        return;
-      }
-      if (have) {
-        try {
-          const ev = await Calendar.ExpoCalendarEvent.get(have.id);
-          await ev.update(d.details);
-          next[d.key] = { id: have.id, sig: d.sig, start: d.start };
-          updated += 1;
-          return;
-        } catch {
-          // Deleted in the Calendar app — create it again below.
-        }
-      }
-      const ev = await calendar.createEvent(d.details);
+      const ev = await target.calendar.createEvent(d.details);
       next[d.key] = { id: ev.id, sig: d.sig, start: d.start };
       added += 1;
     } catch {
       failed += 1;
     }
+  };
+
+  // Upcoming events ÖRZA no longer has are deleted; ones that already passed stay in the phone calendar as history.
+  await inBatches(plan.remove, async (ev) => {
+    await deleteEventById(ev.id);
+    removed += 1;
   });
 
-  writeMap({ userId, calendarId: calendar.id, events: next });
-  const total = Object.keys(next).length;
-  await writeLink({ userId, calendarId: calendar.id, syncedAt: now.toISOString(), count: total });
-  if (failed && !total) throw new PhoneCalendarError('write', "Your phone's calendar didn't accept the events. Please try again.");
-  return { added, updated, removed, total, created };
+  await inBatches(plan.update, async ({ key, have }) => {
+    const d = byKey.get(key);
+    if (!d) return;
+    try {
+      const ev = await Calendar.ExpoCalendarEvent.get(have.id);
+      await ev.update(d.details);
+      next[key] = { id: have.id, sig: d.sig, start: d.start };
+      updated += 1;
+    } catch {
+      // Deleted in the Calendar app — create it again.
+      await create(d);
+    }
+  });
+
+  await inBatches(plan.create, async (key) => {
+    const d = byKey.get(key);
+    if (d) await create(d);
+  });
+
+  const total = upcomingCount(next, now.getTime());
+  const writeFailed = failed > 0 && total === 0;
+  // A first try at the default calendar that wrote nothing leaves no link behind (nothing of ÖRZA's is there).
+  if (writeFailed && target.mode === 'default' && target.created) {
+    throw new PhoneCalendarError('write', "Your phone's calendar didn't accept the events. Please try again.");
+  }
+  writeMap({ userId, calendarId: target.key, events: next });
+  await writeLink({
+    userId,
+    calendarId: target.key,
+    syncedAt: now.toISOString(),
+    count: total,
+    ...(target.title ? { calendarTitle: target.title } : {}),
+    ...(plan.stuck ? { stuck: plan.stuck } : {}),
+  });
+  if (writeFailed) throw new PhoneCalendarError('write', "Your phone's calendar didn't accept the events. Please try again.");
+  return { added, updated, removed, total, created: target.created, mode: target.mode, stuck: plan.stuck };
 }
 
-/** Delete the ÖRZA calendar (and every event in it) from the phone and forget the link. Waits for a running sync. */
+/**
+ * Delete the ÖRZA calendar (and every event in it) — or, in the default calendar, exactly ÖRZA's events — from the
+ * phone and forget the link. Needs full access. Waits for a running sync.
+ */
 export function removePhoneCalendar(): Promise<void> {
   return serialized(async () => {
     if (!phoneCalendarSupported) return;
-    if ((await getPhonePermission()) !== 'granted') {
-      throw new PhoneCalendarError('permission', 'Allow calendar access for ÖRZA in Settings to remove its calendar, or delete the ÖRZA calendar in your Calendar app.');
-    }
+    const permission = await getPhonePermission();
     const link = await readStoredLink();
-    const calendar = (link && (await getCalendarById(link.calendarId))) || (await findOwnCalendar());
-    if (calendar) {
-      try {
-        await calendar.delete();
-      } catch {
-        throw new PhoneCalendarError('write', "Couldn't remove the ÖRZA calendar. You can also delete it in your Calendar app.");
+    const mode: TargetMode = link ? linkMode(link) : 'own';
+    if (permission !== 'granted') throw new PhoneCalendarError('permission', removeBlockedMessage(mode, permission));
+    if (mode === 'default') {
+      await removeDefaultEvents(await readMap(), new Date());
+    } else {
+      const calendar = (link && (await getCalendarById(link.calendarId))) || (await findOwnCalendar());
+      if (calendar) {
+        try {
+          await calendar.delete();
+        } catch {
+          throw new PhoneCalendarError('write', "Couldn't remove the ÖRZA calendar. You can also delete it in your Calendar app.");
+        }
       }
     }
     await writeLink(null);
@@ -576,10 +752,11 @@ export function removePhoneCalendar(): Promise<void> {
 const CLEAR_WAIT_MS = 4000;
 
 /**
- * Deliberate sign-out: delete the ÖRZA calendar this phone was given — its medicine names (Android) and dose times must
- * not stay in the Calendar app, or keep ringing, for whoever uses the phone next — and forget the link and the map.
- * Best effort: never throws; without calendar access only the link and map are forgotten (the calendar can still be
- * deleted in the Calendar app). Not for a 401 session expiry — there the link simply stays with its account (see `readLink`).
+ * Deliberate sign-out: delete the ÖRZA calendar (or ÖRZA's events in the default calendar) this phone was given — its
+ * medicine names (Android) and dose times must not stay in the Calendar app, or keep ringing, for whoever uses the
+ * phone next — and forget the link and the map. Best effort: never throws; without full access only the link and map
+ * are forgotten (the events can still be deleted in the Calendar app). Not for a 401 session expiry — there the link
+ * simply stays with its account (see `readLink`).
  */
 export async function clearPhoneCalendar(): Promise<void> {
   if (!phoneCalendarSupported) return;
@@ -587,11 +764,16 @@ export async function clearPhoneCalendar(): Promise<void> {
     setStale(false);
     const [link, map] = await Promise.all([readStoredLink(), readMap()]);
     if ((link || map) && (await getPhonePermission()) === 'granted') {
-      const calendar = (link && (await getCalendarById(link.calendarId))) || (map && (await getCalendarById(map.calendarId)));
-      try {
-        await calendar?.delete();
-      } catch {
-        // Left on the phone — it can be deleted in the Calendar app; the next account to add ÖRZA wipes it.
+      const inDefault = link ? linkMode(link) === 'default' : map?.calendarId === DEFAULT_CALENDAR_KEY;
+      if (inDefault) {
+        await removeDefaultEvents(map, new Date());
+      } else {
+        const calendar = (link && (await getCalendarById(link.calendarId))) || (map && (await getCalendarById(map.calendarId)));
+        try {
+          await calendar?.delete();
+        } catch {
+          // Left on the phone — it can be deleted in the Calendar app; the next account to add ÖRZA wipes it.
+        }
       }
     }
     await writeLink(null);
