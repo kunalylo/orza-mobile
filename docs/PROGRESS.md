@@ -969,3 +969,8 @@ batch 1" log entry); 3 is still open.
   and PUBLISHED to internal testers (list "FatafatDecor Testers", 28). Closed testing - Alpha: all 177 countries (testers worldwide;
   production stays India), testers = Google Group testers-community@googlegroups.com, feedback support@orza.app, release vc2 saved.
   WAITING for the user's OK to "Send 17 changes for review" (Publishing overview; managed publishing off).
+- 2026-11-16: **GOOGLE PLAY: CLOSED TEST SENT FOR REVIEW** — the user pressed "Send 17 changes for review" (Publishing overview
+  shows "Changes in review"). Testers join (after approval) via https://play.google.com/apps/testing/in.co.ylo.orza (web opt-in)
+  then https://play.google.com/store/apps/details?id=in.co.ylo.orza (Android); they must be in testers-community@googlegroups.com.
+  Next: Google's review → share the links with the community → ≥12 testers opted in for 14 consecutive days → Dashboard "Apply for
+  production" (production countries: India). App Store: build 4 waiting for review (since 16 Nov 01:04).
