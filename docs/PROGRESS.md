@@ -974,3 +974,10 @@ batch 1" log entry); 3 is still open.
   then https://play.google.com/store/apps/details?id=in.co.ylo.orza (Android); they must be in testers-community@googlegroups.com.
   Next: Google's review → share the links with the community → ≥12 testers opted in for 14 consecutive days → Dashboard "Apply for
   production" (production countries: India). App Store: build 4 waiting for review (since 16 Nov 01:04).
+- 2026-11-16 02:21: **GOOGLE PLAY REJECTED the closed test** — "Violation of Play Console Requirements": since 31 Aug 2024 new
+  developer accounts must be an ORGANIZATION to distribute health apps that are medical (our Health declaration correctly ticks
+  Medical › "Medication and treatment management" = the medicine alarms). Personal account "YLO" can't publish ÖRZA as is.
+  Do NOT untick the medical feature to slip through (misrepresentation; the email says declarations must be accurate). Fix: an
+  organization Play account (D-U-N-S for the legal entity) + app transfer (Play Help "transfer apps to an organization account");
+  org accounts also skip the 12-tester/14-day closed test. Same D-U-N-S → Apple Organization enrollment (App Review 5.1.1(ix) risk).
+  Asked the user: is YLO a registered business (Pvt Ltd/LLP/proprietorship), existing D-U-N-S?
