@@ -953,3 +953,9 @@ batch 1" log entry); 3 is still open.
   play\raw; spec scripts/store/play-phone.json; sample account asha.demo@orza.test on the LOCAL server; 0 AI calls). Notes: in-app
   times show early afternoon while the status bar says 9:41; the alarm shot is a real dose alarm (Vitamin B12) with its schedule edit
   reverted. All store graphics now ready: App Store 4 framed shots (2 sizes), Play 8 shots + feature graphic + 512 icon.
+- 2026-11-16: **APP STORE: SUBMITTED FOR REVIEW** by the user — ÖRZA 1.0.0 (build 4), name "ÖRZA: Meals, Meds & AI Coach", 16 Nov
+  01:04, submission a6c754f8-7309-4600-b4c6-3bb7481d8b95, "Manually release" chosen (guide Apple 20/20 done). Next: Apple's answer
+  (reply/fix any rejection — 5.1.1(ix) individual-account risk accepted); after approval the user presses "Release This Version".
+  GOOGLE PLAY (0/23): the Play account is "YLO", a PERSONAL account (FatafatDecor + Partner in production) → the public developer
+  name is "YLO" while the privacy policy / delete-account page say "Kunal Patil" → align (e.g. "Kunal Patil (YLO)", needs the user's
+  OK + web push); check whether the 12-tester / 14-day closed test applies (account creation date).
