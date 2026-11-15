@@ -959,3 +959,13 @@ batch 1" log entry); 3 is still open.
   GOOGLE PLAY (0/23): the Play account is "YLO", a PERSONAL account (FatafatDecor + Partner in production) → the public developer
   name is "YLO" while the privacy policy / delete-account page say "Kunal Patil" → align (e.g. "Kunal Patil (YLO)", needs the user's
   OK + web push); check whether the 12-tester / 14-day closed test applies (account creation date).
+- 2026-11-16: **PLAY CONSOLE SET UP (by Claude in the user's Chrome, user-requested)** — app "ÖRZA: Meals, Meds & AI Coach"
+  (in.co.ylo.orza, account "YLO", personal → 12 testers × 14 days closed test required). Done: privacy policy, sign-in details (demo
+  appreview@yourlocalonline.in; the user typed the password), ads No, content rating (IARC: Everyone / PEGI 3), target audience 18+
+  with minors restricted, Data safety (14 types, nothing shared, delete URL /delete-account), government No, financial none, Health
+  declaration (4 features + 6 permission justifications incl. a new ACTIVITY_RECOGNITION text), trader status applies + Terms URL,
+  category Health & fitness + contact support@orza.app, store listing (texts, icon, feature graphic, 8 screenshots in order; no AI
+  label), full-screen intent "Other", advertising ID No. Internal testing: AAB vc2 (1.0.0) uploaded by the user (86 MB > upload limit)
+  and PUBLISHED to internal testers (list "FatafatDecor Testers", 28). Closed testing - Alpha: all 177 countries (testers worldwide;
+  production stays India), testers = Google Group testers-community@googlegroups.com, feedback support@orza.app, release vc2 saved.
+  WAITING for the user's OK to "Send 17 changes for review" (Publishing overview; managed publishing off).
